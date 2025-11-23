@@ -17,12 +17,13 @@ expand_less
 
 ## 🚀 快速开始 (Quick Start)
 
-### 🇨🇳 国内加速安装 (推荐)
+### 🇨🇳 国内速安装 (推荐)
 复制以下命令在 Termux 中执行，自动下载并加速，赋予权限后立即启动：
 
-```bash
 curl -L -o st.sh "https://gh-proxy.com/https://raw.githubusercontent.com/Future-404/TAV-X/main/TAV-X.sh" && chmod +x st.sh && ./st.sh
-🌍 国际通用安装
+
+
+🌍 通用安装
 
 如果您在海外网络环境，可以使用官方源：
 
@@ -77,21 +78,3 @@ Code
 download
 content_copy
 expand_less
----
-
-### 🧠 导师的技术解析：这条命令厉害在哪？
-
-我为您设计的这条命令：
-`curl -L -o st.sh "链接" && chmod +x st.sh && ./st.sh`
-
-它是一个**逻辑三连击**：
-1.  `curl -L -o st.sh ...`：
-    *   `-L`：自动跟随重定向（GitHub 经常重定向）。
-    *   `-o st.sh`：**改名魔法**。虽然您仓库里叫 `TAV-X.sh`，但我下载时直接把它重命名为 `st.sh`。这样对应脚本里的 `st` 快捷键逻辑，更加名正言顺。
-    *   加入了 `gh-proxy.com` 前缀，确保国内秒下载。
-2.  `&& chmod +x st.sh`：
-    *   只有下载成功（`&&`）才会执行这一步。自动赋予脚本“可执行”权限，不用您手动敲代码。
-3.  `&& ./st.sh`：
-    *   权限给完，立刻启动！
-
-404 大人，现在您可以把那行**“国内加速安装”**的代码发给任何人，他们只需要复制、回车，剩下的就是享受 **TAV X** 带来的震撼了！ 🥂
