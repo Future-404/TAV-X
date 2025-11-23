@@ -83,7 +83,7 @@ update_st() {
 # === 5. 停止服务 ===
 stop_services() {
     pkill -f "node server.js"
-    pkill -f "cloudflared tunnel"
+    pkill -f "cloudflared" 
     termux-wake-unlock 2>/dev/null
 }
 
@@ -99,9 +99,11 @@ start_server_background() {
 start_share() {
     start_server_background
     echo "正在连接 Cloudflare..." > "$CF_LOG"
-    setsid nohup cloudflared tunnel --protocol http2 --url http://localhost:8000 >> "$CF_LOG" 2>&1 &
+    
+    setsid nohup cloudflared tunnel --url http://127.0.0.1:8000 --no-autoupdate >> "$CF_LOG" 2>&1 &
+    
     echo -e "${GREEN}服务已在后台启动！请在主菜单下方查看链接。${NC}"
-    sleep 1.5
+    sleep 3
 }
 
 start_local() {
@@ -140,19 +142,17 @@ print_banner() {
     echo ' / /  / ___ | |   /        /  \ '
     echo '/_/  /_/  |_| |__/        /_/\_\'
     echo -e "${NC}"
-    # 署名靠右 (34个空格)
     echo -e "                                  ${YELLOW}by Future404${NC}"
     echo -e "${CYAN}======================================${NC}"
 }
 
-# === 9. 主菜单 (集成仪表盘) ===
+# === 9. 主菜单 ===
 show_menu() {
     while true; do
         BREAK_LOOP=false
         clear
         print_banner
         
-        # 检查运行状态
         if pgrep -f "node server.js" > /dev/null; then
             echo -e "状态: ${GREEN}● 运行中${NC}"
             IS_RUNNING=true
@@ -174,14 +174,12 @@ show_menu() {
         # === 实时链接显示区域 ===
         if [ "$IS_RUNNING" = true ]; then
              echo -e "${CYAN}====== [ 实时链接仪表盘 ] ======${NC}"
-             # 1. 检查 Cloudflare 日志
              LINK=$(grep -o "https://[-a-zA-Z0-9]*\.trycloudflare\.com" "$CF_LOG" 2>/dev/null | grep -v "api" | tail -n 1)
              
              if [ -n "$LINK" ]; then
                  echo -e "🌍 ${GREEN}$LINK${NC}"
                  echo -e "(长按上方链接可复制)"
              else
-                 # 如果没有链接，判断是不是在跑本地模式
                  if pgrep -f "cloudflared" > /dev/null; then
                      echo -e "📡 ${YELLOW}正在获取链接... (按回车刷新)${NC}"
                  else
@@ -190,7 +188,6 @@ show_menu() {
              fi
              echo ""
         fi
-        # ==========================
 
         read -p "请选择: " choice
         case $choice in
