@@ -1,9 +1,10 @@
-#!/bin/bash
+the#!/bin/bash
 REPO_URL="https://gh-proxy.com/https://github.com/SillyTavern/SillyTavern.git"
 INSTALL_DIR="$HOME/SillyTavern"
 CONFIG_FILE="$INSTALL_DIR/config.yaml"
 CF_LOG="$INSTALL_DIR/cf_tunnel.log"
 SERVER_LOG="$INSTALL_DIR/server.log"
+BACKUP_DIR="$HOME/storage/downloads/ST_Backup"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -28,7 +29,7 @@ check_env() {
     fi
     echo -e "${YELLOW}>>> 正在初始化环境...${NC}"
     pkg update -y
-    pkg install nodejs-lts git cloudflared util-linux -y
+    pkg install nodejs-lts git cloudflared util-linux tar -y
 }
 
 configure_security() {
@@ -92,6 +93,140 @@ configure_proxy() {
             return
             ;;
     esac
+}
+
+check_storage_permission() {
+    if [ ! -d "$HOME/storage" ]; then
+        echo -e "${YELLOW}>>> 检测到未授权存储权限...${NC}"
+        echo -e "${CYAN}请在接下来的弹窗中点击【允许】，以便将备份保存到下载目录。${NC}"
+        termux-setup-storage
+        sleep 2
+        if [ ! -d "$HOME/storage" ]; then
+            echo -e "${RED}错误：无法访问存储。请确保授予权限后重试。${NC}"
+            return 1
+        fi
+    fi
+    return 0
+}
+
+perform_backup() {
+    check_storage_permission || return
+    
+    if [ ! -d "$INSTALL_DIR/data" ]; then
+        echo -e "${RED}错误：找不到酒馆数据目录 ($INSTALL_DIR/data)${NC}"
+        read -p "按回车返回..."
+        return
+    fi
+
+    if [ ! -d "$BACKUP_DIR" ]; then
+        mkdir -p "$BACKUP_DIR"
+    fi
+
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    BACKUP_FILE="$BACKUP_DIR/ST_Backup_$TIMESTAMP.tar.gz"
+
+    echo -e "${CYAN}>>> 正在打包数据，请稍候...${NC}"
+    cd "$INSTALL_DIR" || return
+    # 只打包 data 目录
+    tar -czf "$BACKUP_FILE" data
+
+    if [ -f "$BACKUP_FILE" ]; then
+        echo -e "${GREEN}✅ 备份成功！${NC}"
+        echo -e "文件位置: ${YELLOW}内部存储/Download/ST_Backup/${NC}"
+        echo -e "文件名: $(basename "$BACKUP_FILE")"
+    else
+        echo -e "${RED}❌ 备份失败，请检查存储权限或空间。${NC}"
+    fi
+    read -p "按回车返回..."
+}
+
+perform_restore() {
+    check_storage_permission || return
+
+    if [ ! -d "$BACKUP_DIR" ]; then
+        echo -e "${RED}未找到备份目录: $BACKUP_DIR${NC}"
+        read -p "按回车返回..."
+        return
+    fi
+
+    # 使用数组存储备份文件列表
+    files=("$BACKUP_DIR"/ST_Backup_*.tar.gz)
+    
+    if [ ! -e "${files[0]}" ]; then
+        echo -e "${RED}在 Download/ST_Backup 中未找到有效的备份文件。${NC}"
+        read -p "按回车返回..."
+        return
+    fi
+
+    clear
+    echo -e "${CYAN}=== 选择要恢复的备份文件 ===${NC}"
+    echo -e "${YELLOW}注意：这只显示 ST_Backup 开头的 .tar.gz 文件${NC}"
+    echo ""
+
+    i=1
+    for file in "${files[@]}"; do
+        filename=$(basename "$file")
+        echo -e "$i. $filename"
+        ((i++))
+    done
+    echo "0. 返回"
+    echo ""
+    read -p "请选择编号: " file_idx
+
+    if [[ "$file_idx" == "0" ]]; then return; fi
+
+    # 获取选中的文件
+    SELECTED_FILE="${files[$((file_idx-1))]}"
+
+    if [ -z "$SELECTED_FILE" ] || [ ! -f "$SELECTED_FILE" ]; then
+        echo -e "${RED}无效的选择。${NC}"
+        sleep 1
+        return
+    fi
+
+    echo ""
+    echo -e "${RED}⚠️  高危警告 ⚠️${NC}"
+    echo -e "您即将从备份 [ $(basename "$SELECTED_FILE") ] 恢复数据。"
+    echo -e "${RED}此操作将【彻底删除】当前酒馆内的所有聊天记录和角色！${NC}"
+    echo -e "确定要继续吗？"
+    read -p "输入 'yes' 确认覆盖: " confirm
+
+    if [[ "$confirm" != "yes" ]]; then
+        echo -e "${YELLOW}操作已取消。${NC}"
+        sleep 1
+        return
+    fi
+
+    echo -e "${CYAN}>>> 正在清空旧数据...${NC}"
+    rm -rf "$INSTALL_DIR/data"
+    
+    echo -e "${CYAN}>>> 正在解压恢复...${NC}"
+    mkdir -p "$INSTALL_DIR/data"
+    tar -xzf "$SELECTED_FILE" -C "$INSTALL_DIR"
+
+    echo -e "${GREEN}✅ 恢复完成！${NC}"
+    echo -e "${YELLOW}建议您稍后重启酒馆。${NC}"
+    read -p "按回车返回..."
+}
+
+backup_menu() {
+    while true; do
+        clear
+        echo -e "${CYAN}=== 💾 数据备份与恢复 ===${NC}"
+        echo -e "存储位置: ${YELLOW}手机存储/Download/ST_Backup${NC}"
+        echo ""
+        echo -e "1. 📤 备份当前数据 (Backup)"
+        echo -e "2. 📥 恢复历史备份 (Restore)"
+        echo -e "0. 🔙 返回主菜单"
+        echo ""
+        read -p "请选择: " bk_choice
+        case $bk_choice in
+            1) perform_backup ;;
+            2) perform_restore ;;
+            0) return ;;
+            *) ;;
+        esac
+    done
 }
 
 install_st() {
@@ -215,7 +350,7 @@ show_menu() {
         BREAK_LOOP=false
         clear
         print_banner
-        echo -e "${CYAN}             Version 1.2${NC}"
+        echo -e "${CYAN}             Version 1.3${NC}"
 
         if pgrep -f "node server.js" > /dev/null; then
             echo -e "状态: ${GREEN}● 运行中${NC}"
@@ -233,6 +368,7 @@ show_menu() {
         echo -e "  5. 🔄 无损更新"
         echo -e "  6. 🛠️  重置安全配置"
         echo -e "  7. 🌐 设置代理配置"
+        echo -e "  8. 💾 数据备份与恢复"
         echo -e "  0. 退出"
         echo ""
 
@@ -262,6 +398,7 @@ show_menu() {
             5) check_env; update_st ;;
             6) configure_security; echo "完成"; sleep 1 ;;
             7) configure_proxy ;;
+            8) backup_menu ;;
             0) exec bash ;;
             *) ;;
         esac
