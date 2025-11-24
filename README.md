@@ -110,7 +110,7 @@ curl -s -L https://gh.likk.cc/https://raw.githubusercontent.com/Future-404/TAV-X
 
 ## 💡 常见问题与进阶指南 (FAQ)
 
-### 1. 🌐 进阶技巧：如何同时使用 VPN (API加速) 和 远程分享？
+### 1. 🌐 进阶技巧：如何同时使用 VPN 和 远程分享？
 
 **Q：我的酒馆需要挂梯子才能连上 OpenAI/Claude，但开启 VPN 后 TAV-X 的远程链接（Cloudflare）就断了，怎么办？**
 
@@ -121,7 +121,7 @@ curl -s -L https://gh.likk.cc/https://raw.githubusercontent.com/Future-404/TAV-X
 **操作步骤：**
 
 *   **第一步：保持 VPN App 开启，但在设置中“排除” Termux**
-    请打开您的代理软件，找到 **分应用代理 (Per-App Proxy)** 或 **访问控制 (Access Control)** 功能，将 `Termux` 设置为 **“绕过 (Bypass)”** 或 **“不代理”**。
+    请打开您的代理软件，找到 **分应用代理 ** 或 **访问控制 ** 功能，将 `Termux` 设置为 **“绕过 ”** 或 **“不代理”**。
     *   **Clash 用户**：进入 `设置` -> `访问控制` -> 模式选择 `仅允许已选应用` (不要勾选 Termux) 或者选择 `不代理已选应用` (勾选 Termux)。
     *   **v2rayNG 用户**：进入 `设置` -> `分应用代理` -> 开启开关 -> 模式选择 `绕过局域网及位于分应用代理黑名单内的应用` -> 在列表中勾选 `Termux`。
 
@@ -137,7 +137,7 @@ curl -s -L https://gh.likk.cc/https://raw.githubusercontent.com/Future-404/TAV-X
 
 ---
 
-### 2. 💾 数据备份与恢复指南（必读）
+### 2. 💾 数据备份与恢复指南
 
 **Q：我该如何备份和恢复数据？如果不小心修改了备份文件名会怎样？**
 
@@ -148,7 +148,7 @@ curl -s -L https://gh.likk.cc/https://raw.githubusercontent.com/Future-404/TAV-X
 *   **存放位置**：备份文件**不**在 Termux 里，而是存储在您手机的 **内部存储/Download/ST_Backup** 文件夹中。
 *   **安全性**：即使您卸载了 Termux，只要不删除手机下载目录里的这个文件夹，您的数据就是安全的。
 
-**关于恢复 (Restore)**
+**关于恢复**
 *   **操作步骤**：运行脚本输入 `st` -> 选择 **`8. 💾 数据备份与恢复`** -> 选择 **`2. 📤 恢复数据`** -> 选择对应的备份文件即可。
 *   **⚠️ 警告：严禁修改文件名！**
     脚本依靠特定的文件名格式来识别备份文件。
