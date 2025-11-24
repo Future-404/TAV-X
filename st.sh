@@ -1,76 +1,273 @@
-# --- 代理设置模块 ---
+#!/bin/bash
+REPO_URL="https://gh-proxy.com/https://github.com/SillyTavern/SillyTavern.git"
+INSTALL_DIR="$HOME/SillyTavern"
+CONFIG_FILE="$INSTALL_DIR/config.yaml"
+CF_LOG="$INSTALL_DIR/cf_tunnel.log"
+SERVER_LOG="$INSTALL_DIR/server.log"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+BREAK_LOOP=false
+trap 'BREAK_LOOP=true' SIGINT
+
+auto_setup_alias() {
+    SCRIPT_PATH=$(readlink -f "$0")
+    RC_FILE="$HOME/.bashrc"
+    sed -i '/alias st=/d' "$RC_FILE"
+    echo "alias st='bash $SCRIPT_PATH'" >> "$RC_FILE"
+}
+
+check_env() {
+    auto_setup_alias
+    if command -v node &> /dev/null && command -v git &> /dev/null && command -v cloudflared &> /dev/null && command -v setsid &> /dev/null; then
+        return 0
+    fi
+    echo -e "${YELLOW}>>> 正在初始化环境...${NC}"
+    pkg update -y
+    pkg install nodejs-lts git cloudflared util-linux -y
+}
+
+configure_security() {
+    if [ ! -f "$CONFIG_FILE" ]; then return; fi
+    cp "$CONFIG_FILE" "${CONFIG_FILE}.bak"
+    sed -i 's/whitelistMode: true/whitelistMode: false/' "$CONFIG_FILE"
+    sed -i 's/enableUserAccounts: false/enableUserAccounts: true/' "$CONFIG_FILE"
+    sed -i 's/enableDiscreetLogin: false/enableDiscreetLogin: true/' "$CONFIG_FILE"
+    sed -i 's/enabled: true/enabled: false/' "$CONFIG_FILE"
+}
 
 configure_proxy() {
-    echo -e "${CYAN}=== 🌐 代理/梯子设置向导 ===${NC}"
-    echo -e "该功能让酒馆通过您的 VPN (Clash/v2ray等) 访问 API，"
-    echo -e "同时保持远程 Cloudflare 连接稳定。"
-    echo ""
-    
-    # 1. 询问端口 (这是最关键的)
-    echo -e "${YELLOW}第一步: 请输入您的 VPN 软件本地端口${NC}"
-    echo -e "如果不清楚，请去您的 VPN 软件设置里查看 'HTTP 端口' 或 'SOCKS 端口'。"
-    echo -e "常见默认端口: Clash(7890), v2rayNG(10808), Surfboard(6152)"
-    read -p "请输入端口号 (直接回车默认 7890): " PROXY_PORT
-    PROXY_PORT=${PROXY_PORT:-7890} # 默认值 7890
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo -e "${RED}未找到配置文件，请先安装酒馆。${NC}"
+        read -p "按回车返回..."
+        return
+    fi
 
-    # 2. 询问协议 (解决您的通用性担忧)
+    clear
+    echo -e "${CYAN}=== 代理配置向导 ===${NC}"
+    echo -e "当前 requestProxy 设置状态:"
+    grep -A 5 "requestProxy:" "$CONFIG_FILE" | grep -E "enabled|url"
     echo ""
-    echo -e "${YELLOW}第二步: 请选择代理协议${NC}"
-    echo -e "❓ 如果您不确定，请直接回车选择 HTTP，这适用于 99% 的情况。"
-    echo -e "1) HTTP   (✅ 推荐 - 兼容性最好，适用于 Clash/Surfboard/Mixed)"
-    echo -e "2) SOCKS5 (适用于 v2rayNG 或纯 SOCKS 模式)"
-    read -p "请选择 (1/2): " PROTO_CHOICE
+    echo -e "1. 🟢 开启/设置代理"
+    echo -e "2. 🔴 关闭代理"
+    echo -e "0. 🔙 返回"
+    echo ""
+    read -p "请选择: " proxy_choice
 
-    case $PROTO_CHOICE in
-        2) PROTOCOL="socks5" ;;
-        *) PROTOCOL="http" ;; # 默认 HTTP
+    case $proxy_choice in
+        1)
+            echo ""
+            echo -e "${YELLOW}请输入完整的代理地址 (包含协议、IP和端口)${NC}"
+            echo -e "示例:"
+            echo -e " - http://127.0.0.1:7890"
+            echo -e " - socks5://127.0.0.1:10808"
+            echo -e " - http://192.168.1.5:8080"
+            echo ""
+            read -p "代理 URL: " PROXY_URL
+            
+            if [ -z "$PROXY_URL" ]; then
+                echo -e "${RED}输入不能为空${NC}"
+                sleep 1
+                return
+            fi
+
+            sed -i '/^requestProxy:/,/^  bypass:/ s/enabled: false/enabled: true/' "$CONFIG_FILE"
+            sed -i "/^requestProxy:/,/^  bypass:/ s|^  url:.*|  url: \"$PROXY_URL\"|" "$CONFIG_FILE"
+            
+            echo -e "${GREEN}√ 代理已更新为: $PROXY_URL${NC}"
+            echo -e "${YELLOW}请重启服务以生效。${NC}"
+            sleep 2
+            ;;
+        2)
+            sed -i '/^requestProxy:/,/^  bypass:/ s/enabled: true/enabled: false/' "$CONFIG_FILE"
+            echo -e "${GREEN}√ 代理已关闭${NC}"
+            echo -e "${YELLOW}请重启服务以生效。${NC}"
+            sleep 1
+            ;;
+        *)
+            return
+            ;;
     esac
+}
 
-    # 构造完整的 URL
-    PROXY_URL="${PROTOCOL}://127.0.0.1:${PROXY_PORT}"
+install_st() {
+    if [ ! -d "$INSTALL_DIR" ]; then
+        echo -e "${CYAN}>>> 正在下载 SillyTavern...${NC}"
+        git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
+        cd "$INSTALL_DIR"
+        npm config set registry https://registry.npmmirror.com
+        npm install --no-audit --fund
+        if [ ! -f "$CONFIG_FILE" ] && [ -f "$INSTALL_DIR/default/config.yaml" ]; then
+            cp "$INSTALL_DIR/default/config.yaml" "$CONFIG_FILE"
+        fi
+        configure_security
+    fi
+}
 
+update_st() {
+    echo -e "${CYAN}>>> [1/2] 更新酒馆程序...${NC}"
+    cd "$INSTALL_DIR" || exit
+
+    if [[ -n $(git status -s) ]]; then
+        git stash
+        STASHED=1
+    fi
+
+    git pull
+
+    if [[ "$STASHED" == "1" ]]; then git stash pop; fi
+    npm install --no-audit --fund
+    echo -e "${GREEN}√ 酒馆更新完成${NC}"
     echo ""
-    echo -e "${CYAN}>>> 正在配置: $PROXY_URL ...${NC}"
 
-    # 3. 核心修改逻辑 (精准修改 config.yaml)
-    if [ -f "$CONFIG_FILE" ]; then
-        # 先备份
-        cp "$CONFIG_FILE" "${CONFIG_FILE}.bak"
-        
-        # 这里的逻辑是：先找到 requestProxy 区块，然后修改里面的 enabled 和 url
-        # 使用 python 或 node 做 yaml 修改最稳，但为了不依赖环境，我们用 sed
-        # 1. 开启代理 (enabled: true) - 只匹配 requestProxy 下面的那一行
-        sed -i '/^requestProxy:/,/^  url:/ s/enabled: false/enabled: true/' "$CONFIG_FILE"
-        
-        # 2. 修改 URL (整行替换)
-        # 匹配以 '  url:' 开头，且在 requestProxy 附近的行
-        sed -i "/^requestProxy:/,/^  bypass:/ s|^  url:.*|  url: \"$PROXY_URL\"|" "$CONFIG_FILE"
+    echo -e "${CYAN}>>> [2/2] 检查脚本更新...${NC}"
+    REMOTE_URL="https://gh-proxy.com/https://raw.githubusercontent.com/Future-404/TAV-X/main/st.sh"
+    LOCAL_PATH=$(readlink -f "$0")
 
-        echo -e "${GREEN}√ 配置写入成功！${NC}"
-        echo -e "${YELLOW}请重启酒馆 (选项 4 -> 选项 1) 以生效。${NC}"
+    if curl -s -L -o "${LOCAL_PATH}.tmp" "$REMOTE_URL"; then
+        LOCAL_MD5=$(md5sum "$LOCAL_PATH" | awk '{print $1}')
+        REMOTE_MD5=$(md5sum "${LOCAL_PATH}.tmp" | awk '{print $1}')
+
+        if [ "$LOCAL_MD5" != "$REMOTE_MD5" ]; then
+            echo -e "${YELLOW}发现新版本，正在升级...${NC}"
+            mv "${LOCAL_PATH}.tmp" "$LOCAL_PATH"
+            chmod +x "$LOCAL_PATH"
+            echo -e "${GREEN}√ 脚本升级成功，正在重启...${NC}"
+            sleep 1
+            exec bash "$LOCAL_PATH"
+        else
+            echo -e "${GREEN}脚本已是最新版${NC}"
+            rm "${LOCAL_PATH}.tmp"
+        fi
     else
-        echo -e "${RED}错误：找不到 config.yaml 文件！${NC}"
+        echo -e "${RED}网络连接失败，跳过脚本检查${NC}"
     fi
-    
+
     read -p "按回车返回..."
 }
 
-disable_proxy() {
-    if [ -f "$CONFIG_FILE" ]; then
-        # 只把 requestProxy 下面的 true 改成 false
-        sed -i '/^requestProxy:/,/^  url:/ s/enabled: true/enabled: false/' "$CONFIG_FILE"
-        echo -e "${GREEN}√ 代理已关闭 (enabled: false)${NC}"
-        echo -e "${YELLOW}请重启酒馆以生效。${NC}"
-    else
-        echo -e "${RED}找不到配置文件。${NC}"
-    fi
-    read -p "按回车返回..."
+stop_services() {
+    pkill -f "node server.js"
+    pkill -f "cloudflared"
+    termux-wake-unlock 2>/dev/null
 }
 
-# --- 菜单显示逻辑 (添加到 show_menu 里) ---
-# 在 show_menu 函数里，case $choice 之前，增加这个选项：
-# echo -e "  7. 🌐 设置 API 代理 (解决连不上 API)"
-#
-# 在 case $choice in 里面增加：
-# 7) configure_proxy ;; 
-# 8) disable_proxy ;; # 您可以做个子菜单，或者直接分开
+start_server_background() {
+    stop_services
+    termux-wake-lock
+    cd "$INSTALL_DIR" || exit
+    echo -e "${CYAN}>>> 正在后台启动酒馆...${NC}"
+    setsid nohup node server.js > "$SERVER_LOG" 2>&1 &
+}
+
+start_share() {
+    start_server_background
+    echo "正在连接 Cloudflare..." > "$CF_LOG"
+    setsid nohup cloudflared tunnel --url http://127.0.0.1:8000 --no-autoupdate >> "$CF_LOG" 2>&1 &
+    echo -e "${GREEN}服务已在后台启动！请在主菜单下方查看链接。${NC}"
+    sleep 3
+}
+
+start_local() {
+    start_server_background
+    echo -e "${GREEN}本地模式已启动！${NC}"
+    sleep 1.5
+}
+
+view_logs() {
+    BREAK_LOOP=false
+    clear
+    echo -e "${CYAN}=== 酒馆实时日志 ===${NC}"
+    echo -e "${YELLOW}按 Ctrl + C 返回主菜单${NC}"
+    echo ""
+    if [ -f "$SERVER_LOG" ]; then
+        while true; do
+            if [ "$BREAK_LOOP" = "true" ]; then BREAK_LOOP=false; break; fi
+            clear
+            echo -e "${CYAN}=== 酒馆实时日志 (Ctrl+C 退出) ===${NC}"
+            tail -n 20 "$SERVER_LOG"
+            sleep 1
+        done
+    else
+        echo -e "${RED}暂无日志文件。${NC}"
+        read -p "按回车返回..."
+    fi
+}
+
+print_banner() {
+    echo -e "${CYAN}"
+    echo '  ______ ___   _   _      __  __'
+    echo ' /_  __//   | | | / /     \ \/ /'
+    echo '  / /  / /| | | |/ /       \  / '
+    echo ' / /  / ___ | |   /        /  \ '
+    echo '/_/  /_/  |_| |__/        /_/\_\'
+    echo -e "${NC}"
+    echo -e "                                  ${YELLOW}by Future404${NC}"
+    echo -e "${CYAN}======================================${NC}"
+}
+
+show_menu() {
+    while true; do
+        BREAK_LOOP=false
+        clear
+        print_banner
+        echo -e "${CYAN}             Version 1.2${NC}"
+
+        if pgrep -f "node server.js" > /dev/null; then
+            echo -e "状态: ${GREEN}● 运行中${NC}"
+            IS_RUNNING=true
+        else
+            echo -e "状态: ${RED}● 已停止${NC}"
+            IS_RUNNING=false
+        fi
+
+        echo ""
+        echo -e "  1. 🚀 启动远程分享"
+        echo -e "  2. 🏠 启动本地模式"
+        echo -e "  3. 📜 查看运行日志"
+        echo -e "  4. 🛑 停止所有服务"
+        echo -e "  5. 🔄 无损更新"
+        echo -e "  6. 🛠️  重置安全配置"
+        echo -e "  7. 🌐 设置代理配置"
+        echo -e "  0. 退出"
+        echo ""
+
+        if [ "$IS_RUNNING" = true ]; then
+             echo -e "${CYAN}====== [ 实时链接仪表盘 ] ======${NC}"
+             LINK=$(grep -o "https://[-a-zA-Z0-9]*\.trycloudflare\.com" "$CF_LOG" 2>/dev/null | grep -v "api" | tail -n 1)
+
+             if [ -n "$LINK" ]; then
+                 echo -e "🌍 ${GREEN}$LINK${NC}"
+                 echo -e "(长按上方链接可复制)"
+             else
+                 if pgrep -f "cloudflared" > /dev/null; then
+                     echo -e "📡 ${YELLOW}正在获取链接... (按回车 刷新)${NC}"
+                 else
+                     echo -e "🏠 ${GREEN}本地模式运行中: http://127.0.0.1:8000${NC}"
+                 fi
+             fi
+             echo ""
+        fi
+
+        read -p "请选择: " choice
+        case $choice in
+            1) check_env; install_st; start_share ;;
+            2) check_env; install_st; start_local ;;
+            3) view_logs ;;
+            4) stop_services; echo -e "${RED}已停止${NC}"; sleep 1 ;;
+            5) check_env; update_st ;;
+            6) configure_security; echo "完成"; sleep 1 ;;
+            7) configure_proxy ;;
+            0) exec bash ;;
+            *) ;;
+        esac
+    done
+}
+
+check_env
+if [ ! -d "$INSTALL_DIR" ]; then install_st; fi
+show_menu
