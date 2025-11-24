@@ -1,5 +1,5 @@
 the#!/bin/bash
-# TAV-X v1.7.1 - 更新逻辑修复版
+# TAV-X v1.7.1 - 更新逻辑修复
 
 # --- 常量定义 ---
 MIRROR_CONFIG="$HOME/.st_mirror_url"
