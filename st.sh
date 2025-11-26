@@ -1,5 +1,5 @@
 #!/bin/bash
-# TAV-X v1.9.1 - 环境自检修复版
+# TAV-X v1.9.3 - 修复代理加速嵌套
 
 # --- 常量定义 ---
 MIRROR_CONFIG="$HOME/.st_mirror_url"
@@ -9,7 +9,8 @@ CONFIG_FILE="$INSTALL_DIR/config.yaml"
 CF_LOG="$INSTALL_DIR/cf_tunnel.log"
 SERVER_LOG="$INSTALL_DIR/server.log"
 BACKUP_DIR="$HOME/storage/downloads/ST_Backup"
-DEFAULT_MIRROR="https://gh-proxy.com/"
+# 默认使用直连稳定源
+DEFAULT_MIRROR="https://mirror.ghproxy.com/"
 
 # --- 颜色定义 ---
 RED='\033[0;31m'
@@ -86,35 +87,34 @@ auto_setup_alias() {
 
 check_env() {
     auto_setup_alias
-    
-    # 1. 初步检查
+
+    # 0. 自愈逻辑：清理旧的镜像配置
+    if [ -f "$MIRROR_CONFIG" ]; then
+        if grep -q "gh-proxy.com" "$MIRROR_CONFIG" || grep -q "gh-proxy.org" "$MIRROR_CONFIG"; then
+            echo -e "${YELLOW}>>> 检测到不稳定镜像源，已自动重置。${NC}"
+            rm -f "$MIRROR_CONFIG"
+        fi
+    fi
+
+    # 1. 环境检查
     if command -v node &> /dev/null && command -v git &> /dev/null && command -v cloudflared &> /dev/null && command -v setsid &> /dev/null; then
         return 0
     fi
-    
-    echo -e "${YELLOW}>>> 检测到环境缺失，正在初始化...${NC}"
-    echo -e "${CYAN}>>> 正在更新软件包列表 (pkg update)...${NC}"
+
+    echo -e "${YELLOW}>>> 环境初始化...${NC}"
     pkg update -y
-    
-    echo -e "${CYAN}>>> 正在安装依赖 (node, git, cloudflared)...${NC}"
     pkg install nodejs-lts git cloudflared util-linux tar nmap -y
-    
-    echo -e "${CYAN}>>> 正在进行二次核验...${NC}"
-    
-    # 2. 严格二次核验：任何一个核心组件缺失都直接报错退出
+
+    # 2. 二次核验
     MISSING=""
     if ! command -v git &> /dev/null; then MISSING="$MISSING git"; fi
     if ! command -v node &> /dev/null; then MISSING="$MISSING node"; fi
     if ! command -v cloudflared &> /dev/null; then MISSING="$MISSING cloudflared"; fi
-    
+
     if [ -n "$MISSING" ]; then
-        echo -e "${RED}❌ 致命错误：以下组件安装失败:$MISSING${NC}"
-        echo -e "${YELLOW}请尝试手动运行以下命令修复：${NC}"
-        echo -e "pkg update -y && pkg install nodejs-lts git cloudflared util-linux -y"
-        echo -e "${RED}脚本无法继续，即将退出。${NC}"
+        echo -e "${RED}❌ 致命错误：组件安装失败:$MISSING${NC}"
+        echo -e "${YELLOW}尝试手动运行：pkg update -y && pkg install nodejs-lts git cloudflared util-linux -y${NC}"
         exit 1
-    else
-        echo -e "${GREEN}✅ 环境检查通过！${NC}"
     fi
 }
 
@@ -143,24 +143,17 @@ apply_global_optimizations() {
 ensure_whitelist_off() {
     ensure_minimal_config
     if grep -q "whitelistMode: true" "$CONFIG_FILE"; then
-        echo -e "${YELLOW}>>> 检测到白名单已开启，正在为远程模式关闭它...${NC}"
         sed -i 's/whitelistMode: true/whitelistMode: false/' "$CONFIG_FILE"
         sleep 0.5
     fi
 }
 
-# --- 插件管理核心 (修复版) ---
-
 enable_server_plugins() {
     ensure_minimal_config
-    if grep -q "enableServerPlugins: true" "$CONFIG_FILE"; then
-        return
-    else
-        sed -i 's/enableServerPlugins: false/enableServerPlugins: true/' "$CONFIG_FILE"
-        if ! grep -q "enableServerPlugins" "$CONFIG_FILE"; then
-             echo "enableServerPlugins: true" >> "$CONFIG_FILE"
-        fi
-        echo -e "${GREEN}√ 已自动在配置中开启服务端插件支持${NC}"
+    if grep -q "enableServerPlugins: true" "$CONFIG_FILE"; then return; fi
+    sed -i 's/enableServerPlugins: false/enableServerPlugins: true/' "$CONFIG_FILE"
+    if ! grep -q "enableServerPlugins" "$CONFIG_FILE"; then
+         echo "enableServerPlugins: true" >> "$CONFIG_FILE"
     fi
 }
 
@@ -172,146 +165,96 @@ install_plugin_core() {
     local dir_name=$5
 
     echo -e "${CYAN}>>> 正在安装: $name${NC}"
-    
+
     CONFIG_STR=$(get_current_config)
     TYPE=${CONFIG_STR%%:*}
     VALUE=${CONFIG_STR#*:}
-    
-    GIT_CMD="git clone"
-    TARGET_REPO="$repo"
-    
+
+    # 沙盒模式：强制 GIT_CONFIG_GLOBAL 指向空，彻底屏蔽用户配置
+    local SAFE_ENV="env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null"
+
     if [ "$TYPE" == "PROXY" ]; then
-        GIT_CMD="git clone -c http.proxy=$VALUE"
+        GIT_CMD="$SAFE_ENV git clone -c http.proxy=$VALUE"
         echo -e "${YELLOW}   使用代理: $VALUE${NC}"
     else
-        # 镜像模式：拼接 URL + 强制清空代理防止干扰
-        # 使用 env -u 是为了防止系统环境变量里的代理干扰
-        GIT_CMD="env -u http_proxy -u https_proxy git clone -c http.proxy="
+        # 镜像模式：同时清理代理变量
+        GIT_CMD="$SAFE_ENV env -u http_proxy -u https_proxy git clone -c http.proxy="
         TARGET_REPO="${VALUE}${repo}"
         echo -e "${YELLOW}   使用镜像: $VALUE${NC}"
     fi
 
-    # 2. 处理服务端
+    # 2. 服务端
     if [ "$branch_server" != "-" ]; then
         enable_server_plugins
         SERVER_PATH="$INSTALL_DIR/plugins/$dir_name"
-        echo -e "   📦 正在部署服务端..."
-        
-        if [ -d "$SERVER_PATH" ]; then
-            echo -e "${YELLOW}   检测到旧版本，正在清理...${NC}"
-            rm -rf "$SERVER_PATH"
-        fi
-        
+        if [ -d "$SERVER_PATH" ]; then rm -rf "$SERVER_PATH"; fi
         mkdir -p "$INSTALL_DIR/plugins"
-        
         BRANCH_ARG=""
-        if [ "$branch_server" != "HEAD" ]; then
-            BRANCH_ARG="-b $branch_server"
-        fi
+        if [ "$branch_server" != "HEAD" ]; then BRANCH_ARG="-b $branch_server"; fi
         
-        # 执行 Git 命令
         if $GIT_CMD $BRANCH_ARG --depth 1 "$TARGET_REPO" "$SERVER_PATH"; then
             echo -e "${GREEN}   √ 服务端部署成功${NC}"
         else
-            echo -e "${RED}   ❌ 服务端下载失败！请检查网络或切换线路。${NC}"
+            echo -e "${RED}   ❌ 服务端下载失败！${NC}"
             return 1
         fi
     fi
 
-    # 3. 处理客户端
+    # 3. 客户端
     if [ "$branch_client" != "-" ]; then
         CLIENT_BASE="$INSTALL_DIR/public/scripts/extensions/third-party"
         CLIENT_PATH="$CLIENT_BASE/$dir_name"
-        echo -e "   💻 正在部署客户端..."
-        
-        if [ -d "$CLIENT_PATH" ]; then
-            echo -e "${YELLOW}   检测到旧版本，正在清理...${NC}"
-            rm -rf "$CLIENT_PATH"
-        fi
-        
+        if [ -d "$CLIENT_PATH" ]; then rm -rf "$CLIENT_PATH"; fi
         mkdir -p "$CLIENT_BASE"
-        
         BRANCH_ARG=""
-        if [ "$branch_client" != "HEAD" ]; then
-            BRANCH_ARG="-b $branch_client"
-        fi
-        
+        if [ "$branch_client" != "HEAD" ]; then BRANCH_ARG="-b $branch_client"; fi
+
         if $GIT_CMD $BRANCH_ARG --depth 1 "$TARGET_REPO" "$CLIENT_PATH"; then
             echo -e "${GREEN}   √ 客户端部署成功${NC}"
         else
-            echo -e "${RED}   ❌ 客户端下载失败！请检查网络或切换线路。${NC}"
+            echo -e "${RED}   ❌ 客户端下载失败！${NC}"
             return 1
         fi
     fi
-    
-    echo -e "${GREEN}🎉 插件安装完成！${NC}"
-    read -p "按回车继续..."
+    echo -e "${GREEN}🎉 安装完成！${NC}"; read -p "回车继续..."
 }
 
 plugin_menu() {
     while true; do
         clear
         echo -e "${CYAN}=== 🧩 插件管理中心 ===${NC}"
-        echo -e "${YELLOW}提示：会自动利用您的 加速线路 或 代理配置 进行下载。${NC}"
-        echo "----------------------------------------"
-        
         i=1
         for item in "${PLUGIN_LIST[@]}"; do
             name=$(echo "$item" | awk -F "|" '{print $1}')
             printf "%-2s. %s\n" "$i" "$name"
             ((i++))
         done
-        
         echo "----------------------------------------"
         echo "0. 🔙 返回主菜单"
         echo ""
-        
-        read -p "请选择要安装的插件编号: " p_idx
-        
-        if ! [[ "$p_idx" =~ ^[0-9]+$ ]]; then
-             if [ -n "$p_idx" ]; then echo -e "${RED}输入错误${NC}"; sleep 1; fi
-             return
-        fi
-        
+        read -p "选择编号: " p_idx
         if [ "$p_idx" == "0" ]; then return; fi
-        
+        if ! [[ "$p_idx" =~ ^[0-9]+$ ]]; then continue; fi
         real_idx=$((p_idx-1))
-        
         if [ -n "${PLUGIN_LIST[$real_idx]}" ]; then
             IFS='|' read -r p_name p_repo p_s_branch p_c_branch p_dir <<< "${PLUGIN_LIST[$real_idx]}"
-            
-            p_name=$(echo "$p_name" | xargs)
-            p_repo=$(echo "$p_repo" | xargs)
-            p_s_branch=$(echo "$p_s_branch" | xargs)
-            p_c_branch=$(echo "$p_c_branch" | xargs)
-            p_dir=$(echo "$p_dir" | xargs)
-            
-            install_plugin_core "$p_name" "$p_repo" "$p_s_branch" "$p_c_branch" "$p_dir"
-        else
-            echo -e "${RED}无效的选择${NC}"
-            sleep 1
+            install_plugin_core "$(echo "$p_name"|xargs)" "$(echo "$p_repo"|xargs)" "$(echo "$p_s_branch"|xargs)" "$(echo "$p_c_branch"|xargs)" "$(echo "$p_dir"|xargs)"
         fi
     done
 }
 
 # --- 验证工具函数 ---
-
 validate_proxy_format() {
-    local proxy=$1
-    if [[ "$proxy" =~ ^(http|https|socks5|socks5h)://.+ ]]; then return 0; else return 1; fi
+    if [[ "$1" =~ ^(http|https|socks5|socks5h)://.+ ]]; then return 0; else return 1; fi
 }
-
 test_proxy_connection() {
-    local proxy=$1
-    echo -e "${YELLOW}>>> 正在测试代理连通性 ($proxy)...${NC}"
-    if curl -s -o /dev/null --connect-timeout 5 --proxy "$proxy" https://www.google.com; then return 0; else return 1; fi
+    echo -e "${YELLOW}>>> 测试代理 ($1)...${NC}"
+    if curl -s -o /dev/null --connect-timeout 5 --proxy "$1" https://www.google.com; then return 0; else return 1; fi
 }
-
 test_mirror_connection() {
-    local mirror=$1
-    echo -e "${YELLOW}>>> 正在测试镜像连通性...${NC}"
-    # 使用 env -u 确保不走系统代理，只测直连
-    if env -u http_proxy -u https_proxy curl -s -o /dev/null --noproxy "*" --connect-timeout 5 "${mirror}https://github.com"; then return 0; else return 1; fi
+    echo -e "${YELLOW}>>> 测试镜像...${NC}"
+    # 强制不使用代理测速
+    if env -u http_proxy -u https_proxy curl -s -o /dev/null --noproxy "*" --connect-timeout 5 "${1}https://github.com"; then return 0; else return 1; fi
 }
 
 # --- 功能菜单函数 ---
@@ -319,23 +262,19 @@ test_mirror_connection() {
 select_mirror() {
     clear
     echo -e "${CYAN}=== 🌐 Github 下载线路配置 ===${NC}"
-    echo -e "正在测试线路连通性 (超时限制: 5秒)..."
+    echo -e "正在测试线路连通性..."
     mirrors=(
-        "https://gh-proxy.com/"
+        "https://mirror.ghproxy.com/"
+        "https://gh.likk.cc/"
         "https://edgeone.gh-proxy.com/"
         "https://hk.gh-proxy.com/"
-        "https://gh.likk.cc/"
         "https://github.moeyy.xyz/"
-        "https://mirror.ghproxy.com/"
     )
-
     printf "%-4s %-10s %-30s\n" "编号" "状态" "线路地址"
     echo "------------------------------------------------"
-
     i=1
     valid_indices=()
     for mirror in "${mirrors[@]}"; do
-        # 测速时也清空代理
         if env -u http_proxy -u https_proxy curl -s -o /dev/null --noproxy "*" --connect-timeout 5 "${mirror}https://github.com"; then
             status="${GREEN}🟢 通畅${NC}"
         else
@@ -345,63 +284,48 @@ select_mirror() {
         valid_indices+=($i)
         ((i++))
     done
-
     echo "------------------------------------------------"
-    echo -e "${YELLOW}如果上方全是🔴，请选择选项 8 使用您自己的梯子${NC}"
     echo -e "7. 自定义镜像地址"
-    echo -e "8. 使用代理直连 (Use Proxy) ${GREEN}[推荐]${NC}"
-    echo -e "0. 返回"
+    echo -e "8. 使用代理直连"
+    echo -e "0. 退出脚本"
     echo ""
     read -p "请选择: " choice
 
     case $choice in
-        0) return ;;
+        0) exit 0 ;; # 直接退出脚本，防止死循环
         8)
             while true; do
-                echo -e "${YELLOW}请输入您的代理地址 (支持 http/https/socks5/socks5h)${NC}"
-                echo -e "示例: socks5://127.0.0.1:10808"
-                read -p "代理地址 (输入 0 取消): " user_proxy
-                
+                echo -e "${YELLOW}输入代理 (示例: socks5://127.0.0.1:10808)${NC}"
+                read -p "地址 (0 取消): " user_proxy
                 if [ "$user_proxy" == "0" ]; then break; fi
-
-                if ! validate_proxy_format "$user_proxy"; then
-                    echo -e "${RED}❌ 格式错误！必须以 http:// 或 socks5:// 等开头。${NC}"
-                    continue
-                fi
-
+                if ! validate_proxy_format "$user_proxy"; then echo -e "${RED}格式错误${NC}"; continue; fi
                 if test_proxy_connection "$user_proxy"; then
-                    sed -i '/^requestProxy:/,/^  bypass:/ s/enabled: false/enabled: true/' "$CONFIG_FILE"
-                    sed -i "/^requestProxy:/,/^  bypass:/ s|^  url:.*|  url: \"$user_proxy\"|" "$CONFIG_FILE"
+                    sed -i '/^requestProxy:/,/^  bypass:/ s/enabled: false/enabled: true/' "$CONFIG_FILE" 2>/dev/null
+                    sed -i "/^requestProxy:/,/^  bypass:/ s|^  url:.*|  url: \"$user_proxy\"|" "$CONFIG_FILE" 2>/dev/null
                     echo "$user_proxy" > "$PROXY_CONFIG_FILE"
                     rm -f "$MIRROR_CONFIG"
-                    echo -e "${GREEN}✅ 设置成功！下载将走代理。${NC}"
-                    sleep 1
-                    break
+                    echo -e "${GREEN}✅ 设置成功${NC}"; sleep 1; break
                 else
-                    echo -e "${RED}❌ 连接失败！请检查您的梯子软件。${NC}"
+                    echo -e "${RED}❌ 连接失败${NC}"
                 fi
             done
             ;;
         7)
             while true; do
-                echo -e "${YELLOW}请输入自定义加速前缀 (必须以 http 开头，以 / 结尾)${NC}"
-                read -p "地址 (输入 0 取消): " custom_url
-                
+                echo -e "${YELLOW}输入自定义前缀 (以 / 结尾)${NC}"
+                read -p "地址 (0 取消): " custom_url
                 if [ "$custom_url" == "0" ]; then return; fi
-
                 if [[ $custom_url == http* ]]; then
                     [[ "${custom_url}" != */ ]] && custom_url="${custom_url}/"
-                    
                     if test_mirror_connection "$custom_url"; then
                         echo "$custom_url" > "$MIRROR_CONFIG"
                         rm -f "$PROXY_CONFIG_FILE"
-                        echo -e "${GREEN}✅ 镜像可用！已切换。${NC}"
-                        break
+                        echo -e "${GREEN}✅ 已切换${NC}"; break
                     else
-                         echo -e "${RED}❌ 镜像不可用或超时。${NC}"
+                         echo -e "${RED}❌ 镜像不可用${NC}"
                     fi
                 else
-                    echo -e "${RED}地址格式错误！${NC}"
+                    echo -e "${RED}格式错误${NC}"
                 fi
             done
             ;;
@@ -410,7 +334,7 @@ select_mirror() {
                 idx=$((choice - 1))
                 echo "${mirrors[$idx]}" > "$MIRROR_CONFIG"
                 rm -f "$PROXY_CONFIG_FILE"
-                echo -e "${GREEN}√ 已切换至镜像: ${mirrors[$idx]}${NC}"
+                echo -e "${GREEN}√ 已切换: ${mirrors[$idx]}${NC}"
             else
                 echo -e "${RED}无效选择${NC}"
             fi
@@ -430,35 +354,26 @@ configure_security_original() {
 
 reset_password_logic() {
     cd "$INSTALL_DIR" || return
-    if [ ! -f "recover.js" ]; then
-        echo -e "${RED}错误：找不到 recover.js 脚本。${NC}"
-        read -p "按回车返回..."
-        return
-    fi
+    if [ ! -f "recover.js" ]; then echo -e "${RED}错误：找不到 recover.js${NC}"; read -p "回车返回..."; return; fi
     clear
-    echo -e "${CYAN}=== 🔐 用户密码重置工具 ===${NC}"
+    echo -e "${CYAN}=== 🔐 密码重置 ===${NC}"
+    if [ -d "data" ]; then ls -F data/ | grep "/" | sed 's/\///g'; fi
     echo "------------------------"
-    if [ -d "data" ]; then ls -F data/ | grep "/" | sed 's/\///g'; else echo "无法读取数据目录"; fi
-    echo "------------------------"
-    read -p "用户名 [默认: default-user]: " TARGET_USER
+    read -p "用户名 [default-user]: " TARGET_USER
     TARGET_USER=${TARGET_USER:-default-user}
-    read -p "新密码 [默认: 123456]: " NEW_PASS
+    read -p "新密码 [123456]: " NEW_PASS
     NEW_PASS=${NEW_PASS:-123456}
     node recover.js "$TARGET_USER" "$NEW_PASS"
-    echo -e "${GREEN}✅ 操作完成！${NC}"
-    read -p "按回车返回..."
+    echo -e "${GREEN}完成${NC}"; read -p "回车返回..."
 }
 
 security_menu() {
     while true; do
-        clear
-        echo -e "${CYAN}=== 🛠️ 安全配置菜单 ===${NC}"
-        echo -e "1. 🔓 修复白名单/免密登录"
-        echo -e "2. 🔑 重置用户密码"
-        echo -e "0. 🔙 返回"
-        read -p "请选择: " sec_choice
+        clear; echo -e "${CYAN}=== 🛠️ 安全配置 ===${NC}"
+        echo -e "1. 🔓 修复白名单/免密"; echo -e "2. 🔑 重置密码"; echo -e "0. 🔙 返回"
+        read -p "选择: " sec_choice
         case $sec_choice in
-            1) configure_security_original; echo -e "${GREEN}完成。${NC}"; sleep 1 ;;
+            1) configure_security_original; echo -e "${GREEN}完成${NC}"; sleep 1 ;;
             2) reset_password_logic ;;
             0) return ;;
         esac
@@ -466,152 +381,85 @@ security_menu() {
 }
 
 configure_proxy() {
-    if [ ! -f "$CONFIG_FILE" ]; then echo -e "${RED}找不到配置文件。${NC}"; sleep 1; return; fi
-    clear
-    echo -e "${CYAN}=== 代理配置向导 ===${NC}"
+    if [ ! -f "$CONFIG_FILE" ]; then echo -e "${RED}无配置${NC}"; sleep 1; return; fi
+    clear; echo -e "${CYAN}=== 代理配置 ===${NC}"
     grep -A 5 "requestProxy:" "$CONFIG_FILE" | grep -E "enabled|url"
-    echo ""
-    echo -e "1. 🟢 开启/设置代理"
-    echo -e "2. 🔴 关闭代理"
-    echo -e "0. 🔙 返回"
-    read -p "请选择: " pc
+    echo ""; echo -e "1. 🟢 开启/设置"; echo -e "2. 🔴 关闭"; echo -e "0. 🔙 返回"
+    read -p "选择: " pc
     case $pc in
         1)
             while true; do
-                echo -e "请输入完整代理地址 (支持 http/https/socks5)"
-                echo -e "示例: http://127.0.0.1:7890"
-                read -p "URL (输入 0 返回): " PURL
-                
+                read -p "代理URL (0返回): " PURL
                 if [ "$PURL" == "0" ]; then break; fi
-
-                if ! validate_proxy_format "$PURL"; then
-                    echo -e "${RED}❌ 格式错误！必须以 http:// 或 socks5:// 开头。${NC}"
-                    continue
-                fi
-
+                if ! validate_proxy_format "$PURL"; then echo -e "${RED}格式错误${NC}"; continue; fi
                 if test_proxy_connection "$PURL"; then
                     sed -i '/^requestProxy:/,/^  bypass:/ s/enabled: false/enabled: true/' "$CONFIG_FILE"
                     sed -i "/^requestProxy:/,/^  bypass:/ s|^  url:.*|  url: \"$PURL\"|" "$CONFIG_FILE"
                     echo "$PURL" > "$PROXY_CONFIG_FILE"
-                    echo -e "${GREEN}✅ 设置成功并已同步至下载代理。${NC}"
-                    sleep 1
-                    break
+                    echo -e "${GREEN}✅ 设置成功${NC}"; sleep 1; break
                 else
-                    echo -e "${RED}❌ 连接测试失败，无法连接到 Google。请检查端口。${NC}"
+                    echo -e "${RED}❌ 连接失败${NC}"
                 fi
-            done
-            ;;
+            done ;;
         2)
             sed -i '/^requestProxy:/,/^  bypass:/ s/enabled: true/enabled: false/' "$CONFIG_FILE"
             rm -f "$PROXY_CONFIG_FILE"
-            echo -e "${GREEN}已关闭。${NC}"; sleep 1
-            ;;
+            echo -e "${GREEN}已关闭${NC}"; sleep 1 ;;
         *) return ;;
     esac
 }
 
 check_storage_permission() {
     if [ ! -d "$HOME/storage" ]; then
-        echo -e "${CYAN}请在弹窗中点击【允许】以访问存储。${NC}"
-        termux-setup-storage
-        sleep 2
-        if [ ! -d "$HOME/storage" ]; then
-            echo -e "${RED}错误：无法访问存储。请确保授予权限后重试。${NC}"
-            return 1
-        fi
+        echo -e "${CYAN}请点击【允许】授权存储访问。${NC}"
+        termux-setup-storage; sleep 2
+        if [ ! -d "$HOME/storage" ]; then echo -e "${RED}无存储权限${NC}"; return 1; fi
     fi
     return 0
 }
 
 perform_backup() {
     check_storage_permission || return
-    if [ ! -d "$INSTALL_DIR/data" ]; then
-        echo -e "${RED}错误：找不到酒馆数据目录 ($INSTALL_DIR/data)${NC}"
-        read -p "按回车返回..."
-        return
-    fi
-    if [ ! -d "$BACKUP_DIR" ]; then
-        mkdir -p "$BACKUP_DIR"
-    fi
+    if [ ! -d "$INSTALL_DIR/data" ]; then echo -e "${RED}无数据目录${NC}"; read -p "回车返回..."; return; fi
+    mkdir -p "$BACKUP_DIR"
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
     BACKUP_FILE="$BACKUP_DIR/ST_Backup_$TIMESTAMP.tar.gz"
     echo -e "${CYAN}正在备份...${NC}"
     cd "$INSTALL_DIR" || return
     tar -czf "$BACKUP_FILE" data
-    if [ -f "$BACKUP_FILE" ]; then
-        echo -e "${GREEN}✅ 备份成功: $(basename "$BACKUP_FILE")${NC}"
-    else
-        echo -e "${RED}❌ 备份失败${NC}"
-    fi
-    read -p "按回车返回..."
+    if [ -f "$BACKUP_FILE" ]; then echo -e "${GREEN}✅ 备份: $(basename "$BACKUP_FILE")${NC}"; else echo -e "${RED}失败${NC}"; fi
+    read -p "回车返回..."
 }
 
 perform_restore() {
     check_storage_permission || return
-    if [ ! -d "$BACKUP_DIR" ]; then
-        echo -e "${RED}未找到备份目录: $BACKUP_DIR${NC}"
-        read -p "按回车返回..."
-        return
-    fi
+    if [ ! -d "$BACKUP_DIR" ]; then echo -e "${RED}无备份目录${NC}"; read -p "回车返回..."; return; fi
     files=("$BACKUP_DIR"/ST_Backup_*.tar.gz)
-    if [ ! -e "${files[0]}" ]; then
-        echo -e "${RED}在 Download/ST_Backup 中未找到有效的备份文件。${NC}"
-        read -p "按回车返回..."
-        return
-    fi
-    clear
-    echo -e "${CYAN}=== 选择要恢复的备份文件 ===${NC}"
-    echo -e "${YELLOW}注意：这只显示 ST_Backup 开头的 .tar.gz 文件${NC}"
-    echo ""
+    if [ ! -e "${files[0]}" ]; then echo -e "${RED}无有效备份文件${NC}"; read -p "回车返回..."; return; fi
+    clear; echo -e "${CYAN}=== 恢复备份 ===${NC}"
     i=1
-    for file in "${files[@]}"; do
-        filename=$(basename "$file")
-        echo -e "$i. $filename"
-        ((i++))
-    done
-    echo "0. 返回"
-    echo ""
-    read -p "请选择编号: " file_idx
+    for file in "${files[@]}"; do echo -e "$i. $(basename "$file")"; ((i++)); done
+    echo "0. 返回"; echo ""
+    read -p "选择: " file_idx
     if [[ "$file_idx" == "0" ]]; then return; fi
     SELECTED_FILE="${files[$((file_idx-1))]}"
-    if [ -z "$SELECTED_FILE" ] || [ ! -f "$SELECTED_FILE" ]; then
-        echo -e "${RED}无效的选择。${NC}"
-        sleep 1
-        return
-    fi
-    echo ""
-    echo -e "${RED}⚠️  高危警告 ⚠️${NC}"
-    echo -e "您即将从备份 [ $(basename "$SELECTED_FILE") ] 恢复数据。"
-    echo -e "${RED}此操作将【彻底删除】当前酒馆内的所有聊天记录和角色！${NC}"
-    echo -e "确定要继续吗？"
-    read -p "输入 'yes' 确认覆盖: " confirm
-    if [[ "$confirm" != "yes" ]]; then
-        echo -e "${YELLOW}操作已取消。${NC}"
-        sleep 1
-        return
-    fi
-    echo -e "${CYAN}>>> 正在清空旧数据...${NC}"
+    if [ -z "$SELECTED_FILE" ] || [ ! -f "$SELECTED_FILE" ]; then echo -e "${RED}无效${NC}"; sleep 1; return; fi
+    echo -e "${RED}⚠️  警告: 将覆盖当前数据！${NC}"
+    read -p "输入 'yes' 确认: " confirm
+    if [[ "$confirm" != "yes" ]]; then return; fi
     rm -rf "$INSTALL_DIR/data"
-    echo -e "${CYAN}>>> 正在解压恢复...${NC}"
     mkdir -p "$INSTALL_DIR/data"
     tar -xzf "$SELECTED_FILE" -C "$INSTALL_DIR"
-    echo -e "${GREEN}✅ 恢复完成！${NC}"
-    echo -e "${YELLOW}建议您稍后重启酒馆。${NC}"
-    read -p "按回车返回..."
+    echo -e "${GREEN}✅ 恢复完成${NC}"; read -p "回车返回..."
 }
 
 backup_menu() {
     while true; do
-        clear
-        echo -e "${CYAN}=== 💾 数据备份与恢复 ===${NC}"
-        echo -e "1. 📤 备份 (Backup)"
-        echo -e "2. 📥 恢复 (Restore)"
-        echo -e "0. 🔙 返回"
+        clear; echo -e "${CYAN}=== 💾 备份与恢复 ===${NC}"
+        echo -e "1. 📤 备份"; echo -e "2. 📥 恢复"; echo -e "0. 🔙 返回"
         read -p "选择: " bc
         case $bc in
-            1) perform_backup ;;
-            2) perform_restore ;;
-            0) return ;;
+            1) perform_backup ;; 2) perform_restore ;; 0) return ;;
         esac
     done
 }
@@ -625,19 +473,20 @@ install_st() {
 
     if [ ! -d "$INSTALL_DIR" ]; then
         echo -e "${CYAN}>>> 开始部署...${NC}"
-        GIT_CMD="git clone --depth 1"
-        URL=""
+
+        # 沙盒模式：屏蔽所有全局配置，解决 URL 解析错误和代理嵌套问题
+        local SAFE_ENV="env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null"
+        
         if [ "$TYPE" == "PROXY" ]; then
-            echo -e "${YELLOW}>>> 使用代理下载模式: $VALUE${NC}"
-            GIT_CMD="git clone --depth 1 -c http.proxy=$VALUE"
+            echo -e "${YELLOW}>>> 代理模式: $VALUE${NC}"
+            GIT_CMD="$SAFE_ENV git clone --depth 1 -c http.proxy=$VALUE"
             URL="https://github.com/SillyTavern/SillyTavern.git"
         else
-            echo -e "${YELLOW}>>> 使用镜像下载模式: $VALUE${NC}"
-            # 强制清空代理，防止干扰
-            GIT_CMD="env -u http_proxy -u https_proxy git clone --depth 1 -c http.proxy="
+            echo -e "${YELLOW}>>> 镜像模式: $VALUE${NC}"
+            GIT_CMD="$SAFE_ENV env -u http_proxy -u https_proxy git clone --depth 1 -c http.proxy="
             URL="${VALUE}https://github.com/SillyTavern/SillyTavern.git"
         fi
-        
+
         if ! $GIT_CMD "$URL" "$INSTALL_DIR"; then
             echo -e "${RED}❌ 下载失败，进入线路选择...${NC}"
             sleep 2
@@ -648,9 +497,7 @@ install_st() {
         cd "$INSTALL_DIR" || return
         npm config set registry https://registry.npmmirror.com
         npm install --no-audit --fund
-        if [ -f "$INSTALL_DIR/default/config.yaml" ]; then
-            cp "$INSTALL_DIR/default/config.yaml" "$CONFIG_FILE"
-        fi
+        if [ -f "$INSTALL_DIR/default/config.yaml" ]; then cp "$INSTALL_DIR/default/config.yaml" "$CONFIG_FILE"; fi
     else
         if [ ! -d "$INSTALL_DIR/node_modules" ]; then
             echo -e "${YELLOW}>>> 修复依赖...${NC}"
@@ -666,138 +513,98 @@ update_st() {
     VALUE=${CONFIG_STR#*:}
     echo -e "${CYAN}>>> 更新酒馆...${NC}"
     cd "$INSTALL_DIR" || exit
-    
+
+    # 使用纯净环境进行 pull
+    local SAFE_ENV="env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null"
+
     if [ "$TYPE" == "PROXY" ]; then git config http.proxy "$VALUE"; else git config --unset http.proxy; fi
-    
     if [[ -n $(git status -s) ]]; then git stash; STASHED=1; fi
-    
-    if ! git pull; then
-        echo -e "${RED}❌ 更新失败！网络超时或代理配置错误。${NC}"
+
+    # 修复：使用沙盒环境执行 pull
+    if ! $SAFE_ENV git pull; then
+        echo -e "${RED}❌ 更新失败！${NC}"
         if [ "$TYPE" == "PROXY" ]; then git config --unset http.proxy; fi
-        
-        echo -e "${YELLOW}>>> 是否进入线路/代理切换向导？(y/n)${NC}"
+        echo -e "${YELLOW}是否切换线路重试？(y/n)${NC}"
         read -p "选择: " retry_choice
         if [[ "$retry_choice" == "y" ]]; then
             select_mirror
-            update_st # 递归重试
+            update_st
             return
         else
-            echo -e "${RED}更新中止。${NC}"
             if [[ "$STASHED" == "1" ]]; then git stash pop; fi
-            read -p "按回车返回..."
+            read -p "回车返回..."
             return
         fi
     fi
 
     if [ "$TYPE" == "PROXY" ]; then git config --unset http.proxy; fi
     if [[ "$STASHED" == "1" ]]; then git stash pop; fi
-    
     npm install --no-audit --fund
-    echo -e "${GREEN}完成。${NC}"; read -p "按回车返回..."
+    echo -e "${GREEN}完成${NC}"; read -p "回车返回..."
 }
 
 stop_services() {
-    pkill -f "node server.js"
-    pkill -f "cloudflared"
-    termux-wake-unlock 2>/dev/null
+    pkill -f "node server.js"; pkill -f "cloudflared"; termux-wake-unlock 2>/dev/null
 }
 
 start_server_background() {
-    stop_services
-    termux-wake-lock
+    stop_services; termux-wake-lock
     cd "$INSTALL_DIR" || exit
-    echo -e "${CYAN}>>> 启动酒馆...${NC}"
+    echo -e "${CYAN}>>> 启动服务...${NC}"
     setsid nohup node server.js > "$SERVER_LOG" 2>&1 &
 }
 
 start_share() {
-    ensure_whitelist_off
-    start_server_background
-    echo "正在连接 Cloudflare..." > "$CF_LOG"
+    ensure_whitelist_off; start_server_background
+    echo "正在连接..." > "$CF_LOG"
     setsid nohup cloudflared tunnel --protocol http2 --url http://127.0.0.1:8000 --no-autoupdate >> "$CF_LOG" 2>&1 &
-    echo -e "${GREEN}服务已在后台启动！请在主菜单下方查看链接。${NC}"
-    sleep 3
+    echo -e "${GREEN}服务已启动！${NC}"; sleep 3
 }
 
 start_local() {
-    start_server_background
-    echo -e "${GREEN}本地模式已启动！${NC}"
-    sleep 1.5
+    start_server_background; echo -e "${GREEN}本地模式已启动！${NC}"; sleep 1.5
 }
 
 view_logs() {
     BREAK_LOOP=false
     clear
-    echo -e "${CYAN}=== 实时日志 (Ctrl+C 退出) ===${NC}"
     if [ -f "$SERVER_LOG" ]; then
         while true; do
             if [ "$BREAK_LOOP" = "true" ]; then BREAK_LOOP=false; break; fi
-            clear; echo -e "${CYAN}=== 实时日志 (Ctrl+C 退出) ===${NC}"
-            tail -n 20 "$SERVER_LOG"
-            sleep 1
+            clear; echo -e "${CYAN}=== 日志 (Ctrl+C 退出) ===${NC}"
+            tail -n 20 "$SERVER_LOG"; sleep 1
         done
     else
-        echo -e "${RED}无日志文件${NC}"; read -p "回车返回..."
+        echo -e "${RED}无日志${NC}"; read -p "回车返回..."
     fi
 }
 
-exit_script() {
-    exec bash
-}
+exit_script() { exec bash; }
 
 show_menu() {
     while true; do
-        BREAK_LOOP=false
-        clear
-        print_banner
-        echo -e "${CYAN}             Version 1.9.1${NC}"
-        if pgrep -f "node server.js" > /dev/null; then
-            echo -e "状态: ${GREEN}● 运行中${NC}"
-            IS_RUNNING=true
-        else
-            echo -e "状态: ${RED}● 已停止${NC}"
-            IS_RUNNING=false
-        fi
+        BREAK_LOOP=false; clear; print_banner
+        echo -e "${CYAN}             Version 1.9.3${NC}"
+        if pgrep -f "node server.js" > /dev/null; then echo -e "状态: ${GREEN}● 运行中${NC}"; IS_RUNNING=true
+        else echo -e "状态: ${RED}● 已停止${NC}"; IS_RUNNING=false; fi
+        echo ""; echo -e "  1. 🚀 远程分享"; echo -e "  2. 🏠 本地模式"
+        echo -e "  3. 📜 运行日志"; echo -e "  4. 🛑 停止服务"
+        echo -e "  5. 🔄 无损更新"; echo -e "  6. 🛠️  安全配置"
+        echo -e "  7. 🌐 API代理"; echo -e "  8. 💾 备份恢复"
+        echo -e "  9. 🌐 切换线路"; echo -e " 10. 🧩 插件管理"; echo -e "  0. 退出"
         echo ""
-        echo -e "  1. 🚀 启动远程分享"
-        echo -e "  2. 🏠 启动本地模式"
-        echo -e "  3. 📜 查看运行日志"
-        echo -e "  4. 🛑 停止所有服务"
-        echo -e "  5. 🔄 无损更新"
-        echo -e "  6. 🛠️  安全与密码配置"
-        echo -e "  7. 🌐 设置 API 代理配置"
-        echo -e "  8. 💾 数据备份与恢复"
-        echo -e "  9. 🌐 切换 下载 线路/代理"
-        echo -e " 10. 🧩 安装/管理 扩展插件"
-        echo -e "  0. 退出"
-        echo ""
-        
         if [ "$IS_RUNNING" = true ]; then
-             echo -e "${CYAN}====== [ 实时链接仪表盘 ] ======${NC}"
+             echo -e "${CYAN}====== [ 实时链接 ] ======${NC}"
              LINK=$(grep -o "https://[-a-zA-Z0-9]*\.trycloudflare\.com" "$CF_LOG" 2>/dev/null | grep -v "api" | tail -n 1)
-             if [ -n "$LINK" ]; then
-                 echo -e "🌍 ${GREEN}$LINK${NC}"
-                 echo -e "(长按上方链接可复制)"
-             else
-                 echo -e "📡 ${YELLOW}正在获取链接... (按回车刷新)${NC}"
-             fi
+             if [ -n "$LINK" ]; then echo -e "🌍 ${GREEN}$LINK${NC}"; else echo -e "📡 ${YELLOW}获取中...${NC}"; fi
              echo ""
         fi
-        
-        read -p "请选择: " choice
+        read -p "选择: " choice
         case $choice in
-            1) check_env; install_st; start_share ;;
-            2) check_env; install_st; start_local ;;
-            3) view_logs ;;
-            4) stop_services; echo -e "${RED}已停止${NC}"; sleep 1 ;;
-            5) check_env; update_st ;;
-            6) security_menu ;;
-            7) configure_proxy ;;
-            8) backup_menu ;;
-            9) select_mirror ;;
-            10) plugin_menu ;;
-            0) exit_script ;;
-            *) ;;
+            1) check_env; install_st; start_share ;; 2) check_env; install_st; start_local ;;
+            3) view_logs ;; 4) stop_services; sleep 1 ;; 5) check_env; update_st ;;
+            6) security_menu ;; 7) configure_proxy ;; 8) backup_menu ;;
+            9) select_mirror ;; 10) plugin_menu ;; 0) exit_script ;; *) ;;
         esac
     done
 }
