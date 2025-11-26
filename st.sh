@@ -1,5 +1,5 @@
-the#!/bin/bash
-# TAV-X v1.7.1 - 更新逻辑修复
+#!/bin/bash
+# TAV-X v1.9 - 测试  (Fixed by Future404 & Co-Pilot)
 
 # --- 常量定义 ---
 MIRROR_CONFIG="$HOME/.st_mirror_url"
@@ -22,6 +22,36 @@ NC='\033[0m'
 BREAK_LOOP=false
 trap 'BREAK_LOOP=true' SIGINT
 
+# --- 插件注册表 ---
+PLUGIN_LIST=(
+    "AIStudioBuildProxy (汉化/API代理) | https://github.com/il1umi/AIStudioBuildProxy.git | server | client | AIStudioBuildProxy"
+    "对话文本着色 (Dialogue Colorizer) | https://github.com/XanadusWorks/SillyTavern-Dialogue-Colorizer.git | - | HEAD | SillyTavern-Dialogue-Colorizer"
+    "顶部信息栏 (TopInfoBar) | https://github.com/SillyTavern/Extension-TopInfoBar.git | - | HEAD | Extension-TopInfoBar"
+    "界面元素隐藏 (Hide UI) | https://github.com/uhhhh15/hide.git | - | HEAD | hide"
+    "自定义模型列表 (Custom Models) | https://github.com/LenAnderson/SillyTavern-CustomModels.git | - | HEAD | SillyTavern-CustomModels"
+    "聊天统计面板 (Chat Stats) | https://github.com/Junejulyz/chat-companion-stats.git | - | HEAD | chat-companion-stats"
+    "快速回复 (QR) | https://github.com/uhhhh15/QR.git | - | HEAD | QR"
+    "强力快速回复 (QR Force) | https://github.com/AlbusKen/quick-response-force.git | - | HEAD | quick-response-force"
+    "输入辅助助手 (Input Helper) | https://github.com/Mooooooon/st-input-helper.git | - | HEAD | st-input-helper"
+    "提示词模板管理 (Prompt Template) | https://github.com/zonde306/ST-Prompt-Template.git | - | HEAD | ST-Prompt-Template"
+    "消息收藏/星标 (Star Message) | https://github.com/uhhhh15/star.git | - | HEAD | star"
+    "Amily2 聊天优化 (Chat Opt) | https://github.com/Wx-2025/ST-Amily2-Chat-Optimisation.git | - | HEAD | ST-Amily2-Chat-Optimisation"
+    "记忆增强扩展 (Memory Enhance) | https://github.com/muyoou/st-memory-enhancement.git | HEAD | - | st-memory-enhancement"
+    "上下文消息限制 (Message Limit) | https://github.com/SillyTavern/Extension-MessageLimit.git | - | HEAD | Extension-MessageLimit"
+    "前端 Token 计数 (Tokenizer) | https://github.com/GoldenglowMeow/ST-Frontend-Tokenizer.git | - | HEAD | ST-Frontend-Tokenizer"
+    "预设管理器 Momo (Preset Mgr) | https://github.com/1830488003/preset-manager-momo.git | - | HEAD | preset-manager-momo"
+    "世界书扩展 Momo (World Book) | https://github.com/1830488003/my-world-book-momo.git | - | HEAD | my-world-book-momo"
+    "JS 脚本运行器 (Slash Runner) | https://github.com/n0vi028/JS-Slash-Runner.git | - | HEAD | JS-Slash-Runner"
+    "Bincooo 执行器 (JsRunner) | https://github.com/bincooo/SillyTavernExtension-JsRunner.git | - | HEAD | SillyTavernExtension-JsRunner"
+    "拒绝助手废话 (No Assistant) | https://gitgud.io/Monblant/noass.git | - | HEAD | noass"
+    "定时提醒工具 (Reminder) | https://github.com/Mooooooon/silly-tavern-reminder.git | - | HEAD | silly-tavern-reminder"
+    "生成失败通知 (Fail Notify) | https://github.com/RealSubstantiality/fail-notification.git | - | HEAD | fail-notification"
+    "小白盒工具箱 (LittleWhiteBox) | https://github.com/RT15548/LittleWhiteBox.git | - | HEAD | LittleWhiteBox"
+    "快捷人格切换 (Quick Persona) | https://github.com/SillyTavern/Extension-QuickPersona.git | - | HEAD | Extension-QuickPersona"
+    "聊天记录备份 (Chat Backup) | https://github.com/uhhhh15/chat-history-backup.git | - | HEAD | chat-history-backup"
+    "静音/停止生成 (Silence) | https://github.com/SillyTavern/Extension-Silence.git | - | HEAD | Extension-Silence"
+)
+
 # --- 辅助函数 ---
 
 get_current_config() {
@@ -32,6 +62,18 @@ get_current_config() {
     else
         echo "MIRROR:$DEFAULT_MIRROR"
     fi
+}
+
+ensure_minimal_config() {
+    if [ -f "$CONFIG_FILE" ]; then return; fi
+    mkdir -p "$(dirname "$CONFIG_FILE")"
+    echo "whitelistMode: false" > "$CONFIG_FILE"
+    echo "enableUserAccounts: true" >> "$CONFIG_FILE"
+    echo "enableServerPlugins: true" >> "$CONFIG_FILE"
+    echo "enableDiscreetLogin: true" >> "$CONFIG_FILE"
+    echo "requestProxy:" >> "$CONFIG_FILE"
+    echo "  enabled: false" >> "$CONFIG_FILE"
+    echo "  url: \"\"" >> "$CONFIG_FILE"
 }
 
 auto_setup_alias() {
@@ -67,7 +109,8 @@ print_banner() {
 # --- 核心逻辑函数 ---
 
 apply_global_optimizations() {
-    if [ ! -f "$CONFIG_FILE" ]; then return; fi
+    ensure_minimal_config
+    # 使用正则精准替换，避免误伤
     sed -i 's/enableUserAccounts: false/enableUserAccounts: true/' "$CONFIG_FILE"
     sed -i 's/lazyLoadCharacters: false/lazyLoadCharacters: true/' "$CONFIG_FILE"
     sed -i 's/useDiskCache: true/useDiskCache: false/' "$CONFIG_FILE"
@@ -75,7 +118,7 @@ apply_global_optimizations() {
 }
 
 ensure_whitelist_off() {
-    if [ ! -f "$CONFIG_FILE" ]; then return; fi
+    ensure_minimal_config
     if grep -q "whitelistMode: true" "$CONFIG_FILE"; then
         echo -e "${YELLOW}>>> 检测到白名单已开启，正在为远程模式关闭它...${NC}"
         sed -i 's/whitelistMode: true/whitelistMode: false/' "$CONFIG_FILE"
@@ -83,35 +126,178 @@ ensure_whitelist_off() {
     fi
 }
 
+# --- 插件管理核心 (修复版) ---
+
+enable_server_plugins() {
+    ensure_minimal_config
+    if grep -q "enableServerPlugins: true" "$CONFIG_FILE"; then
+        return
+    else
+        sed -i 's/enableServerPlugins: false/enableServerPlugins: true/' "$CONFIG_FILE"
+        # 防止配置项不存在的情况，追加一行
+        if ! grep -q "enableServerPlugins" "$CONFIG_FILE"; then
+             echo "enableServerPlugins: true" >> "$CONFIG_FILE"
+        fi
+        echo -e "${GREEN}√ 已自动在配置中开启服务端插件支持${NC}"
+    fi
+}
+
+install_plugin_core() {
+    local name=$1
+    local repo=$2
+    local branch_server=$3
+    local branch_client=$4
+    local dir_name=$5
+
+    echo -e "${CYAN}>>> 正在安装: $name${NC}"
+    
+    # 1. 准备网络配置 (修复代理套娃问题)
+    CONFIG_STR=$(get_current_config)
+    TYPE=${CONFIG_STR%%:*}
+    VALUE=${CONFIG_STR#*:}
+    
+    # 强制 git clone 使用的命令前缀
+    GIT_CMD="git clone"
+    
+    # 目标仓库地址
+    TARGET_REPO="$repo"
+    
+    if [ "$TYPE" == "PROXY" ]; then
+        # 代理模式：指定 http.proxy
+        GIT_CMD="git clone -c http.proxy=$VALUE"
+        echo -e "${YELLOW}   使用代理: $VALUE${NC}"
+    else
+        # 镜像模式：拼接 URL + 清除可能的全局代理干扰
+        # 关键修复：使用 env -u 确保不走系统环境变量代理
+        GIT_CMD="env -u http_proxy -u https_proxy git clone -c http.proxy="
+        TARGET_REPO="${VALUE}${repo}"
+        echo -e "${YELLOW}   使用镜像: $VALUE${NC}"
+    fi
+
+    # 2. 处理服务端
+    if [ "$branch_server" != "-" ]; then
+        enable_server_plugins
+        SERVER_PATH="$INSTALL_DIR/plugins/$dir_name"
+        echo -e "   📦 正在部署服务端..."
+        
+        if [ -d "$SERVER_PATH" ]; then
+            echo -e "${YELLOW}   检测到旧版本，正在清理...${NC}"
+            rm -rf "$SERVER_PATH"
+        fi
+        
+        mkdir -p "$INSTALL_DIR/plugins"
+        
+        # 修复 HEAD 分支处理
+        BRANCH_ARG=""
+        if [ "$branch_server" != "HEAD" ]; then
+            BRANCH_ARG="-b $branch_server"
+        fi
+        
+        if $GIT_CMD $BRANCH_ARG --depth 1 "$TARGET_REPO" "$SERVER_PATH"; then
+            echo -e "${GREEN}   √ 服务端部署成功${NC}"
+        else
+            echo -e "${RED}   ❌ 服务端下载失败！请检查网络或切换线路。${NC}"
+            return 1
+        fi
+    fi
+
+    # 3. 处理客户端
+    if [ "$branch_client" != "-" ]; then
+        CLIENT_BASE="$INSTALL_DIR/public/scripts/extensions/third-party"
+        CLIENT_PATH="$CLIENT_BASE/$dir_name"
+        echo -e "   💻 正在部署客户端..."
+        
+        if [ -d "$CLIENT_PATH" ]; then
+            echo -e "${YELLOW}   检测到旧版本，正在清理...${NC}"
+            rm -rf "$CLIENT_PATH"
+        fi
+        
+        mkdir -p "$CLIENT_BASE"
+        
+        # 修复 HEAD 分支处理
+        BRANCH_ARG=""
+        if [ "$branch_client" != "HEAD" ]; then
+            BRANCH_ARG="-b $branch_client"
+        fi
+        
+        if $GIT_CMD $BRANCH_ARG --depth 1 "$TARGET_REPO" "$CLIENT_PATH"; then
+            echo -e "${GREEN}   √ 客户端部署成功${NC}"
+        else
+            echo -e "${RED}   ❌ 客户端下载失败！请检查网络或切换线路。${NC}"
+            return 1
+        fi
+    fi
+    
+    echo -e "${GREEN}🎉 插件安装完成！${NC}"
+    read -p "按回车继续..."
+}
+
+plugin_menu() {
+    while true; do
+        clear
+        echo -e "${CYAN}=== 🧩 插件管理中心 ===${NC}"
+        echo -e "${YELLOW}提示：会自动利用您的 加速线路 或 代理配置 进行下载。${NC}"
+        echo "----------------------------------------"
+        
+        i=1
+        for item in "${PLUGIN_LIST[@]}"; do
+            name=$(echo "$item" | awk -F "|" '{print $1}')
+            printf "%-2s. %s\n" "$i" "$name"
+            ((i++))
+        done
+        
+        echo "----------------------------------------"
+        echo "0. 🔙 返回主菜单"
+        echo ""
+        
+        read -p "请选择要安装的插件编号: " p_idx
+        
+        # 输入验证
+        if ! [[ "$p_idx" =~ ^[0-9]+$ ]]; then
+             if [ -n "$p_idx" ]; then echo -e "${RED}输入错误${NC}"; sleep 1; fi
+             return
+        fi
+        
+        if [ "$p_idx" == "0" ]; then return; fi
+        
+        real_idx=$((p_idx-1))
+        
+        if [ -n "${PLUGIN_LIST[$real_idx]}" ]; then
+            IFS='|' read -r p_name p_repo p_s_branch p_c_branch p_dir <<< "${PLUGIN_LIST[$real_idx]}"
+            
+            # 去除空格
+            p_name=$(echo "$p_name" | xargs)
+            p_repo=$(echo "$p_repo" | xargs)
+            p_s_branch=$(echo "$p_s_branch" | xargs)
+            p_c_branch=$(echo "$p_c_branch" | xargs)
+            p_dir=$(echo "$p_dir" | xargs)
+            
+            install_plugin_core "$p_name" "$p_repo" "$p_s_branch" "$p_c_branch" "$p_dir"
+        else
+            echo -e "${RED}无效的选择${NC}"
+            sleep 1
+        fi
+    done
+}
+
 # --- 验证工具函数 ---
 
 validate_proxy_format() {
     local proxy=$1
-    if [[ "$proxy" =~ ^(http|https|socks5|socks5h)://.+ ]]; then
-        return 0
-    else
-        return 1
-    fi
+    if [[ "$proxy" =~ ^(http|https|socks5|socks5h)://.+ ]]; then return 0; else return 1; fi
 }
 
 test_proxy_connection() {
     local proxy=$1
     echo -e "${YELLOW}>>> 正在测试代理连通性 ($proxy)...${NC}"
-    if curl -s -o /dev/null --connect-timeout 5 --proxy "$proxy" https://www.google.com; then
-        return 0
-    else
-        return 1
-    fi
+    if curl -s -o /dev/null --connect-timeout 5 --proxy "$proxy" https://www.google.com; then return 0; else return 1; fi
 }
 
 test_mirror_connection() {
     local mirror=$1
     echo -e "${YELLOW}>>> 正在测试镜像连通性...${NC}"
-    if curl -s -o /dev/null --connect-timeout 5 "${mirror}https://github.com"; then
-        return 0
-    else
-        return 1
-    fi
+    # 使用 env -u 确保不走系统代理，只测直连
+    if env -u http_proxy -u https_proxy curl -s -o /dev/null --noproxy "*" --connect-timeout 5 "${mirror}https://github.com"; then return 0; else return 1; fi
 }
 
 # --- 功能菜单函数 ---
@@ -135,7 +321,8 @@ select_mirror() {
     i=1
     valid_indices=()
     for mirror in "${mirrors[@]}"; do
-        if curl -s -o /dev/null --connect-timeout 5 "${mirror}https://github.com"; then
+        # 测速时也清空代理
+        if env -u http_proxy -u https_proxy curl -s -o /dev/null --noproxy "*" --connect-timeout 5 "${mirror}https://github.com"; then
             status="${GREEN}🟢 通畅${NC}"
         else
             status="${RED}🔴 超时${NC}"
@@ -161,7 +348,7 @@ select_mirror() {
                 echo -e "示例: socks5://127.0.0.1:10808"
                 read -p "代理地址 (输入 0 取消): " user_proxy
                 
-                if [ "$user_proxy" == "0" ]; then return; fi
+                if [ "$user_proxy" == "0" ]; then break; fi
 
                 if ! validate_proxy_format "$user_proxy"; then
                     echo -e "${RED}❌ 格式错误！必须以 http:// 或 socks5:// 等开头。${NC}"
@@ -169,13 +356,15 @@ select_mirror() {
                 fi
 
                 if test_proxy_connection "$user_proxy"; then
+                    sed -i '/^requestProxy:/,/^  bypass:/ s/enabled: false/enabled: true/' "$CONFIG_FILE"
+                    sed -i "/^requestProxy:/,/^  bypass:/ s|^  url:.*|  url: \"$user_proxy\"|" "$CONFIG_FILE"
                     echo "$user_proxy" > "$PROXY_CONFIG_FILE"
                     rm -f "$MIRROR_CONFIG"
-                    echo -e "${GREEN}✅ 测试通过！已设置为代理模式。${NC}"
+                    echo -e "${GREEN}✅ 设置成功！下载将走代理。${NC}"
                     sleep 1
                     break
                 else
-                    echo -e "${RED}❌ 连接测试失败！请检查您的梯子软件是否开启。${NC}"
+                    echo -e "${RED}❌ 连接失败！请检查您的梯子软件。${NC}"
                 fi
             done
             ;;
@@ -365,6 +554,24 @@ perform_restore() {
     read -p "按回车返回..."
 }
 
+backup_menu() {
+    while true; do
+        clear
+        echo -e "${CYAN}=== 💾 数据备份与恢复 ===${NC}"
+        echo -e "1. 📤 备份 (Backup)"
+        echo -e "2. 📥 恢复 (Restore)"
+        echo -e "0. 🔙 返回"
+        read -p "选择: " bc
+        case $bc in
+            1) perform_backup ;;
+            2) perform_restore ;;
+            0) return ;;
+        esac
+    done
+}
+
+# --- 核心操作函数 ---
+
 install_st() {
     CONFIG_STR=$(get_current_config)
     TYPE=${CONFIG_STR%%:*}
@@ -380,6 +587,8 @@ install_st() {
             URL="https://github.com/SillyTavern/SillyTavern.git"
         else
             echo -e "${YELLOW}>>> 使用镜像下载模式: $VALUE${NC}"
+            # 强制清空代理，防止干扰
+            GIT_CMD="env -u http_proxy -u https_proxy git clone --depth 1 -c http.proxy="
             URL="${VALUE}https://github.com/SillyTavern/SillyTavern.git"
         fi
         
@@ -409,14 +618,13 @@ update_st() {
     CONFIG_STR=$(get_current_config)
     TYPE=${CONFIG_STR%%:*}
     VALUE=${CONFIG_STR#*:}
-    echo -e "${CYAN}>>> [1/2] 更新酒馆程序...${NC}"
+    echo -e "${CYAN}>>> 更新酒馆...${NC}"
     cd "$INSTALL_DIR" || exit
     
     if [ "$TYPE" == "PROXY" ]; then git config http.proxy "$VALUE"; else git config --unset http.proxy; fi
     
     if [[ -n $(git status -s) ]]; then git stash; STASHED=1; fi
     
-    # === 更新的核心逻辑修改 ===
     if ! git pull; then
         echo -e "${RED}❌ 更新失败！网络超时或代理配置错误。${NC}"
         if [ "$TYPE" == "PROXY" ]; then git config --unset http.proxy; fi
@@ -425,7 +633,6 @@ update_st() {
         read -p "选择: " retry_choice
         if [[ "$retry_choice" == "y" ]]; then
             select_mirror
-            # 递归重试，使用新配置
             update_st
             return
         else
@@ -435,7 +642,6 @@ update_st() {
             return
         fi
     fi
-    # ========================
 
     if [ "$TYPE" == "PROXY" ]; then git config --unset http.proxy; fi
     if [[ "$STASHED" == "1" ]]; then git stash pop; fi
@@ -498,7 +704,7 @@ show_menu() {
         BREAK_LOOP=false
         clear
         print_banner
-        echo -e "${CYAN}             Version 1.7.1${NC}"
+        echo -e "${CYAN}             Version 1.9${NC}"
         if pgrep -f "node server.js" > /dev/null; then
             echo -e "状态: ${GREEN}● 运行中${NC}"
             IS_RUNNING=true
@@ -516,6 +722,7 @@ show_menu() {
         echo -e "  7. 🌐 设置 API 代理配置"
         echo -e "  8. 💾 数据备份与恢复"
         echo -e "  9. 🌐 切换 下载 线路/代理"
+        echo -e " 10. 🧩 安装/管理 扩展插件"
         echo -e "  0. 退出"
         echo ""
         
@@ -542,6 +749,7 @@ show_menu() {
             7) configure_proxy ;;
             8) backup_menu ;;
             9) select_mirror ;;
+            10) plugin_menu ;;
             0) exit_script ;;
             *) ;;
         esac
@@ -554,5 +762,3 @@ auto_setup_alias
 if [ ! -d "$INSTALL_DIR" ]; then install_st; fi
 if [ -d "$INSTALL_DIR" ]; then apply_global_optimizations; fi
 show_menu
-
-exec bash
