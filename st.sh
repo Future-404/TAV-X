@@ -1,6 +1,6 @@
 #!/bin/bash
-# TAV-X v1.12.0
-CURRENT_VERSION="v1.12.0"
+# TAV-X v1.12.1
+CURRENT_VERSION="v1.12.1"
 MIRROR_CONFIG="$HOME/.st_mirror_url"
 PROXY_CONFIG_FILE="$HOME/.st_download_proxy"
 INSTALL_DIR="$HOME/SillyTavern"
@@ -9,7 +9,7 @@ CF_LOG="$INSTALL_DIR/cf_tunnel.log"
 SERVER_LOG="$INSTALL_DIR/server.log"
 BACKUP_DIR="$HOME/storage/downloads/ST_Backup"
 DEFAULT_MIRROR="https://mirror.ghproxy.com/"
-SCRIPT_URL_BASE="https://raw.githubusercontent.com/Future-404/TAV-X/main/st.sh"
+SCRIPT_URL_BASE="https://edgecname.gh-proxy.com/https://raw.githubusercontent.com/Future-404/TAV-X/main/st.sh"
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -22,32 +22,32 @@ BREAK_LOOP=false
 trap 'BREAK_LOOP=true' SIGINT
 NEW_VERSION_AVAILABLE=""
 PLUGIN_LIST=(
-    "AIStudioBuildProxy (汉化/API代理) | https://github.com/il1umi/AIStudioBuildProxy.git | server | client | AIStudioBuildProxy"
-    "对话文本着色 | https://github.com/XanadusWorks/SillyTavern-Dialogue-Colorizer.git | - | HEAD | SillyTavern-Dialogue-Colorizer"
-    "顶部信息栏 | https://github.com/SillyTavern/Extension-TopInfoBar.git | - | HEAD | Extension-TopInfoBar"
-    "界面元素隐藏 | https://github.com/uhhhh15/hide.git | - | HEAD | hide"
-    "自定义模型列表 | https://github.com/LenAnderson/SillyTavern-CustomModels.git | - | HEAD | SillyTavern-CustomModels"
-    "聊天统计面板 | https://github.com/Junejulyz/chat-companion-stats.git | - | HEAD | chat-companion-stats"
-    "快速回复 | https://github.com/uhhhh15/QR.git | - | HEAD | QR"
-    "强力快速回复 | https://github.com/AlbusKen/quick-response-force.git | - | HEAD | quick-response-force"
-    "输入辅助助手 | https://github.com/Mooooooon/st-input-helper.git | - | HEAD | st-input-helper"
-    "提示词模板管理 | https://github.com/zonde306/ST-Prompt-Template.git | - | HEAD | ST-Prompt-Template"
-    "消息收藏/星标 | https://github.com/uhhhh15/star.git | - | HEAD | star"
-    "Amily2 聊天优化 | https://github.com/Wx-2025/ST-Amily2-Chat-Optimisation.git | - | HEAD | ST-Amily2-Chat-Optimisation"
-    "记忆增强扩展 | https://github.com/muyoou/st-memory-enhancement.git | HEAD | - | st-memory-enhancement"
-    "上下文消息限制 | https://github.com/SillyTavern/Extension-MessageLimit.git | - | HEAD | Extension-MessageLimit"
-    "前端 Token 计数 | https://github.com/GoldenglowMeow/ST-Frontend-Tokenizer.git | - | HEAD | ST-Frontend-Tokenizer"
-    "预设管理器 Momo | https://github.com/1830488003/preset-manager-momo.git | - | HEAD | preset-manager-momo"
-    "世界书扩展 Momo | https://github.com/1830488003/my-world-book-momo.git | - | HEAD | my-world-book-momo"
-    "JS 脚本运行器 | https://github.com/n0vi028/JS-Slash-Runner.git | - | HEAD | JS-Slash-Runner"
-    "Bincooo 执行器 | https://github.com/bincooo/SillyTavernExtension-JsRunner.git | - | HEAD | SillyTavernExtension-JsRunner"
+    "AIStudioBuildProxy (汉化/API代理) | https://edgecname.gh-proxy.com/https://github.com/il1umi/AIStudioBuildProxy.git | server | client | AIStudioBuildProxy"
+    "对话文本着色 | https://edgecname.gh-proxy.com/https://github.com/XanadusWorks/SillyTavern-Dialogue-Colorizer.git | - | HEAD | SillyTavern-Dialogue-Colorizer"
+    "顶部信息栏 | https://edgecname.gh-proxy.com/https://github.com/SillyTavern/Extension-TopInfoBar.git | - | HEAD | Extension-TopInfoBar"
+    "界面元素隐藏 | https://edgecname.gh-proxy.com/https://github.com/uhhhh15/hide.git | - | HEAD | hide"
+    "自定义模型列表 | https://edgecname.gh-proxy.com/https://github.com/LenAnderson/SillyTavern-CustomModels.git | - | HEAD | SillyTavern-CustomModels"
+    "聊天统计面板 | https://edgecname.gh-proxy.com/https://github.com/Junejulyz/chat-companion-stats.git | - | HEAD | chat-companion-stats"
+    "快速回复 | https://edgecname.gh-proxy.com/https://github.com/uhhhh15/QR.git | - | HEAD | QR"
+    "强力快速回复 | https://edgecname.gh-proxy.com/https://github.com/AlbusKen/quick-response-force.git | - | HEAD | quick-response-force"
+    "输入辅助助手 | https://edgecname.gh-proxy.com/https://github.com/Mooooooon/st-input-helper.git | - | HEAD | st-input-helper"
+    "提示词模板管理 | https://edgecname.gh-proxy.com/https://github.com/zonde306/ST-Prompt-Template.git | - | HEAD | ST-Prompt-Template"
+    "消息收藏/星标 | https://edgecname.gh-proxy.com/https://github.com/uhhhh15/star.git | - | HEAD | star"
+    "Amily2 聊天优化 | https://edgecname.gh-proxy.com/https://github.com/Wx-2025/ST-Amily2-Chat-Optimisation.git | - | HEAD | ST-Amily2-Chat-Optimisation"
+    "记忆增强扩展 | https://edgecname.gh-proxy.com/https://github.com/muyoou/st-memory-enhancement.git | HEAD | - | st-memory-enhancement"
+    "上下文消息限制 | https://edgecname.gh-proxy.com/https://github.com/SillyTavern/Extension-MessageLimit.git | - | HEAD | Extension-MessageLimit"
+    "前端 Token 计数 | https://edgecname.gh-proxy.com/https://github.com/GoldenglowMeow/ST-Frontend-Tokenizer.git | - | HEAD | ST-Frontend-Tokenizer"
+    "预设管理器 Momo | https://edgecname.gh-proxy.com/https://github.com/1830488003/preset-manager-momo.git | - | HEAD | preset-manager-momo"
+    "世界书扩展 Momo | https://edgecname.gh-proxy.com/https://github.com/1830488003/my-world-book-momo.git | - | HEAD | my-world-book-momo"
+    "JS 脚本运行器 | https://edgecname.gh-proxy.com/https://github.com/n0vi028/JS-Slash-Runner.git | - | HEAD | JS-Slash-Runner"
+    "Bincooo 执行器 | https://edgecname.gh-proxy.com/https://github.com/bincooo/SillyTavernExtension-JsRunner.git | - | HEAD | SillyTavernExtension-JsRunner"
     "拒绝助手废话 | https://gitgud.io/Monblant/noass.git | - | HEAD | noass"
-    "定时提醒工具 | https://github.com/Mooooooon/silly-tavern-reminder.git | - | HEAD | silly-tavern-reminder"
-    "生成失败通知 | https://github.com/RealSubstantiality/fail-notification.git | - | HEAD | fail-notification"
-    "小白盒工具箱 | https://github.com/RT15548/LittleWhiteBox.git | - | HEAD | LittleWhiteBox"
-    "快捷人格切换 | https://github.com/SillyTavern/Extension-QuickPersona.git | - | HEAD | Extension-QuickPersona"
-    "聊天记录备份 | https://github.com/uhhhh15/chat-history-backup.git | - | HEAD | chat-history-backup"
-    "静音/停止生成 | https://github.com/SillyTavern/Extension-Silence.git | - | HEAD | Extension-Silence"
+    "定时提醒工具 | https://edgecname.gh-proxy.com/https://github.com/Mooooooon/silly-tavern-reminder.git | - | HEAD | silly-tavern-reminder"
+    "生成失败通知 | https://edgecname.gh-proxy.com/https://github.com/RealSubstantiality/fail-notification.git | - | HEAD | fail-notification"
+    "小白盒工具箱 | https://edgecname.gh-proxy.com/https://github.com/RT15548/LittleWhiteBox.git | - | HEAD | LittleWhiteBox"
+    "快捷人格切换 | https://edgecname.gh-proxy.com/https://github.com/SillyTavern/Extension-QuickPersona.git | - | HEAD | Extension-QuickPersona"
+    "聊天记录备份 | https://edgecname.gh-proxy.com/https://github.com/uhhhh15/chat-history-backup.git | - | HEAD | chat-history-backup"
+    "静音/停止生成 | https://edgecname.gh-proxy.com/https://github.com/SillyTavern/Extension-Silence.git | - | HEAD | Extension-Silence"
 )
 retry_cmd() {
     local max_attempts=3
@@ -128,6 +128,14 @@ check_env() {
         exit 1
     fi
 }
+
+send_analytics() {
+    local STAT_URL="https://tav-api.future404.qzz.io"
+    if command -v curl &> /dev/null; then
+        curl -s -m 5 "${STAT_URL}?ver=${CURRENT_VERSION}&type=startup" > /dev/null 2>&1 &
+    fi
+}
+
 print_banner() {
     clear
     echo -e "${PURPLE}"
@@ -351,7 +359,7 @@ test_proxy_connection() {
 }
 get_mirror_status_code() {
     local target="$1"
-    local test_url="${target}https://github.com/SillyTavern/SillyTavern.git/info/refs?service=git-upload-pack"
+    local test_url="${target}https://edgecname.gh-proxy.com/https://github.com/SillyTavern/SillyTavern.git/info/refs?service=git-upload-pack"
     env -u http_proxy -u https_proxy curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "$test_url"
 }
 select_mirror() {
@@ -582,7 +590,7 @@ run_adb_module() {
     TYPE=${CONFIG_STR%%:*}
     VALUE=${CONFIG_STR#*:}
     
-    RAW_URL="https://raw.githubusercontent.com/Future-404/TAV-X/main/modules/adb_keepalive.sh"
+    RAW_URL="https://edgecname.gh-proxy.com/https://raw.githubusercontent.com/Future-404/TAV-X/main/modules/adb_keepalive.sh"
     
     if [ "$TYPE" == "PROXY" ]; then
         DOWNLOAD_CMD="curl -s -L --proxy $VALUE"
@@ -698,11 +706,11 @@ install_st() {
         if [ "$TYPE" == "PROXY" ]; then
             echo -e "${YELLOW}>>> 代理模式: $VALUE${NC}"
             GIT_CMD="$SAFE_ENV git clone --depth 1 -c http.proxy=$VALUE"
-            URL="https://github.com/SillyTavern/SillyTavern.git"
+            URL="https://edgecname.gh-proxy.com/https://github.com/SillyTavern/SillyTavern.git"
         else
             echo -e "${YELLOW}>>> 镜像模式: $VALUE${NC}"
             GIT_CMD="$SAFE_ENV env -u http_proxy -u https_proxy git clone --depth 1 -c http.proxy="
-            if [[ "$VALUE" == *"https://github.com"* ]]; then URL="$VALUE"; else URL="${VALUE}https://github.com/SillyTavern/SillyTavern.git"; fi
+            if [[ "$VALUE" == *"https://edgecname.gh-proxy.com/https://github.com"* ]]; then URL="$VALUE"; else URL="${VALUE}https://edgecname.gh-proxy.com/https://github.com/SillyTavern/SillyTavern.git"; fi
         fi
         if ! retry_cmd "$GIT_CMD \"$URL\" \"$INSTALL_DIR\""; then
             echo -e "${RED}❌ 下载失败，进入线路选择...${NC}"
@@ -889,6 +897,7 @@ show_menu() {
 check_for_update
 check_env
 auto_setup_alias
+send_analytics
 if [ ! -d "$INSTALL_DIR" ]; then install_st; fi
 if [ -d "$INSTALL_DIR" ]; then apply_global_optimizations; fi
 show_menu
