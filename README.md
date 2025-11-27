@@ -154,7 +154,7 @@ curl -s -L https://gh.likk.cc/https://raw.githubusercontent.com/Future-404/TAV-X
 
 **🎉 效果：** 设置完成后，您的 Cloudflare 远程链接将保持稳定直连，而酒馆内的 AI 对话将通过代理端口飞速响应！
 
-### 2. 保活模块常见问题
+### 2.👁️‍🗨️ 保活模块常见问题
 
 **Q: 报错 `protocol fault (couldn't read status message)` 怎么办？**
 
@@ -195,7 +195,7 @@ A: 强烈建议使用 **127.0.0.1**。这是本地回环地址，不经过路由
 ---
 
 
-# 📖 TAV-X ADB 保活模块使用指南
+## 📖 TAV-X ADB 保活模块使用指南
 
 > **为什么你需要这个？**
 > 如果你的酒馆经常在聊到一半时突然断开，或者手机锁屏几分钟后就无法连接，通常是因为 Android 系统的激进杀后台机制（特别是 Android 12+ 的 Phantom Process Killer）。本模块通过 ADB 权限彻底解决此问题。
