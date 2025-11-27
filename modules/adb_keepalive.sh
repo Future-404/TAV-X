@@ -1,5 +1,5 @@
-#!/bin/bash
-# TAV-X Module: ADB Keep-Alive System
+#!/data/data/com.termux/files/usr/bin/bash
+# TAV-X Module: ADB Keep-Alive System (v1.2.1)
 
 # --- 颜色定义 ---
 RED='\033[0;31m'
@@ -8,117 +8,217 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# --- 核心函数 ---
+PKG="com.termux"
+LOG_FILE="$TMPDIR/adb_connect_log.txt"
+
+# --- 基础检测 ---
+check_dependency() {
+    if ! command -v adb &> /dev/null; then
+        echo -e "${YELLOW}>>> 检测到缺失 android-tools，正在安装...${NC}"
+        pkg update -y && pkg install android-tools termux-tools -y
+    fi
+}
 
 check_adb_connection() {
-    local device_count=$(adb devices | grep -v "List of devices attached" | grep -c "device")
-    if [ "$device_count" -gt 0 ]; then
-        return 0
-    else
+    local count=$(adb devices | grep -v 'List' | grep -c 'device')
+    [[ "$count" -gt 0 ]]
+}
+
+exec_adb_cmd() {
+    "$@"
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED}❌ 命令执行失败： $* ${NC}"
         return 1
     fi
+    return 0
 }
 
-connect_menu() {
-    echo -e "${CYAN}=== 🔌 ADB 连接向导 ===${NC}"
-    echo -e "请输入【无线调试】主界面显示的端口号。"
-    echo -e "${YELLOW}注意：不是配对端口，是主界面的端口！${NC}"
-    echo -e "----------------------------------------"
-    
-    while true; do
-        read -p "请输入端口 (0 返回): " PORT
-        if [ "$PORT" == "0" ]; then return; fi
-        
-        if [[ "$PORT" =~ ^[0-9]+$ ]]; then
-            echo -e "${YELLOW}正在连接 127.0.0.1:$PORT ...${NC}"
-            OUTPUT=$(adb connect "127.0.0.1:$PORT")
-            echo "$OUTPUT"
-            
-            if [[ "$OUTPUT" == *"connected"* ]] || check_adb_connection; then
-                echo -e "${GREEN}✅ 连接成功！${NC}"
-                echo "$PORT" > "$HOME/.st_adb_port"
-                break
-            else
-                echo -e "${RED}❌ 连接失败。${NC}"
-                echo -e "提示：如果显示 'Connection refused'，请先进行配对(选择菜单3)。"
-            fi
-        else
-            echo -e "${RED}无效端口${NC}"
-        fi
-    done
-    read -p "回车继续..."
+confirm() {
+    read -p "$1 (y/n): " answer
+    [[ "$answer" == "y" || "$answer" == "Y" ]]
 }
 
-pair_guide() {
-    clear
-    echo -e "${CYAN}=== 🤝 配对指引 (Pairing) ===${NC}"
-    echo -e "${YELLOW}只有第一次使用，或报错 'Connection refused' 时才需要配对。${NC}"
-    echo ""
-    echo -e "1. 手机开启分屏，或者快速切换。"
-    echo -e "2. 进入开发者选项 -> 无线调试 -> 点击【使用配对码配对设备】。"
-    echo -e "3. 记下弹窗里的 IP、端口 和 配对码。"
-    echo -e "4. 在下方输入命令进行配对。"
-    echo ""
-    echo -e "命令格式: ${GREEN}adb pair 127.0.0.1:端口${NC}"
-    echo -e "----------------------------------------"
-    echo -e "现在，请直接在下方输入配对命令 (输入 0 返回):"
-    
-    read -p "> " CMD
-    if [ "$CMD" == "0" ]; then return; fi
-    
-    eval "$CMD"
-    echo ""
-    echo -e "${CYAN}如果显示 Successfully paired，请返回菜单选择 [1] 进行连接。${NC}"
-    read -p "回车返回..."
+# --- 核心功能 ---
+
+reset_adb_server() {
+    echo -e "${YELLOW}正在重置 ADB 服务以修复协议错误...${NC}"
+    adb kill-server
+    adb start-server > /dev/null 2>&1
+    sleep 1
 }
 
-run_optimization() {
-    if ! check_adb_connection; then
-        echo -e "${RED}❌ 未连接 ADB，无法执行。${NC}"; sleep 1; return
+pair_device() {
+    echo -e "${CYAN}=== ADB 配对向导 ===${NC}"
+    echo -e "${YELLOW}提示：建议使用 IP 127.0.0.1 以提高稳定性！${NC}"
+    echo "1. 开发者选项 -> 无线调试 -> 使用配对码配对设备"
+    echo "2. 输入弹窗中的 IP:端口 和 配对码"
+    echo "-------------------------------------"
+    
+    adb start-server > /dev/null 2>&1
+
+    read -p "请输入 IP:端口 (推荐 127.0.0.1:端口): " HOST
+    [[ -z "$HOST" ]] && return
+    
+    read -p "请输入 6位配对码: " CODE
+    [[ -z "$CODE" ]] && return
+    
+    echo -e "${CYAN}正在配对...${NC}"
+    OUTPUT=$(adb pair "$HOST" "$CODE" 2>&1)
+    echo "$OUTPUT"
+
+    if [[ "$OUTPUT" == *"protocol fault"* ]]; then
+        echo -e "${RED}❌ 检测到协议错误，正在自动修复...${NC}"
+        reset_adb_server
+        echo -e "${YELLOW}>>> 请重新尝试配对操作！${NC}"
+    elif [[ "$OUTPUT" == *"Successfully paired"* ]]; then
+        echo -e "${GREEN}✅ 配对成功！请继续进行连接。${NC}"
+        read -n1 -r -p "按任意键继续..."
+    else
+        echo -e "${RED}配对未成功，请检查配对码是否过期。${NC}"
+        read -n1 -r -p "按任意键继续..."
+    fi
+}
+
+connect_adb_interactive() {
+    if check_adb_connection; then
+        echo -e "${GREEN}✔ 已连接到 ADB。${NC}"
+        return 0
     fi
 
-    echo -e "${CYAN}>>> 正在执行保活策略...${NC}"
+    echo -e "${CYAN}=== ADB 连接助手 ===${NC}"
+    echo "请开启无线调试，查看【IP地址和端口】"
+    echo -e "${YELLOW}注意：连接端口 与 配对端口 不同！${NC}"
 
-    echo -e "${YELLOW}[1/4] 💥 解除 32 个子进程限制 (Phantom Process)...${NC}"
-    adb shell "/system/bin/device_config put activity_manager max_phantom_processes 2147483647"
-    adb shell "/system/bin/settings put global settings_enable_monitor_phantom_procs false"
+    while true; do
+        read -p "请输入端口（0返回，p配对，r重置ADB）： " PORT
+        
+        if [[ "$PORT" == "0" ]]; then return 1; fi
+        
+        if [[ "$PORT" == "p" || "$PORT" == "P" ]]; then 
+            pair_device
+            echo -e "${CYAN}=== 回到连接界面 ===${NC}"
+            continue
+        fi
 
-    echo -e "${YELLOW}[2/4] 🔋 加入电池优化白名单...${NC}"
-    adb shell dumpsys deviceidle whitelist +com.termux
+        if [[ "$PORT" == "r" || "$PORT" == "R" ]]; then 
+            reset_adb_server
+            echo -e "${GREEN}ADB 服务已重启。${NC}"
+            continue
+        fi
 
-    echo -e "${YELLOW}[3/4] 🛡️ 强制授予后台运行权限...${NC}"
-    adb shell cmd appops set com.termux RUN_IN_BACKGROUND allow
+        if [[ "$PORT" =~ ^[0-9]+$ ]]; then
+            echo -e "${CYAN}尝试连接 127.0.0.1:$PORT ...${NC}"
+            adb connect "127.0.0.1:$PORT" | tee "$LOG_FILE"
 
-    echo -e "${YELLOW}[4/4] 🔥 设置应用活跃级别...${NC}"
-    adb shell am set-standby-bucket com.termux active
-    
-    echo -e "${GREEN}✅ 优化完成！酒馆现在获得了系统级免死金牌。${NC}"
-    echo -e "${CYAN}提示：重启手机后【第1项】可能会失效，建议重启后重新运行一次。${NC}"
-    read -p "回车返回..."
+            if grep -q "connected" "$LOG_FILE" || check_adb_connection; then
+                echo -e "${GREEN}✔ ADB 连接成功${NC}"
+                rm -f "$LOG_FILE"
+                return 0
+            else
+                echo -e "${RED}❌ 连接失败。${NC}"
+                if grep -q "protocol fault" "$LOG_FILE"; then
+                     echo -e "${YELLOW}检测到协议错误，自动重置 ADB...${NC}"
+                     reset_adb_server
+                     echo -e "${YELLOW}>>> 请重新输入端口尝试连接。${NC}"
+                else
+                     echo -e "${YELLOW}提示：输入 'p' 可进入配对模式，输入 'r' 重置服务。${NC}"
+                fi
+            fi
+        else
+            echo -e "${RED}❌ 格式错误${NC}"
+        fi
+    done
 }
+
+apply_keepalive() {
+    if ! check_adb_connection; then
+        echo -e "${RED}❌ ADB 未连接，无法执行保活。${NC}"
+        return 1
+    fi
+
+    echo -e "${CYAN}>>> 下发保活策略...${NC}"
+
+    if confirm "确定禁用幽灵进程杀手？(推荐)"; then
+        exec_adb_cmd adb shell device_config put activity_manager max_phantom_processes 2147483647
+        exec_adb_cmd adb shell settings put global settings_enable_monitor_phantom_procs false
+    else
+        echo "跳过。"
+    fi
+
+    if confirm "加入电池优化白名单？(推荐)"; then
+        exec_adb_cmd adb shell dumpsys deviceidle whitelist +$PKG
+    fi
+
+    if confirm "赋予后台运行权限？(推荐)"; then
+        exec_adb_cmd adb shell cmd appops set $PKG RUN_IN_BACKGROUND allow
+        exec_adb_cmd adb shell cmd appops set $PKG RUN_ANY_IN_BACKGROUND allow
+        exec_adb_cmd adb shell cmd appops set $PKG START_FOREGROUND allow
+    fi
+
+    echo "设置应用活跃优先级..."
+    exec_adb_cmd adb shell am set-standby-bucket $PKG active
+
+    if confirm "尝试关闭 MIUI 优化？(慎选)"; then
+         exec_adb_cmd adb shell settings put secure miui_optimization 0 2>/dev/null
+    fi
+    
+    echo "应用厂商通用优化..."
+    exec_adb_cmd adb shell settings put system bg_power_permission_list +$PKG 2>/dev/null || true
+
+    echo "申请 Termux CPU 唤醒锁 (WakeLock)..."
+    if command -v termux-wake-lock &> /dev/null; then
+        termux-wake-lock
+        echo -e "${GREEN}✔ 锁已申请${NC}"
+    else
+        echo -e "${RED}❌ 失败: 未找到 termux-wake-lock 命令${NC}"
+    fi
+
+    echo -e "${GREEN}✅ 保活策略应用完成！${NC}"
+    echo "提示：重启手机后部分设置会失效。"
+    read -n1 -r -p "按任意键返回..."
+}
+
+stop_keepalive() {
+    echo -e "${YELLOW}释放 WakeLock...${NC}"
+    termux-wake-unlock || echo -e "${RED}释放失败 (可能未申请)${NC}"
+    echo -e "${GREEN}✔ 已停止 CPU 唤醒锁${NC}"
+    read -n1 -r -p "按任意键返回..."
+}
+
+# --- 菜单循环 ---
+check_dependency
 
 while true; do
     clear
-    echo -e "${CYAN}=== 🛡️ ADB 保活系统 (独立模块) ===${NC}"
-    
+    echo -e "${CYAN}=== TAV-X ADB 保活模块 ===${NC}"
+
     if check_adb_connection; then
-        echo -e "状态: ${GREEN}● 已连接${NC}"
+        echo -e "ADB 状态：${GREEN}● 已连接${NC}"
     else
-        echo -e "状态: ${RED}● 未连接${NC}"
+        echo -e "ADB 状态：${RED}● 未连接${NC}"
     fi
-    echo "----------------------------------------"
-    echo -e "1. 🔗 连接无线 ADB (Connect)"
-    echo -e "2. ⚡ 一键执行保活 (Run Optimization)"
-    echo -e "3. 🤝 配对模式 (Pairing)"
-    echo -e "0. 🔙 返回主程序"
+
+    echo "-------------------------------------"
+    echo "1) 连接 ADB"
+    echo "2) 执行系统级保活"
+    echo "3) 停止保活"
+    echo "0) 返回主菜单"
     echo ""
-    
-    read -p "选择: " choice
-    case $choice in
-        1) connect_menu ;;
-        2) run_optimization ;;
-        3) pair_guide ;;
+
+    read -p "选择： " c
+    case $c in
+        1) connect_adb_interactive ;;
+        2) 
+           if check_adb_connection; then
+               apply_keepalive
+           else
+               echo -e "${YELLOW}请先连接 ADB！${NC}"; sleep 1
+               connect_adb_interactive
+               if check_adb_connection; then apply_keepalive; fi
+           fi 
+           ;;
+        3) stop_keepalive ;;
         0) exit 0 ;;
-        *) echo -e "${RED}无效输入${NC}"; sleep 0.5 ;;
+        *) echo "无效选择"; sleep 0.5 ;;
     esac
 done
