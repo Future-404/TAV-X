@@ -12,7 +12,7 @@ CF_LOG="$INSTALL_DIR/cf_tunnel.log"
 SERVER_LOG="$INSTALL_DIR/server.log"
 BACKUP_DIR="$HOME/storage/downloads/ST_Backup"
 DEFAULT_MIRROR="https://mirror.ghproxy.com/"
-SCRIPT_URL_BASE="https://raw.githubusercontent.com/Future-404/TAV-X/main/st.sh"
+SCRIPT_URL_BASE="https://gh-proxy.org/https://raw.githubusercontent.com/Future-404/TAV-X/main/st.sh"
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -25,32 +25,32 @@ BREAK_LOOP=false
 trap 'BREAK_LOOP=true' SIGINT
 NEW_VERSION_AVAILABLE=""
 PLUGIN_LIST=(
-    "AIStudioBuildProxy (汉化/API代理) | https://github.com/il1umi/AIStudioBuildProxy.git | server | client | AIStudioBuildProxy"
-    "对话文本着色 | https://github.com/XanadusWorks/SillyTavern-Dialogue-Colorizer.git | - | HEAD | SillyTavern-Dialogue-Colorizer"
-    "顶部信息栏 | https://github.com/SillyTavern/Extension-TopInfoBar.git | - | HEAD | Extension-TopInfoBar"
-    "界面元素隐藏 | https://github.com/uhhhh15/hide.git | - | HEAD | hide"
-    "自定义模型列表 | https://github.com/LenAnderson/SillyTavern-CustomModels.git | - | HEAD | SillyTavern-CustomModels"
-    "聊天统计面板 | https://github.com/Junejulyz/chat-companion-stats.git | - | HEAD | chat-companion-stats"
-    "快速回复 | https://github.com/uhhhh15/QR.git | - | HEAD | QR"
-    "强力快速回复 | https://github.com/AlbusKen/quick-response-force.git | - | HEAD | quick-response-force"
-    "输入辅助助手 | https://github.com/Mooooooon/st-input-helper.git | - | HEAD | st-input-helper"
-    "提示词模板管理 | https://github.com/zonde306/ST-Prompt-Template.git | - | HEAD | ST-Prompt-Template"
-    "消息收藏/星标 | https://github.com/uhhhh15/star.git | - | HEAD | star"
-    "Amily2 聊天优化 | https://github.com/Wx-2025/ST-Amily2-Chat-Optimisation.git | - | HEAD | ST-Amily2-Chat-Optimisation"
-    "记忆增强扩展 | https://github.com/muyoou/st-memory-enhancement.git | HEAD | - | st-memory-enhancement"
-    "上下文消息限制 | https://github.com/SillyTavern/Extension-MessageLimit.git | - | HEAD | Extension-MessageLimit"
-    "前端 Token 计数 | https://github.com/GoldenglowMeow/ST-Frontend-Tokenizer.git | - | HEAD | ST-Frontend-Tokenizer"
-    "预设管理器 Momo | https://github.com/1830488003/preset-manager-momo.git | - | HEAD | preset-manager-momo"
-    "世界书扩展 Momo | https://github.com/1830488003/my-world-book-momo.git | - | HEAD | my-world-book-momo"
-    "JS 脚本运行器 | https://github.com/n0vi028/JS-Slash-Runner.git | - | HEAD | JS-Slash-Runner"
-    "Bincooo 执行器 | https://github.com/bincooo/SillyTavernExtension-JsRunner.git | - | HEAD | SillyTavernExtension-JsRunner"
+    "AIStudioBuildProxy (汉化/API代理) | https://gh-proxy.org/https://github.com/il1umi/AIStudioBuildProxy.git | server | client | AIStudioBuildProxy"
+    "对话文本着色 | https://gh-proxy.org/https://github.com/XanadusWorks/SillyTavern-Dialogue-Colorizer.git | - | HEAD | SillyTavern-Dialogue-Colorizer"
+    "顶部信息栏 | https://gh-proxy.org/https://github.com/SillyTavern/Extension-TopInfoBar.git | - | HEAD | Extension-TopInfoBar"
+    "界面元素隐藏 | https://gh-proxy.org/https://github.com/uhhhh15/hide.git | - | HEAD | hide"
+    "自定义模型列表 | https://gh-proxy.org/https://github.com/LenAnderson/SillyTavern-CustomModels.git | - | HEAD | SillyTavern-CustomModels"
+    "聊天统计面板 | https://gh-proxy.org/https://github.com/Junejulyz/chat-companion-stats.git | - | HEAD | chat-companion-stats"
+    "快速回复 | https://gh-proxy.org/https://github.com/uhhhh15/QR.git | - | HEAD | QR"
+    "强力快速回复 | https://gh-proxy.org/https://github.com/AlbusKen/quick-response-force.git | - | HEAD | quick-response-force"
+    "输入辅助助手 | https://gh-proxy.org/https://github.com/Mooooooon/st-input-helper.git | - | HEAD | st-input-helper"
+    "提示词模板管理 | https://gh-proxy.org/https://github.com/zonde306/ST-Prompt-Template.git | - | HEAD | ST-Prompt-Template"
+    "消息收藏/星标 | https://gh-proxy.org/https://github.com/uhhhh15/star.git | - | HEAD | star"
+    "Amily2 聊天优化 | https://gh-proxy.org/https://github.com/Wx-2025/ST-Amily2-Chat-Optimisation.git | - | HEAD | ST-Amily2-Chat-Optimisation"
+    "记忆增强扩展 | https://gh-proxy.org/https://github.com/muyoou/st-memory-enhancement.git | HEAD | - | st-memory-enhancement"
+    "上下文消息限制 | https://gh-proxy.org/https://github.com/SillyTavern/Extension-MessageLimit.git | - | HEAD | Extension-MessageLimit"
+    "前端 Token 计数 | https://gh-proxy.org/https://github.com/GoldenglowMeow/ST-Frontend-Tokenizer.git | - | HEAD | ST-Frontend-Tokenizer"
+    "预设管理器 Momo | https://gh-proxy.org/https://github.com/1830488003/preset-manager-momo.git | - | HEAD | preset-manager-momo"
+    "世界书扩展 Momo | https://gh-proxy.org/https://github.com/1830488003/my-world-book-momo.git | - | HEAD | my-world-book-momo"
+    "JS 脚本运行器 | https://gh-proxy.org/https://github.com/n0vi028/JS-Slash-Runner.git | - | HEAD | JS-Slash-Runner"
+    "Bincooo 执行器 | https://gh-proxy.org/https://github.com/bincooo/SillyTavernExtension-JsRunner.git | - | HEAD | SillyTavernExtension-JsRunner"
     "拒绝助手废话 | https://gitgud.io/Monblant/noass.git | - | HEAD | noass"
-    "定时提醒工具 | https://github.com/Mooooooon/silly-tavern-reminder.git | - | HEAD | silly-tavern-reminder"
-    "生成失败通知 | https://github.com/RealSubstantiality/fail-notification.git | - | HEAD | fail-notification"
-    "小白盒工具箱 | https://github.com/RT15548/LittleWhiteBox.git | - | HEAD | LittleWhiteBox"
-    "快捷人格切换 | https://github.com/SillyTavern/Extension-QuickPersona.git | - | HEAD | Extension-QuickPersona"
-    "聊天记录备份 | https://github.com/uhhhh15/chat-history-backup.git | - | HEAD | chat-history-backup"
-    "静音/停止生成 | https://github.com/SillyTavern/Extension-Silence.git | - | HEAD | Extension-Silence"
+    "定时提醒工具 | https://gh-proxy.org/https://github.com/Mooooooon/silly-tavern-reminder.git | - | HEAD | silly-tavern-reminder"
+    "生成失败通知 | https://gh-proxy.org/https://github.com/RealSubstantiality/fail-notification.git | - | HEAD | fail-notification"
+    "小白盒工具箱 | https://gh-proxy.org/https://github.com/RT15548/LittleWhiteBox.git | - | HEAD | LittleWhiteBox"
+    "快捷人格切换 | https://gh-proxy.org/https://github.com/SillyTavern/Extension-QuickPersona.git | - | HEAD | Extension-QuickPersona"
+    "聊天记录备份 | https://gh-proxy.org/https://github.com/uhhhh15/chat-history-backup.git | - | HEAD | chat-history-backup"
+    "静音/停止生成 | https://gh-proxy.org/https://github.com/SillyTavern/Extension-Silence.git | - | HEAD | Extension-Silence"
 )
 
 retry_cmd() {
@@ -583,7 +583,7 @@ run_adb_module() {
     CONFIG_STR=$(get_current_config)
     TYPE=${CONFIG_STR%%:*}
     VALUE=${CONFIG_STR#*:}
-    RAW_URL="https://raw.githubusercontent.com/Future-404/TAV-X/main/modules/adb_keepalive.sh"
+    RAW_URL="https://gh-proxy.org/https://raw.githubusercontent.com/Future-404/TAV-X/main/modules/adb_keepalive.sh"
 
     if [ "$TYPE" == "PROXY" ]; then
         DOWNLOAD_CMD="curl -s -f -L --proxy $VALUE"
@@ -699,7 +699,7 @@ install_st() {
     if [ ! -d "$INSTALL_DIR" ]; then
         echo -e "${CYAN}>>> 开始部署...${NC}"
         local SAFE_ENV="env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null"
-        local ST_RAW_URL="https://github.com/SillyTavern/SillyTavern.git"
+        local ST_RAW_URL="https://gh-proxy.org/https://github.com/SillyTavern/SillyTavern.git"
 
         if [ "$TYPE" == "PROXY" ]; then
             echo -e "${YELLOW}>>> 代理模式: $VALUE${NC}"
@@ -875,7 +875,8 @@ show_menu() {
         echo -e "  5. 🔄 更新管理"; echo -e "  6. 🛠️  安全配置"
         echo -e "  7. 🌐 API代理"; echo -e "  8. 💾 备份与恢复"
         echo -e "  9. 🌐 切换线路"; echo -e " 10. 🧩 插件管理"
-        echo -e " 11. 🛡️  ADB保活"; echo -e "  0. 退出"
+        echo -e " 11. 🛡️  ADB保活"; echo -e " 12. 🦀 ClewdR代理"
+        echo -e "  0. 退出"
         echo ""
         if [ "$IS_RUNNING" = true ]; then
              echo -e "${CYAN}====== [ 实时链接 ] ======${NC}"
@@ -900,6 +901,11 @@ show_menu() {
             6) security_menu ;; 7) configure_proxy ;; 8) backup_menu ;;
             9) select_mirror ;; 10) plugin_menu ;;
             11) check_env; run_adb_module ;;
+            12) 
+                echo -e "${YELLOW}>>> 🚧 正在开发中...${NC}"
+                echo -e "${CYAN}ClewdR 模块即将上线，将支持本地运行 Clewd 并在酒馆直接调用。${NC}"
+                read -p "回车返回..." 
+                ;;
             0) exit_script ;; *) echo -e "${RED}无效输入${NC}"; sleep 0.5 ;;
         esac
     done
