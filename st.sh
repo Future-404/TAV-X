@@ -394,13 +394,13 @@ select_mirror() {
     echo "------------------------------------------------"
     echo -e "99. 自定义镜像地址"
     echo -e "88. 使用代理直连"
-    echo -e "9.  返回主菜单"
+    echo -e "66.  返回主菜单"
     echo -e "0.  退出脚本"
     echo ""
     read -p "请选择最佳线路: " choice
     case $choice in
         0) exit 0 ;;
-        9) return ;;
+        66) return ;;
         88)
             while true; do
                 echo -e "${YELLOW}输入代理 (示例: socks5://127.0.0.1:10808)${NC}"
