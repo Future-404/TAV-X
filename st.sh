@@ -1,6 +1,6 @@
 #!/bin/bash
-# TAV-X v1.12.5
-CURRENT_VERSION="v1.12.5"
+# TAV-X v1.12.6
+CURRENT_VERSION="v1.12.6"
 MIRROR_CONFIG="$HOME/.st_mirror_url"
 PROXY_CONFIG_FILE="$HOME/.st_download_proxy"
 INSTALL_DIR="$HOME/SillyTavern"
