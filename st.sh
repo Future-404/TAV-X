@@ -1,37 +1,32 @@
 #!/bin/bash
-# TAV-X Universal Bootstrapper (V4.0 Absolute Anchor)
-STANDARD_DIR="$HOME/.tav_x"
-CORE_FILE="$STANDARD_DIR/core/main.sh"
+# TAV-X v2.0 Local Bootstrapper (Startup Only)
+
+SOURCE=${BASH_SOURCE[0]}
+while [ -L "$SOURCE" ]; do
+  DIR=$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )
+  SOURCE=$(readlink "$SOURCE")
+  [[ $SOURCE != /* ]] && SOURCE=$DIR/$SOURCE
+done
+export TAVX_DIR=$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )
+
+CURRENT_ALIAS=$(grep "alias st=" "$HOME/.bashrc" 2>/dev/null)
+TARGET_CMD="bash $TAVX_DIR/st.sh"
+EXPECTED_ALIAS="alias st='$TARGET_CMD'"
+
+if echo "$CURRENT_ALIAS" | grep -q "$TAVX_DIR/st.sh"; then
+    : 
+else
+    sed -i '/alias st=/d' "$HOME/.bashrc"
+    echo "$EXPECTED_ALIAS" >> "$HOME/.bashrc"
+fi
+
+CORE_FILE="$TAVX_DIR/core/main.sh"
 
 if [ -f "$CORE_FILE" ]; then
-    export TAVX_DIR="$STANDARD_DIR"
-    
     chmod +x "$CORE_FILE"
     exec bash "$CORE_FILE"
-    
 else
-    echo -e "\033[1;33m" # Yellow
-    echo ">>> 未检测到安装文件 (Core Missing)..."
-    echo ">>> 正在连接云端获取最新版本..."
-    echo -e "\033[0m"
-    
-    if command -v curl &> /dev/null; then
-        bash <(curl -s https://tav-x.future404.qzz.io)
-    else
-        echo -e "\033[0;31m❌ 错误: 未找到 curl 工具。\033[0m"
-        exit 1
-    fi
-    
-    if [ -f "$CORE_FILE" ]; then
-        echo ""
-        echo -e "\033[1;32m>>> 就绪！正在启动 TAV-X...\033[0m"
-        sleep 1
-        
-        export TAVX_DIR="$STANDARD_DIR"
-        chmod +x "$CORE_FILE"
-        exec bash "$CORE_FILE"
-    else
-        echo -e "\033[0;31m❌ 启动失败：安装未完成，请检查网络。\033[0m"
-        exit 1
-    fi
+    echo -e "\033[0;31m❌ 致命错误：核心文件丢失 ($CORE_FILE)\033[0m"
+    echo "请尝试重新安装: curl -s https://tav-x.future404.qzz.io | bash"
+    exit 1
 fi
