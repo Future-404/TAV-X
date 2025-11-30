@@ -70,7 +70,6 @@ stop_services() {
             fuser -k -9 "$PORT/tcp" >/dev/null 2>&1
         fi
         
-        # 超时保护
         if [ "$count" -ge 10 ]; then
             ui_print warn "旧进程可能未完全清理，尝试强制启动..."
             break

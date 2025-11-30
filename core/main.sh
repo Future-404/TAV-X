@@ -1,12 +1,9 @@
 #!/bin/bash
 # TAV-X Core: Main Logic (V6.2 Final Clean)
 
-# 1. 加载核心环境与工具
 source "$TAVX_DIR/core/env.sh"
 source "$TAVX_DIR/core/ui.sh"
 source "$TAVX_DIR/core/utils.sh"
-
-# 2. 加载功能模块
 source "$TAVX_DIR/core/deps.sh"
 source "$TAVX_DIR/core/security.sh"
 source "$TAVX_DIR/core/plugins.sh"
@@ -17,14 +14,11 @@ source "$TAVX_DIR/core/launcher.sh"
 source "$TAVX_DIR/core/uninstall.sh"
 source "$TAVX_DIR/modules/clewd.sh"
 
-# 3. 初始化检查
 check_dependencies
 check_for_updates
 send_analytics
 
-# 4. 主循环
 while true; do
-    # --- 状态刷新 ---
     if [ -d "$INSTALL_DIR" ]; then ST_STATUS="${GREEN}已安装${NC}"; else ST_STATUS="${YELLOW}未安装${NC}"; fi
     S_ST=0; S_CF=0; S_ADB=0
     pgrep -f "node server.js" >/dev/null && S_ST=1
@@ -48,7 +42,6 @@ while true; do
         fi
     fi
 
-    # --- 渲染界面 ---
     ui_header ""
     ui_dashboard "$S_ST" "$S_CF" "$S_ADB" "$NET_DL" "$NET_API"
 
