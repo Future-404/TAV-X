@@ -14,7 +14,7 @@ TARGET_CMD="bash $TAVX_DIR/st.sh"
 EXPECTED_ALIAS="alias st='$TARGET_CMD'"
 
 if echo "$CURRENT_ALIAS" | grep -q "$TAVX_DIR/st.sh"; then
-    : 
+    :
 else
     sed -i '/alias st=/d' "$HOME/.bashrc"
     echo "$EXPECTED_ALIAS" >> "$HOME/.bashrc"
