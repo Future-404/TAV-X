@@ -1,5 +1,5 @@
 #!/bin/bash
-# TAV-X Core: Installer & Version Controller (UI v4.0)
+# TAV-X Core: Installer & Version Controller (V6.6 Rollback Fix)
 
 source "$TAVX_DIR/core/env.sh"
 source "$TAVX_DIR/core/ui.sh"
@@ -10,14 +10,18 @@ export -f git_clone_smart
 export -f info success error warn
 
 apply_git_proxy() {
+    local proxy_url=""
     if [ -f "$NETWORK_CONFIG" ]; then
-        local conf=$(cat "$NETWORK_CONFIG")
-        if [[ "$conf" == PROXY* ]]; then
-            local val=${conf#*|}; val=$(echo "$val" | tr -d '\n\r')
-            git config http.proxy "$val"; git config https.proxy "$val"
-        else
-            git config --unset http.proxy; git config --unset https.proxy
-        fi
+        local c=$(cat "$NETWORK_CONFIG"); [[ "$c" == PROXY* ]] && proxy_url=${c#*|}
+    else
+        proxy_url=$(get_dynamic_proxy)
+    fi
+    proxy_url=$(echo "$proxy_url" | tr -d '\n\r')
+
+    if [ -n "$proxy_url" ]; then
+        git config http.proxy "$proxy_url"; git config https.proxy "$proxy_url"
+    else
+        git config --unset http.proxy; git config --unset https.proxy
     fi
 }
 
@@ -30,7 +34,7 @@ install_sillytavern() {
         else return; fi
     fi
 
-    local CMD_CLONE="source $TAVX_DIR/core/utils.sh; git_clone_smart '' 'https://github.com/SillyTavern/SillyTavern.git' '$INSTALL_DIR'"
+    local CMD_CLONE="source $TAVX_DIR/core/env.sh; source $TAVX_DIR/core/utils.sh; git_clone_smart '' 'https://github.com/SillyTavern/SillyTavern.git' '$INSTALL_DIR'"
     
     if ui_spinner "正在拉取代码 (自动优选线路)..." "$CMD_CLONE"; then
         ui_print success "代码下载完成。"
@@ -48,7 +52,6 @@ install_sillytavern() {
         ui_print error "依赖安装失败。"
         ui_pause; return
     fi
-
 
     mkdir -p "$INSTALL_DIR"
     cat > "$INSTALL_DIR/config.yaml" << YAML
@@ -97,7 +100,7 @@ rollback_sillytavern() {
     cd "$INSTALL_DIR" || return
     
     if ! ui_spinner "正在获取版本列表..." "git fetch --tags"; then
-        ui_print error "无法获取版本信息。"
+        ui_print error "无法获取版本信息 (网络错误)。"
         ui_pause; return
     fi
     
@@ -112,19 +115,22 @@ rollback_sillytavern() {
     
     if [[ "$CHOICE" == *"返回"* ]]; then return; fi
     
+    
     if [[ "$CHOICE" == *"最新版"* ]]; then
-        local CMD="git checkout release && git pull && npm install --no-audit --fund --loglevel error"
+        local CMD="git stash >/dev/null 2>&1; git checkout release && git pull && npm install --no-audit --fund --loglevel error"
         if ui_spinner "正在恢复最新版..." "$CMD"; then
             ui_print success "✅ 已恢复！"
-        else ui_print error "操作失败。"; fi
+        else ui_print error "操作失败，可能网络不通。"; fi
     else
-    
         TARGET_TAG=$(echo "$CHOICE" | awk '{print $2}')
-        local CMD="git checkout $TARGET_TAG && rm -rf node_modules package-lock.json && npm install --no-audit --fund --loglevel error"
+        
+        local CMD="git stash >/dev/null 2>&1; git checkout -f $TARGET_TAG && rm -rf node_modules package-lock.json && npm install --no-audit --fund --loglevel error"
         
         if ui_spinner "正在穿越到 $TARGET_TAG ..." "$CMD"; then
             ui_print success "✅ 穿越成功: $TARGET_TAG"
-        else ui_print error "穿越失败。"; fi
+        else 
+            ui_print error "穿越失败 (Git冲突或网络错误)。"
+        fi
     fi
     ui_pause
 }

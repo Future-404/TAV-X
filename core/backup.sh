@@ -1,5 +1,5 @@
 #!/bin/bash
-# TAV-X Core: Backup & Restore (V5.6 High-Stability Fix)
+# TAV-X Core: Backup & Restore (V5.6.1 Timestamp Fix)
 
 source "$TAVX_DIR/core/env.sh"
 source "$TAVX_DIR/core/ui.sh"
@@ -28,14 +28,19 @@ perform_backup() {
     if [ ! -d "$INSTALL_DIR" ]; then ui_print error "请先安装酒馆！"; ui_pause; return; fi
     check_storage_permission || { ui_pause; return; }
 
-    cd "$INSTALL_DIR" || 
-    local TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    cd "$INSTALL_DIR" || return
+    
+    local TIMESTAMP=$(date "+%Y%m%d_%H%M%S")
+    
+    if [ -z "$TIMESTAMP" ]; then
+        TIMESTAMP=$(date +%s)
+    fi
+
     local BACKUP_FILE="$EXTERNAL_DIR/ST_Backup_$TIMESTAMP.tar.gz"
     local TARGETS="data config.yaml"
     [ -f "secrets.json" ] && TARGETS="$TARGETS secrets.json"
     
-    # 这里加了单引号保护路径
-    if ui_spinner "正在打包数据 (这可能需要一分钟)..." "tar -czf '$BACKUP_FILE' $TARGETS 2>/dev/null"; then
+    if ui_spinner "正在打包数据..." "tar -czf '$BACKUP_FILE' $TARGETS 2>/dev/null"; then
         ui_print success "备份成功！"
         echo -e "位置: ${GREEN}Download/ST_Backup/$(basename "$BACKUP_FILE")${NC}"
     else
@@ -72,7 +77,6 @@ perform_restore() {
         local LOCAL_COPY="$TEMP_DIR/restore_target.tar.gz"
         
         rm -rf "$TEMP_DIR"; mkdir -p "$TEMP_DIR"
-        
         
         if ! cp "$selected_file" "$LOCAL_COPY"; then
             ui_print error "无法读取备份文件，请检查存储权限！"

@@ -1,6 +1,6 @@
 ✅ AIStudioBuildProxy (汉化/API代理)  [AIStudioBuildProxy]|AIStudioBuildProxy (汉化/API代理) | https://github.com/il1umi/AIStudioBuildProxy.git | server | client | AIStudioBuildProxy
-✅ 对话文本着色  [SillyTavern-Dialogue-Colorizer]|对话文本着色 | https://github.com/XanadusWorks/SillyTavern-Dialogue-Colorizer.git | - | HEAD | SillyTavern-Dialogue-Colorizer
-✅ 顶部信息栏  [Extension-TopInfoBar]|顶部信息栏 | https://github.com/SillyTavern/Extension-TopInfoBar.git | - | HEAD | Extension-TopInfoBar
+📦 对话文本着色  [SillyTavern-Dialogue-Colorizer]|对话文本着色 | https://github.com/XanadusWorks/SillyTavern-Dialogue-Colorizer.git | - | HEAD | SillyTavern-Dialogue-Colorizer
+📦 顶部信息栏  [Extension-TopInfoBar]|顶部信息栏 | https://github.com/SillyTavern/Extension-TopInfoBar.git | - | HEAD | Extension-TopInfoBar
 📦 界面元素隐藏  [hide]|界面元素隐藏 | https://github.com/uhhhh15/hide.git | - | HEAD | hide
 📦 自定义模型列表  [SillyTavern-CustomModels]|自定义模型列表 | https://github.com/LenAnderson/SillyTavern-CustomModels.git | - | HEAD | SillyTavern-CustomModels
 📦 聊天统计面板  [chat-companion-stats]|聊天统计面板 | https://github.com/Junejulyz/chat-companion-stats.git | - | HEAD | chat-companion-stats
@@ -18,7 +18,7 @@
 📦 JS 脚本运行器  [JS-Slash-Runner]|JS 脚本运行器 | https://github.com/n0vi028/JS-Slash-Runner.git | - | HEAD | JS-Slash-Runner
 📦 Bincooo 执行器  [SillyTavernExtension-JsRunner]|Bincooo 执行器 | https://github.com/bincooo/SillyTavernExtension-JsRunner.git | - | HEAD | SillyTavernExtension-JsRunner
 📦 拒绝助手废话  [noass]|拒绝助手废话 | https://gitgud.io/Monblant/noass.git | - | HEAD | noass
-✅ 定时提醒工具  [silly-tavern-reminder]|定时提醒工具 | https://github.com/Mooooooon/silly-tavern-reminder.git | - | HEAD | silly-tavern-reminder
+📦 定时提醒工具  [silly-tavern-reminder]|定时提醒工具 | https://github.com/Mooooooon/silly-tavern-reminder.git | - | HEAD | silly-tavern-reminder
 📦 生成失败通知  [fail-notification]|生成失败通知 | https://github.com/RealSubstantiality/fail-notification.git | - | HEAD | fail-notification
 📦 小白盒工具箱  [LittleWhiteBox]|小白盒工具箱 | https://github.com/RT15548/LittleWhiteBox.git | - | HEAD | LittleWhiteBox
 📦 快捷人格切换  [Extension-QuickPersona]|快捷人格切换 | https://github.com/SillyTavern/Extension-QuickPersona.git | - | HEAD | Extension-QuickPersona

@@ -91,7 +91,7 @@ ui_dashboard() {
     fi
 }
 
-# --- 👇 通用组件 ---
+# --- 通用组件 ---
 
 ui_menu() {
     local header="$1"; shift; local options=("$@")

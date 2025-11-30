@@ -1,5 +1,5 @@
 #!/bin/bash
-# TAV-X Core: Main Logic (V6.0 Hot-Reload UI)
+# TAV-X Core: Main Logic (V6.1 Uninstall Module Linked)
 
 source "$TAVX_DIR/core/env.sh"
 source "$TAVX_DIR/core/ui.sh"
@@ -11,6 +11,7 @@ source "$TAVX_DIR/core/backup.sh"
 source "$TAVX_DIR/core/updater.sh"
 source "$TAVX_DIR/core/install.sh"
 source "$TAVX_DIR/core/launcher.sh"
+source "$TAVX_DIR/core/uninstall.sh"
 source "$TAVX_DIR/modules/clewd.sh"
 
 check_dependencies
@@ -21,7 +22,6 @@ check_for_updates
 send_analytics
 
 while true; do
-    # 状态检测
     if [ -d "$INSTALL_DIR" ]; then ST_STATUS="${GREEN}已安装${NC}"; else ST_STATUS="${YELLOW}未安装${NC}"; fi
     S_ST=0; S_CF=0; S_ADB=0
     pgrep -f "node server.js" >/dev/null && S_ST=1
@@ -54,10 +54,10 @@ while true; do
     CHOICE=$(ui_menu "功能导航" \
         "🚀 启动服务" \
         "$OPT_UPD" \
-        "⚙️ 系统设置" \
+        "⚙️  系统设置" \
         "🧩 插件管理" \
         "💾 备份与恢复" \
-        "🛠️ 高级工具" \
+        "🛠️  高级工具" \
         "🚪 退出程序"
     )
 

@@ -5,7 +5,6 @@ source "$TAVX_DIR/core/env.sh"
 source "$TAVX_DIR/core/ui.sh"
 source "$TAVX_DIR/core/utils.sh"
 
-# --- 🔐 核弹发射密钥 (安全校验) ---
 verify_kill_switch() {
     local TARGET_PHRASE="我已知此操作风险并且已做好备份"
     
@@ -31,7 +30,6 @@ verify_kill_switch() {
     fi
 }
 
-# --- 1. 卸载 SillyTavern ---
 uninstall_st() {
     if ! verify_kill_switch; then return; fi
     
@@ -43,12 +41,10 @@ uninstall_st() {
     ui_pause
 }
 
-# --- 2. 卸载 ClewdR ---
 uninstall_clewd() {
     local CLEWD_DIR="$HOME/.tav_x/clewdr"
     if ! verify_kill_switch; then return; fi
     
-    # 先停止服务
     pkill -f "clewdr"
     
     if ui_spinner "正在清除 ClewdR..." "rm -rf '$CLEWD_DIR'"; then
@@ -59,7 +55,6 @@ uninstall_clewd() {
     ui_pause
 }
 
-# --- 3. 卸载依赖环境 (慎用) ---
 uninstall_deps() {
     ui_header "卸载环境依赖"
     echo -e "${RED}警告：这将卸载 Node.js, Cloudflared 等组件。${NC}"
@@ -68,7 +63,6 @@ uninstall_deps() {
     
     if ! verify_kill_switch; then return; fi
     
-    # 注意：不卸载 gum，否则界面会崩
     local PKGS="nodejs nodejs-lts cloudflared git"
     
     if ui_spinner "正在卸载系统包..." "pkg uninstall $PKGS -y"; then
@@ -80,7 +74,6 @@ uninstall_deps() {
     ui_pause
 }
 
-# --- 4. 一键彻底毁灭 (Full Wipe) ---
 full_wipe() {
     ui_header "一键彻底卸载 (Factory Reset)"
     echo -e "${RED}危险等级：⭐⭐⭐⭐⭐${NC}"
@@ -93,12 +86,10 @@ full_wipe() {
     
     if ! verify_kill_switch; then return; fi
     
-    # 停止所有服务
     pkill -f "node server.js"
     pkill -f "cloudflared"
     pkill -f "clewdr"
     
-    # 执行清理
     ui_spinner "正在执行清理..." "
         rm -rf '$INSTALL_DIR'
         rm -rf '$HOME/.tav_x/clewdr'
@@ -111,10 +102,8 @@ full_wipe() {
     echo -e "感谢您的使用，再见！👋"
     sleep 2
     
-    # 删除自身目录 (自杀)
     rm -rf "$TAVX_DIR"
     
-    # 退出终端
     exit 0
 }
 
@@ -126,10 +115,10 @@ uninstall_menu() {
         echo ""
         
         CHOICE=$(ui_menu "请选择操作" \
-            "🗑️ 卸载 SillyTavern (保留脚本)" \
+            "🗑️ 卸载 SillyTavern" \
             "🦀 卸载 ClewdR 模块" \
-            "📦 卸载环境依赖 (Node/Git...)" \
-            "💥 一键彻底毁灭 (Full Wipe)" \
+            "📦 卸载环境依赖" \
+            "💥 一键彻底毁灭(全清)" \
             "🔙 返回上级"
         )
         

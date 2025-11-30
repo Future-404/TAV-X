@@ -1,5 +1,5 @@
 #!/bin/bash
-# TAV-X Core: Security & System Config (V5.9 API Status Fix)
+# TAV-X Core: Security & System Config (V6.6 Uninstall Added)
 
 source "$TAVX_DIR/core/env.sh"
 source "$TAVX_DIR/core/ui.sh"
@@ -33,8 +33,7 @@ configure_memory() {
     echo -e "⚙️ 当前配置值: ${PURPLE}${curr_set}${NC}"
     echo "----------------------------------------"
     echo -e "${YELLOW}推荐设置:${NC}"
-    echo -e "• 2048 (2GB) - 本地运行推荐"
-    echo -e "• 4096 (4GB) - 穿透远程，适合大多数情况"
+    echo -e "• 4096 (4GB) - 均衡选择，适合大多数情况"
     echo -e "• $safe_max (Max) - 理论极限，超过此值易被杀后台"
     echo "----------------------------------------"
     
@@ -82,7 +81,6 @@ configure_download_network() {
 
     case "$CHOICE" in
         *"智能"*)
-            
             CMD="source $TAVX_DIR/core/utils.sh; 
                  p=\$(get_dynamic_proxy); 
                  if [ -n \"\$p\" ]; then echo \"PROXY|\$p\" > \"$NETWORK_CONFIG\"; exit 0; fi;
@@ -101,16 +99,15 @@ configure_download_network() {
 
 optimize_config() {
     ui_header "系统设置优化"
-    echo -e "${YELLOW}即将应用 Termux 最佳配置：${NC}\n  • 多用户验证 & 隐私登录\n  • 开启插件系统\n  • 关闭磁盘缓存 & 开启懒加载\n"
+    echo -e "${YELLOW}即将应用 Termux 最佳配置：${NC}\n  • 多用户验证 & 隐私登录\n  • 关闭磁盘缓存\n  • 开启懒加载 (性能优化)\n"
     if ui_confirm "确认执行优化？"; then
         ui_spinner "修改中..." "
             node '$JS_TOOL' set enableUserAccounts true
             node '$JS_TOOL' set enableDiscreetLogin true
-            node '$JS_TOOL' set enableServerPlugins true
             node '$JS_TOOL' set useDiskCache false
             node '$JS_TOOL' set lazyLoadCharacters true
             node '$JS_TOOL' set performance.lazyLoadCharacters true"
-        ui_print success "优化完成！"
+        ui_print success "优化完成！插件状态已保留。"
     else ui_print info "已取消。"; fi
     ui_pause
 }
@@ -139,19 +136,17 @@ reset_password() {
 configure_api_proxy() {
     while true; do
         ui_header "API 代理配置"
-        
-        # 实时获取配置
         local is_enabled=$(node "$JS_TOOL" get requestProxy.enabled 2>/dev/null)
         local current_url=$(node "$JS_TOOL" get requestProxy.url 2>/dev/null)
         [ -z "$current_url" ] && current_url="未设置"
 
         echo -e "当前配置状态："
         if [ "$is_enabled" == "true" ]; then
-            echo -e "  🟢 状态: ${GREEN}已开启${NC}"
+            echo -e "  🟢 状态: ${GREEN}已开启 (Enabled)${NC}"
             echo -e "  🔗 地址: ${CYAN}$current_url${NC}"
         else
-            echo -e "  🔴 状态: ${RED}已关闭${NC}"
-            echo -e "  🔗 地址: ${CYAN}$current_url${NC}"
+            echo -e "  🔴 状态: ${RED}已关闭 (Disabled)${NC}"
+            echo -e "  🔗 地址: ${CYAN}$current_url${NC} (未生效)"
         fi
         echo "----------------------------------------"
 
@@ -209,6 +204,7 @@ security_menu() {
             "🌐 配置API代理" \
             "🔐 重置登录密码" \
             "🔌 修改服务端口" \
+            "🧨 卸载与重置" \
             "🔙 返回主菜单"
         )
         case "$CHOICE" in
@@ -218,6 +214,7 @@ security_menu() {
             *"API"*) configure_api_proxy ;;
             *"密码"*) reset_password ;;
             *"端口"*) change_port ;;
+            *"卸载"*) uninstall_menu ;;
             *"返回"*) return ;;
         esac
     done
