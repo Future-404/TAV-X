@@ -1,6 +1,7 @@
 #!/bin/bash
 # TAV-X v2.0 Local Bootstrapper (Startup Only)
 
+# 获取真实路径
 SOURCE=${BASH_SOURCE[0]}
 while [ -L "$SOURCE" ]; do
   DIR=$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )
@@ -9,17 +10,17 @@ while [ -L "$SOURCE" ]; do
 done
 export TAVX_DIR=$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )
 
+# Alias 自愈
 CURRENT_ALIAS=$(grep "alias st=" "$HOME/.bashrc" 2>/dev/null)
 TARGET_CMD="bash $TAVX_DIR/st.sh"
 EXPECTED_ALIAS="alias st='$TARGET_CMD'"
 
-if echo "$CURRENT_ALIAS" | grep -q "$TAVX_DIR/st.sh"; then
-    :
-else
+if ! echo "$CURRENT_ALIAS" | grep -q "$TAVX_DIR/st.sh"; then
     sed -i '/alias st=/d' "$HOME/.bashrc"
     echo "$EXPECTED_ALIAS" >> "$HOME/.bashrc"
 fi
 
+# 启动核心
 CORE_FILE="$TAVX_DIR/core/main.sh"
 
 if [ -f "$CORE_FILE" ]; then
