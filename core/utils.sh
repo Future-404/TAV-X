@@ -34,7 +34,32 @@ is_port_open() {
 }
 
 get_dynamic_proxy() {
-    local PORTS=("7890:http" "7891:socks5h" "10808:socks5h" "10809:http" "20171:http" "20170:socks5h")
+    local PORTS=(
+        "7890:socks5h"
+        "7891:socks5h"
+        "10808:socks5h"
+        "10080:socks5h"
+        "1080:socks5h"
+        "8081:socks5h"
+        "20170:socks5h"
+        "10809:http"
+        "10081:http"
+        "6152:http"
+        "8080:http"
+        "3128:http"
+        "8001:http" "8888:http" "9000:http"
+    )
+    for entry in "${PORTS[@]}"; do
+        local port=${entry%%:*}
+        local proto=${entry#*:}
+        if is_port_open "127.0.0.1" "$port"; then
+            echo "${proto}://127.0.0.1:${port}"
+            return 0
+        fi
+    done
+    return 1
+}
+
     for entry in "${PORTS[@]}"; do
         local port=${entry%%:*}
         local proto=${entry#*:}

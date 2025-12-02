@@ -1,5 +1,5 @@
 #!/bin/bash
-# TAV-X Core: Security & System Config (V3.0 Config Adapter)
+# TAV-X Core: Security & System Config (V3.1 Clean & Strict)
 
 source "$TAVX_DIR/core/env.sh"
 source "$TAVX_DIR/core/ui.sh"
@@ -9,7 +9,7 @@ NETWORK_CONFIG="$TAVX_DIR/config/network.conf"
 MEMORY_CONFIG="$TAVX_DIR/config/memory.conf"
 
 configure_memory() {
-    ui_header "运行内存配置"
+    ui_header "运行内存配置 (Memory Tuning)"
     
     local mem_info=$(free -m | grep "Mem:")
     local total_mem=$(echo "$mem_info" | awk '{print $2}')
@@ -28,7 +28,7 @@ configure_memory() {
 
     echo -e "${CYAN}当前设备内存状态:${NC}"
     echo -e "📦 总物理内存: ${GREEN}${total_mem} MB${NC}"
-    echo -e "🟢 当前可用量: ${YELLOW}${avail_mem} MB${NC}"
+    echo -e "🟢 当前可用量: ${YELLOW}${avail_mem} MB${NC} (剩余)"
     echo -e "⚙️ 当前配置值: ${PURPLE}${curr_set}${NC}"
     echo "----------------------------------------"
     echo -e "${YELLOW}推荐设置:${NC}"
@@ -43,8 +43,7 @@ configure_memory() {
     
     if [[ ! "$input_mem" =~ ^[0-9]+$ ]]; then
         ui_print error "请输入有效的数字。"
-        ui_pause
-        return
+        ui_pause; return
     fi
     
     if [ "$input_mem" -eq 0 ]; then
@@ -52,7 +51,7 @@ configure_memory() {
         ui_print success "已恢复默认内存策略。"
     else
         if [ "$input_mem" -gt "$safe_max" ]; then
-            ui_print warn "注意：设定值接近或超过物理极限！"
+            ui_print warn "注意：设定值 ($input_mem) 接近或超过物理极限 ($total_mem)！"
             if ! ui_confirm "这可能导致 Termux 崩溃，确定要继续吗？"; then
                 ui_pause; return
             fi
@@ -67,26 +66,35 @@ configure_memory() {
 
 configure_download_network() {
     ui_header "下载网络配置"
-    local curr_mode="自动/未配置"
+    local curr_mode="自动 (智能自愈)"
     if [ -f "$NETWORK_CONFIG" ]; then
         local c=$(cat "$NETWORK_CONFIG"); curr_mode="${c#*|}"
         [ ${#curr_mode} -gt 30 ] && curr_mode="${curr_mode:0:28}..."
     fi
     echo -e "当前策略: ${CYAN}$curr_mode${NC}\n"
+    echo -e "说明: 脚本默认会自动探测代理或使用镜像源，无需手动设置。"
+    echo -e "仅当您使用非标准端口或需要强制指定时才使用自定义。"
+    echo ""
 
-    CHOICE=$(ui_menu "请选择模式" "🤖 智能优选" "🔧 自定义代理" "🔙 返回")
+    CHOICE=$(ui_menu "请选择模式" "🔧 配置自定义代理 (Custom)" "🔄 重置为自动模式 (Reset)" "🔙 返回")
 
     case "$CHOICE" in
-        *"智能"*)
-            local CMD="source $TAVX_DIR/core/utils.sh; p=\$(get_dynamic_proxy); if [ -n \"\$p\" ]; then echo \"PROXY|\$p\" > \"$NETWORK_CONFIG\"; exit 0; fi; rm -f \"$NETWORK_CONFIG\"; exit 1"
-            
-            if ui_spinner "扫描中..." "$CMD"; then
-                [ -f "$NETWORK_CONFIG" ] && ui_print success "已更新: $(cat "$NETWORK_CONFIG" | cut -d'|' -f2)" || ui_print warn "无可用代理，重置为默认。"
-            else ui_print error "探测结束，未发现代理。"; fi
-            ui_pause ;;
         *"自定义"*)
             local url=$(ui_input "输入代理 (如 http://127.0.0.1:7890)" "" "false")
-            [[ "$url" =~ ^(http|https|socks5|socks5h)://.* ]] && { echo "PROXY|$url" > "$NETWORK_CONFIG"; ui_print success "已保存"; } || ui_print error "格式错误"
+            if [[ "$url" =~ ^(http|https|socks5|socks5h)://.* ]]; then 
+                echo "PROXY|$url" > "$NETWORK_CONFIG"
+                ui_print success "已保存自定义代理。"
+            else 
+                ui_print error "格式错误，请包含协议头 (如 socks5://)"
+            fi
+            ui_pause ;;
+        *"重置"*)
+            if [ -f "$NETWORK_CONFIG" ]; then
+                rm -f "$NETWORK_CONFIG"
+                ui_print success "已重置。脚本将自动管理网络连接。"
+            else
+                ui_print info "当前已是默认自动模式。"
+            fi
             ui_pause ;;
     esac
 }
@@ -109,12 +117,24 @@ optimize_config() {
 
 change_port() {
     ui_header "修改端口"
+    
     CURR=$(config_get port)
-    local new=$(ui_input "输入新端口 (1024-65535)" "${CURR:-8000}" "false")
+    
+    if [[ -z "$CURR" ]] || [[ "$CURR" == "-1" ]]; then
+        ui_print error "配置文件异常：无法获取有效端口号 ($CURR)。"
+        ui_print warn "请检查 config.yaml 格式是否正确。"
+        ui_pause
+        return
+    fi
+    
+    local new=$(ui_input "输入新端口 (1024-65535)" "$CURR" "false")
+    
     if [[ "$new" =~ ^[0-9]+$ ]] && [ "$new" -ge 1024 ] && [ "$new" -le 65535 ]; then
         config_set port "$new"
         ui_print success "端口已改为 $new"
-    else ui_print error "无效端口"; fi
+    else 
+        ui_print error "无效端口"
+    fi
     ui_pause
 }
 

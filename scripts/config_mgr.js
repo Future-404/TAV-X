@@ -1,11 +1,12 @@
 /**
- * TAV-X Configuration Manager (The Scalpel) v2.0
- * Update: Robust Indentation, Comment Preservation, Type Handling
+ * TAV-X Configuration Manager (The Scalpel) v2.1
+ * Update: Fix root key collision (Root Zero Tolerance)
  */
 
 const fs = require('fs');
 const path = require('path');
 
+// 适配环境变量
 const INSTALL_DIR = process.env.INSTALL_DIR || path.join(process.env.HOME, 'SillyTavern');
 const CONFIG_PATH = path.join(INSTALL_DIR, 'config.yaml');
 
@@ -47,12 +48,13 @@ function parseLineValue(line) {
     if (commentIdx !== -1) {
         return {
             val: raw.substring(0, commentIdx).trim(),
-            comment: raw.substring(commentIdx) // 保留 # 及后面的内容
+            comment: raw.substring(commentIdx) 
         };
     }
     return { val: raw.trim(), comment: '' };
 }
 
+// --- GET 模式 ---
 if (action === 'get') {
     const keys = keyPath.split('.');
     let currentDepth = 0;
@@ -65,6 +67,8 @@ if (action === 'get') {
         const targetKey = keys[currentDepth];
 
         if (key === targetKey) {
+            if (currentDepth === 0 && indent > 0) continue;
+
             if (currentDepth === keys.length - 1) {
                 const { val } = parseLineValue(line);
                 const cleanVal = val.replace(/^['"]|['"]$/g, '');
@@ -88,12 +92,13 @@ else if (action === 'set') {
 
     const newLines = lines.map(line => {
         if (pathFound && currentDepth >= keys.length) return line;
-        
         if (line.trim().startsWith('#') || line.trim() === '') return line;
 
         const key = getKey(line);
         
         if (key === keys[currentDepth]) {
+            if (currentDepth === 0 && getIndent(line) > 0) return line;
+
             if (currentDepth === keys.length - 1) {
                 pathFound = true;
                 
@@ -101,7 +106,6 @@ else if (action === 'set') {
                 const { comment } = parseLineValue(line);
                 
                 let finalVal = newValue;
-                
                 let newLine = `${indentStr}${key}: ${finalVal}`;
                 
                 if (comment) {

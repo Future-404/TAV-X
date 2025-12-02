@@ -2,7 +2,6 @@
 # TAV-X Core: Environment Context & Global Config
 
 export TAVX_DIR="${TAVX_DIR:-$HOME/.tav_x}"
-
 export TAVX_ROOT="$TAVX_DIR"
 
 export INSTALL_DIR="$HOME/SillyTavern"
@@ -12,8 +11,7 @@ mkdir -p "$CONFIG_DIR"
 
 export NETWORK_CONFIG="$CONFIG_DIR/network.conf"
 
-export CURRENT_VERSION="v2.1.0"
-
+export CURRENT_VERSION="v2.2.0"
 export RED='\033[0;31m'
 export GREEN='\033[0;32m'
 export YELLOW='\033[1;33m'
@@ -23,10 +21,22 @@ export NC='\033[0m'
 
 export GLOBAL_MIRRORS=(
     "https://ghproxy.net/"
-    "https://ghproxy.cc/"
     "https://mirror.ghproxy.com/"
+    "https://ghproxy.cc/"
     "https://gh.likk.cc/"
+    "https://github.akams.cn/"
+    "https://hub.gitmirror.com/"
+    "https://hk.gh-proxy.com/"
+    "https://ui.ghproxy.cc/"
+    "https://gh.ddlc.top/"
     "https://gh-proxy.com/"
+    "https://gh.jasonzeng.dev/"
+    "https://gh.idayer.com/"
+    "https://edgeone.gh-proxy.com/"
+    "https://ghproxy.site/"
+    "https://www.gitwarp.com/"
+    "https://cors.isteed.cc/"
+    "https://ghproxy.vip/"    
 )
 
 info() { echo -e "${BLUE}[INFO]${NC} $1"; }
