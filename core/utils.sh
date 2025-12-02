@@ -60,14 +60,6 @@ get_dynamic_proxy() {
     return 1
 }
 
-    for entry in "${PORTS[@]}"; do
-        local port=${entry%%:*}
-        local proto=${entry#*:}
-        if is_port_open "127.0.0.1" "$port"; then echo "${proto}://127.0.0.1:${port}"; return 0; fi
-    done
-    return 1
-}
-
 _auto_heal_network_config() {
     local network_conf="$TAVX_DIR/config/network.conf"
     local need_scan=false
