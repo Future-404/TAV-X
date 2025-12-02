@@ -1,6 +1,8 @@
 #!/bin/bash
 # TAV-X Core: Utilities (V3.3 Smart NPM & Proxy-Only Download)
-
+if [ -n "$TAVX_DIR" ] && [ -f "$TAVX_DIR/core/env.sh" ]; then
+    source "$TAVX_DIR/core/env.sh"
+fi
 # --- UI Helpers (Cleaned) ---
 pause() { echo ""; read -n 1 -s -r -p "按任意键继续..."; echo ""; }
 
