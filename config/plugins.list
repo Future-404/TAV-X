@@ -1,0 +1,28 @@
+# Name | RepoURL | ServerBranch | ClientBranch | DirName
+# -------------------------------------------------------
+AIStudioBuildProxy (汉化/API代理) | https://github.com/il1umi/AIStudioBuildProxy.git | server | client | AIStudioBuildProxy
+对话文本着色 | https://github.com/XanadusWorks/SillyTavern-Dialogue-Colorizer.git | - | HEAD | SillyTavern-Dialogue-Colorizer
+顶部信息栏 | https://github.com/SillyTavern/Extension-TopInfoBar.git | - | HEAD | Extension-TopInfoBar
+界面元素隐藏 | https://github.com/uhhhh15/hide.git | - | HEAD | hide
+自定义模型列表 | https://github.com/LenAnderson/SillyTavern-CustomModels.git | - | HEAD | SillyTavern-CustomModels
+聊天统计面板 | https://github.com/Junejulyz/chat-companion-stats.git | - | HEAD | chat-companion-stats
+快速回复 | https://github.com/uhhhh15/QR.git | - | HEAD | QR
+强力快速回复 | https://github.com/AlbusKen/quick-response-force.git | - | HEAD | quick-response-force
+输入辅助助手 | https://github.com/Mooooooon/st-input-helper.git | - | HEAD | st-input-helper
+提示词模板管理 | https://github.com/zonde306/ST-Prompt-Template.git | - | HEAD | ST-Prompt-Template
+消息收藏/星标 | https://github.com/uhhhh15/star.git | - | HEAD | star
+Amily2 聊天优化 | https://github.com/Wx-2025/ST-Amily2-Chat-Optimisation.git | - | HEAD | ST-Amily2-Chat-Optimisation
+记忆增强扩展 | https://github.com/muyoou/st-memory-enhancement.git | HEAD | - | st-memory-enhancement
+上下文消息限制 | https://github.com/SillyTavern/Extension-MessageLimit.git | - | HEAD | Extension-MessageLimit
+前端 Token 计数 | https://github.com/GoldenglowMeow/ST-Frontend-Tokenizer.git | - | HEAD | ST-Frontend-Tokenizer
+预设管理器 Momo | https://github.com/1830488003/preset-manager-momo.git | - | HEAD | preset-manager-momo
+世界书扩展 Momo | https://github.com/1830488003/my-world-book-momo.git | - | HEAD | my-world-book-momo
+JS 脚本运行器 | https://github.com/n0vi028/JS-Slash-Runner.git | - | HEAD | JS-Slash-Runner
+Bincooo 执行器 | https://github.com/bincooo/SillyTavernExtension-JsRunner.git | - | HEAD | SillyTavernExtension-JsRunner
+拒绝助手废话 | https://gitgud.io/Monblant/noass.git | - | HEAD | noass
+定时提醒工具 | https://github.com/Mooooooon/silly-tavern-reminder.git | - | HEAD | silly-tavern-reminder
+生成失败通知 | https://github.com/RealSubstantiality/fail-notification.git | - | HEAD | fail-notification
+小白盒工具箱 | https://github.com/RT15548/LittleWhiteBox.git | - | HEAD | LittleWhiteBox
+快捷人格切换 | https://github.com/SillyTavern/Extension-QuickPersona.git | - | HEAD | Extension-QuickPersona
+聊天记录备份 | https://github.com/uhhhh15/chat-history-backup.git | - | HEAD | chat-history-backup
+静音/停止生成 | https://github.com/SillyTavern/Extension-Silence.git | - | HEAD | Extension-Silence
