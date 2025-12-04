@@ -1,10 +1,7 @@
-# --- 运行时生成的目录 (Runtime) ---
 clewdr/
 adb_tools/
 SillyTavern/
 node_modules/
-
-# --- 临时文件与日志 (Logs & Temp) ---
 *.log
 *.txt
 .temp_link
@@ -13,12 +10,14 @@ node_modules/
 .plugin_map
 .api_res
 secrets.env
-
-# --- 用户配置文件 (User Config) ---
 config/network.conf
 config/memory.conf
 config/plugins.list
-
-# --- 系统垃圾 (System) ---
 .DS_Store
 Thumbs.db
+*.swp
+temp_restore/
+.api_req
+adb_log.txt
+config/*.conf
+config/*.env

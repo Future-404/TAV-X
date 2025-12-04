@@ -12,7 +12,7 @@ install_sillytavern() {
         ui_print warn "检测到旧版本目录: $INSTALL_DIR"
         echo -e "${RED}继续安装将清空旧目录！${NC}"
         if ! ui_confirm "确认覆盖安装吗？"; then return; fi
-        rm -rf "$INSTALL_DIR"
+        safe_rm "$INSTALL_DIR"
     fi
 
     local CLONE_CMD="source \"$TAVX_DIR/core/utils.sh\"; git_clone_smart '-b release' 'SillyTavern/SillyTavern' '$INSTALL_DIR'"

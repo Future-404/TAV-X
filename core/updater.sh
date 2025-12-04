@@ -1,5 +1,5 @@
 #!/bin/bash
-# TAV-X Core: Update Center (V3.1 Interactive NPM)
+# TAV-X Core: Update Center (V3.4 Branch Unlock Fix)
 
 source "$TAVX_DIR/core/env.sh"
 source "$TAVX_DIR/core/ui.sh"
@@ -87,7 +87,7 @@ rollback_sillytavern() {
         case "$CHOICE" in
             *"解除锁定"*)
                 if ui_confirm "确定恢复到最新 Release 版？"; then
-                    local RESTORE="source \"$TAVX_DIR/core/utils.sh\"; fix_git_remote \"$INSTALL_DIR\" \"SillyTavern/SillyTavern\"; git checkout release; git pull"
+                    local RESTORE="source \"$TAVX_DIR/core/utils.sh\"; fix_git_remote \"$INSTALL_DIR\" \"SillyTavern/SillyTavern\"; git config remote.origin.fetch \"+refs/heads/*:refs/remotes/origin/*\"; git fetch origin release --depth=1; git reset --hard origin/release; git checkout release"
                     if ui_spinner "正在归队..." "$RESTORE"; then
                         echo ""; npm_install_smart "$INSTALL_DIR"
                         ui_print success "已恢复！"
@@ -116,8 +116,11 @@ rollback_sillytavern() {
                 TAG_CHOICE=$(ui_menu "选择版本" "${TAG_LIST[@]}")
                 
                 if [[ "$TAG_CHOICE" != *"取消"* ]]; then
-                    if ui_confirm "确认回退到 $TAG_CHOICE ？(风险操作)"; then
-                        if ui_spinner "时光倒流..." "git checkout $TAG_CHOICE"; then
+                    echo -e "${RED}警告：即将重置核心文件以解决冲突。${NC}"
+                    echo -e "您的聊天记录和配置不会丢失，但手动修改的代码将被还原。"
+                    if ui_confirm "确认回退到 $TAG_CHOICE ？"; then
+                        local ROLLBACK_CMD="source \"$TAVX_DIR/core/utils.sh\"; fix_git_remote \"$INSTALL_DIR\" \"SillyTavern/SillyTavern\"; git fetch origin tag \"$TAG_CHOICE\" --depth=1; git reset --hard; git checkout \"$TAG_CHOICE\""
+                        if ui_spinner "时光倒流..." "$ROLLBACK_CMD"; then
                             echo ""; npm_install_smart "$INSTALL_DIR"
                             ui_print success "已锁定在 $TAG_CHOICE"
                         else ui_print error "切换失败"; fi
@@ -127,7 +130,7 @@ rollback_sillytavern() {
                 
             *"切换通道"*)
                 local TARGET=""; [[ "$CHOICE" == *"Release"* ]] && TARGET="release"; [[ "$CHOICE" == *"Staging"* ]] && TARGET="staging"
-                local SW_CMD="source \"$TAVX_DIR/core/utils.sh\"; fix_git_remote \"$INSTALL_DIR\" \"SillyTavern/SillyTavern\"; git fetch origin; git checkout $TARGET; git pull"
+                local SW_CMD="source \"$TAVX_DIR/core/utils.sh\"; fix_git_remote \"$INSTALL_DIR\" \"SillyTavern/SillyTavern\"; git config remote.origin.fetch \"+refs/heads/*:refs/remotes/origin/*\"; git fetch origin $TARGET --depth=1; git reset --hard origin/$TARGET; git checkout $TARGET"
                 if ui_spinner "切换至 $TARGET..." "$SW_CMD"; then
                     echo ""; npm_install_smart "$INSTALL_DIR"
                     ui_print success "切换成功！"

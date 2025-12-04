@@ -24,18 +24,17 @@ install_single_plugin() {
     local TASKS=""
     if [ "$s" != "-" ]; then
         local b_arg=""; [ "$s" != "HEAD" ] && b_arg="-b $s"
-        TASKS+="rm -rf '$INSTALL_DIR/plugins/$dir'; git_clone_smart '$b_arg' '$repo' '$INSTALL_DIR/plugins/$dir' || exit 1;"
+        TASKS+="safe_rm '$INSTALL_DIR/plugins/$dir'; git_clone_smart '$b_arg' '$repo' '$INSTALL_DIR/plugins/$dir' || exit 1;"
     fi
     if [ "$c" != "-" ]; then
         local b_arg=""; [ "$c" != "HEAD" ] && b_arg="-b $c"
-        TASKS+="rm -rf '$INSTALL_DIR/public/scripts/extensions/third-party/$dir'; git_clone_smart '$b_arg' '$repo' '$INSTALL_DIR/public/scripts/extensions/third-party/$dir' || exit 1;"
+        TASKS+="safe_rm '$INSTALL_DIR/public/scripts/extensions/third-party/$dir'; git_clone_smart '$b_arg' '$repo' '$INSTALL_DIR/public/scripts/extensions/third-party/$dir' || exit 1;"
     fi
     
     local WRAP_CMD="source \"$TAVX_DIR/core/utils.sh\"; $TASKS"
     
     if ui_spinner "正在下载插件 (智能优选)..." "$WRAP_CMD"; then
         ui_print success "安装完成！"
-        config_set enableServerPlugins true
     else
         ui_print error "安装失败，请检查网络。"
     fi

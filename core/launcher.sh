@@ -31,10 +31,15 @@ get_memory_args() {
 
 ensure_critical_configs() {
     config_set ssl.enabled false
-    
+    config_set enableUserAccounts true
+    config_set enableDiscreetLogin true
+    config_set whitelistMode false
+    config_set useDiskCache false
+    config_set lazyLoadCharacters true
     config_set extensions.enabled true
-    
     config_set enableServerPlugins true 
+    config_set performance.lazyLoadCharacters true
+    
 }
 
 is_port_open() {

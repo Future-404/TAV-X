@@ -1,5 +1,5 @@
 #!/bin/bash
-# TAV-X Core: Backup & Restore (V5.6.1 Timestamp Fix)
+# TAV-X Core: Backup & Restore (V2.2.3 Timestamp Fix)
 
 source "$TAVX_DIR/core/env.sh"
 source "$TAVX_DIR/core/ui.sh"
@@ -76,7 +76,7 @@ perform_restore() {
         local TEMP_DIR="$TAVX_DIR/temp_restore"
         local LOCAL_COPY="$TEMP_DIR/restore_target.tar.gz"
         
-        rm -rf "$TEMP_DIR"; mkdir -p "$TEMP_DIR"
+        safe_rm "$TEMP_DIR"; mkdir -p "$TEMP_DIR"
         
         if ! cp "$selected_file" "$LOCAL_COPY"; then
             ui_print error "无法读取备份文件，请检查存储权限！"
@@ -92,11 +92,11 @@ perform_restore() {
                 if [ -d "data" ]; then mv data data_old_tmp; fi
                 
                 if cp -r "$TEMP_DIR/data" .; then
-                    rm -rf data_old_tmp
+                    safe_rm "data_old_tmp"
                     ui_print success "Data 恢复成功"
                 else
                     ui_print error "Data 恢复失败！正在还原旧数据..."
-                    rm -rf data
+                    safe_rm "data"
                     mv data_old_tmp data
                     ui_pause; return
                 fi
@@ -110,11 +110,11 @@ perform_restore() {
                 cp "$TEMP_DIR/secrets.json" .
             fi
             
-            rm -rf "$TEMP_DIR"
+            safe_rm "$TEMP_DIR"
             ui_print success "🎉 所有操作完成！请重启酒馆。"
         else
             ui_print error "解压失败！备份文件确实已损坏或格式错误。"
-            rm -rf "$TEMP_DIR"
+            safe_rm "$TEMP_DIR"
         fi
     else
         ui_print info "已取消。"

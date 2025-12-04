@@ -99,22 +99,6 @@ configure_download_network() {
     esac
 }
 
-optimize_config() {
-    ui_header "系统设置优化"
-    echo -e "${YELLOW}即将应用 Termux 最佳配置：${NC}\n  • 多用户验证 & 隐私登录\n  • 关闭磁盘缓存\n  • 开启懒加载 (性能优化)\n  • 修复插件权限"
-    if ui_confirm "确认执行优化？"; then
-        ui_spinner "修改中..." "
-            config_set enableUserAccounts true
-            config_set enableDiscreetLogin true
-            config_set useDiskCache false
-            config_set lazyLoadCharacters true
-            config_set performance.lazyLoadCharacters true
-            config_set enableServerPlugins true"
-        ui_print success "优化完成！插件状态已强制开启。"
-    else ui_print info "已取消。"; fi
-    ui_pause
-}
-
 change_port() {
     ui_header "修改端口"
     
@@ -217,7 +201,6 @@ security_menu() {
     while true; do
         ui_header "系统设置"
         CHOICE=$(ui_menu "请选择功能" \
-            "🚀 一键系统优化" \
             "🧠 配置运行内存" \
             "📥 下载网络配置" \
             "🌐 配置API代理" \
@@ -227,7 +210,6 @@ security_menu() {
             "🔙 返回主菜单"
         )
         case "$CHOICE" in
-            *"优化"*) optimize_config ;;
             *"内存"*) configure_memory ;; 
             *"下载"*) configure_download_network ;;
             *"API"*) configure_api_proxy ;;

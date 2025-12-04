@@ -1,5 +1,4 @@
 #!/bin/bash
-# TAV-X Core: Uninstall Center (V3.1 + ADB Removal)
 
 source "$TAVX_DIR/core/env.sh"
 source "$TAVX_DIR/core/ui.sh"
@@ -33,7 +32,7 @@ verify_kill_switch() {
 uninstall_st() {
     if ! verify_kill_switch; then return; fi
     
-    if ui_spinner "正在删除酒馆数据..." "rm -rf '$INSTALL_DIR'"; then
+    if ui_spinner "正在删除酒馆数据..." "source \"$TAVX_DIR/core/utils.sh\"; safe_rm '$INSTALL_DIR'"; then
         ui_print success "SillyTavern 已卸载。"
     else
         ui_print error "删除失败，请检查权限。"
@@ -47,7 +46,7 @@ uninstall_clewd() {
     
     pkill -f "clewdr"
     
-    if ui_spinner "正在清除 ClewdR..." "rm -rf '$CLEWD_DIR'"; then
+    if ui_spinner "正在清除 ClewdR..." "source \"$TAVX_DIR/core/utils.sh\"; safe_rm '$CLEWD_DIR'"; then
         ui_print success "ClewdR 模块已卸载。"
     else
         ui_print error "删除失败。"
@@ -68,7 +67,7 @@ uninstall_adb() {
     if ! ui_confirm "确认继续吗？"; then return; fi
 
     if [ -d "$ADB_DIR" ]; then
-        ui_spinner "正在删除本地文件..." "rm -rf '$ADB_DIR'"
+        ui_spinner "正在删除本地文件..." "source \"$TAVX_DIR/core/utils.sh\"; safe_rm '$ADB_DIR'"
         sed -i '/adb_tools\/platform-tools/d' "$HOME/.bashrc"
         ui_print success "本地组件及环境变量已清理。"
     fi
@@ -126,9 +125,10 @@ full_wipe() {
     pkill -f "clewdr"
     
     ui_spinner "正在执行清理..." "
-        rm -rf '$INSTALL_DIR'
-        rm -rf '$TAVX_DIR/clewdr'
-        rm -rf '$TAVX_DIR/adb_tools'
+        source \"$TAVX_DIR/core/utils.sh\"
+        safe_rm '$INSTALL_DIR'
+        safe_rm '$TAVX_DIR/clewdr'
+        safe_rm '$TAVX_DIR/adb_tools'
         sed -i '/alias st=/d' '$HOME/.bashrc'
         sed -i '/adb_tools\/platform-tools/d' '$HOME/.bashrc'
     "
@@ -138,13 +138,11 @@ full_wipe() {
     echo -e "${YELLOW}最后一步：自毁程序启动...${NC}"
     echo -e "感谢您的使用，再见！👋"
     sleep 2
-    
-    rm -rf "$TAVX_DIR"
+    safe_rm "$TAVX_DIR"
     
     exit 0
 }
 
-# --- 菜单入口 ---
 uninstall_menu() {
     while true; do
         ui_header "卸载与重置中心"
