@@ -20,3 +20,6 @@ temp_restore/
 adb_log.txt
 config/*.conf
 config/*.env
+config/cf_token
+gemini_proxy/
+gemini_proxy/*.log

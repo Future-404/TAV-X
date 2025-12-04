@@ -301,6 +301,20 @@ config_get() {
 config_set() {
     local key=$1
     local value=$2
-    if [ ! -f "$JS_TOOL" ]; then return 1; fi
-    if node "$JS_TOOL" set "$key" "$value" >/dev/null 2>&1; then return 0; else return 1; fi
+    if [ ! -f "$JS_TOOL" ]; then
+        ui_print error "找不到配置工具: $JS_TOOL"
+        return 1
+    fi
+
+    local output
+    output=$(node "$JS_TOOL" set "$key" "$value" 2>&1)
+    local status=$?
+
+    if [ $status -eq 0 ]; then
+        return 0
+    else
+        ui_print error "设置失败 [$key]: $(echo "$output" | head -n 1)" 
+        sleep 1
+        return 1
+    fi
 }

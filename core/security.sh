@@ -197,6 +197,40 @@ configure_api_proxy() {
     done
 }
 
+configure_cf_token() {
+    ui_header "Cloudflare Tunnel Token"
+    local token_file="$TAVX_DIR/config/cf_token"
+    
+    local current_stat="${YELLOW}未配置 (使用临时隧道)${NC}"
+    if [ -f "$token_file" ] && [ -s "$token_file" ]; then
+        local t=$(cat "$token_file")
+        current_stat="${GREEN}已配置${NC} (${t:0:6}......)"
+    fi
+
+    echo -e "当前状态: $current_stat"
+    echo "----------------------------------------"
+    echo -e "说明: 使用 Token 可绑定自定义域名，连接更稳定。"
+    echo -e "请在 Cloudflare Zero Trust 后台获取 Tunnel Token。"
+    echo ""
+
+    CHOICE=$(ui_menu "请选择操作" "✏️ 输入/更新 Token" "🗑️ 清除 Token (恢复默认)" "🔙 返回")
+
+    case "$CHOICE" in
+        *"输入"*)
+            local input=$(ui_input "请粘贴 Token" "" "false")
+            if [ -n "$input" ]; then
+                echo "$input" > "$token_file"
+                ui_print success "Token 已保存！"
+            fi
+            ui_pause ;;
+        *"清除"*)
+            rm -f "$token_file"
+            ui_print success "Token 已清除，已恢复为临时隧道模式。"
+            ui_pause ;;
+    esac
+}
+
+
 security_menu() {
     while true; do
         ui_header "系统设置"
@@ -204,6 +238,7 @@ security_menu() {
             "🧠 配置运行内存" \
             "📥 下载网络配置" \
             "🌐 配置API代理" \
+            "☁️  配置Cloudflare Token" \
             "🔐 重置登录密码" \
             "🔌 修改服务端口" \
             "🧨 卸载与重置" \
@@ -213,6 +248,7 @@ security_menu() {
             *"内存"*) configure_memory ;; 
             *"下载"*) configure_download_network ;;
             *"API"*) configure_api_proxy ;;
+            *"Cloudflare"*) configure_cf_token ;;
             *"密码"*) reset_password ;;
             *"端口"*) change_port ;;
             *"卸载"*) uninstall_menu ;;

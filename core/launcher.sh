@@ -30,16 +30,21 @@ get_memory_args() {
 }
 
 ensure_critical_configs() {
+    ui_print info "正在配置..."
+    local CONF="$INSTALL_DIR/config.yaml"
+
+    config_set listen true
+    config_set whitelistMode false
+    config_set basicAuthMode false
     config_set ssl.enabled false
+    config_set hostWhitelist.enabled false
     config_set enableUserAccounts true
     config_set enableDiscreetLogin true
-    config_set whitelistMode false
-    config_set useDiskCache false
-    config_set lazyLoadCharacters true
     config_set extensions.enabled true
     config_set enableServerPlugins true 
+    config_set performance.useDiskCache false
     config_set performance.lazyLoadCharacters true
-    
+
 }
 
 is_port_open() {
@@ -162,32 +167,55 @@ start_menu() {
                 
                 ui_spinner "正在启动酒馆..." "nohup node $MEM_ARGS server.js > '$SERVER_LOG' 2>&1 & sleep 2"
                 
-                PROTOCOL="http2"
-                if [ -n "$PROXY_URL" ]; then
-                    ui_print info "检测到代理，强制使用 HTTP2 协议以透传流量..."
+                local TOKEN_FILE="$TAVX_DIR/config/cf_token"
+                local CF_TOKEN=""
+                [ -f "$TOKEN_FILE" ] && CF_TOKEN=$(cat "$TOKEN_FILE")
+
+                if [ -n "$CF_TOKEN" ]; then
+                    ui_print info "检测到 Token，启动固定隧道..."
+                    
+                    local CF_CMD="tunnel run --token $CF_TOKEN"
+                    
+                    if [ -n "$PROXY_URL" ]; then
+                        ui_print info "代理已注入: $PROXY_URL"
+                        env TUNNEL_HTTP_PROXY="$PROXY_URL" cloudflared $CF_CMD --protocol http2 > "$CF_LOG" 2>&1 &
+                    else
+                        cloudflared $CF_CMD > "$CF_LOG" 2>&1 &
+                    fi
+                    
+                    ui_print success "服务已启动！"
+                    echo ""
+                    echo -e "${GREEN}请访问您在 Cloudflare 后台绑定的域名。${NC}"
+                    echo -e "${GRAY}(固定隧道无需获取临时链接)${NC}"
+
                 else
-                    PROTOCOL=$(detect_protocol_logic "")
-                fi
-                
-                local CF_ARGS=(tunnel --protocol "$PROTOCOL" --url "http://127.0.0.1:$PORT" --no-autoupdate)
-                
-                if [ -n "$PROXY_URL" ]; then
-                    ui_print info "隧道已接入代理网关: $PROXY_URL"
-                    env TUNNEL_HTTP_PROXY="$PROXY_URL" cloudflared "${CF_ARGS[@]}" > "$CF_LOG" 2>&1 &
-                else
-                    cloudflared "${CF_ARGS[@]}" > "$CF_LOG" 2>&1 &
-                fi
-                
-                rm -f "$TAVX_DIR/.temp_link"
-                wait_cmd="source \"$TAVX_DIR/core/launcher.sh\"; link=\$(wait_for_link_logic); if [ -n \"\$link\" ]; then echo \"\$link\" > \"$TAVX_DIR/.temp_link\"; exit 0; else exit 1; fi"
-                
-                if ui_spinner "建立隧道 ($PROTOCOL)..." "$wait_cmd"; then
-                    LINK=$(cat "$TAVX_DIR/.temp_link")
-                    ui_print success "链接创建成功！"
-                    echo ""; echo -e "${YELLOW}👉 $LINK${NC}"; echo ""; echo -e "${CYAN}(长按复制)${NC}"
-                else 
-                    ui_print error "链接获取超时。"
-                    ui_print warn "提示: 若一直超时，请尝试开启/关闭 VPN 后重试。" 
+                    PROTOCOL="http2"
+                    if [ -n "$PROXY_URL" ]; then
+                        ui_print info "检测到代理，强制使用 HTTP2..."
+                    else
+                        PROTOCOL=$(detect_protocol_logic "")
+                    fi
+                    
+                    local CF_ARGS=(tunnel --protocol "$PROTOCOL" --url "http://127.0.0.1:$PORT" --no-autoupdate)
+                    
+                    if [ -n "$PROXY_URL" ]; then
+                        ui_print info "隧道已接入代理网关: $PROXY_URL"
+                        env TUNNEL_HTTP_PROXY="$PROXY_URL" cloudflared "${CF_ARGS[@]}" > "$CF_LOG" 2>&1 &
+                    else
+                        cloudflared "${CF_ARGS[@]}" > "$CF_LOG" 2>&1 &
+                    fi
+                    
+                    rm -f "$TAVX_DIR/.temp_link"
+                    wait_cmd="source \"$TAVX_DIR/core/launcher.sh\"; link=\$(wait_for_link_logic); if [ -n \"\$link\" ]; then echo \"\$link\" > \"$TAVX_DIR/.temp_link\"; exit 0; else exit 1; fi"
+                    
+                    if ui_spinner "建立隧道 ($PROTOCOL)..." "$wait_cmd"; then
+                        LINK=$(cat "$TAVX_DIR/.temp_link")
+                        ui_print success "链接创建成功！"
+                        echo ""; echo -e "${YELLOW}👉 $LINK${NC}"; echo ""; echo -e "${CYAN}(长按复制)${NC}"
+                    else 
+                        ui_print error "链接获取超时。"
+                        ui_print warn "提示：若一直超时，请尝试配置 Token 使用固定隧道。" 
+                    fi
                 fi
                 ui_pause ;;
 

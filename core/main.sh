@@ -68,9 +68,10 @@ while true; do
         *"网络设置") configure_download_network ;;
         *"备份与恢复") backup_menu ;;
         *"高级工具")
-            SUB=$(ui_menu "高级工具箱" "🦀 ClewdR 管理" "🛡️  ADB 保活" "🔙 返回上级")
+            SUB=$(ui_menu "高级工具箱" "🦀 ClewdR 管理" "♊ Gemini-CLI(测试模块，可能有未知bug)" "🛡️  ADB 保活" "🔙 返回上级")
             case "$SUB" in
                 *"ClewdR"*) clewd_menu ;;
+                *"Gemini"*) source "$TAVX_DIR/modules/Gemini_CLI.sh"; gemini_menu ;;
                 *"ADB"*) source "$TAVX_DIR/modules/adb_keepalive.sh"; adb_menu_loop ;;
                 *"返回"*) ;;
             esac ;;
