@@ -11,7 +11,7 @@ mkdir -p "$CONFIG_DIR"
 
 export NETWORK_CONFIG="$CONFIG_DIR/network.conf"
 
-export CURRENT_VERSION="v2.4.0"
+export CURRENT_VERSION="v2.4.2"
 export RED='\033[0;31m'
 export GREEN='\033[0;32m'
 export YELLOW='\033[1;33m'
