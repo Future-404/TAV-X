@@ -5,7 +5,6 @@ if [ -n "$TAVX_DIR" ] && [ -f "$TAVX_DIR/core/env.sh" ]; then
     source "$TAVX_DIR/core/env.sh"
 fi
 
-
 safe_rm() {
     local target="$1"
     if [[ -z "$target" ]]; then ui_print error "安全拦截: 空路径！"; return 1; fi
@@ -43,11 +42,6 @@ is_port_open() {
     if timeout 0.2 bash -c "</dev/tcp/$1/$2" 2>/dev/null; then return 0; else return 1; fi
 }
 
-PROXY_PORTS_POOL=(
-    "7890:socks5h" "7891:socks5h" "10809:http" "10808:socks5h" 
-    "20171:http" "20170:socks5h" "9090:http" "8080:http" "1080:socks5h"
-)
-
 get_active_proxy() {
     local network_conf="$TAVX_DIR/config/network.conf"
     if [ -f "$network_conf" ]; then
@@ -61,7 +55,7 @@ get_active_proxy() {
     if [ -n "$http_proxy" ]; then echo "$http_proxy"; return 0; fi
     if [ -n "$https_proxy" ]; then echo "$https_proxy"; return 0; fi
 
-    for entry in "${PROXY_PORTS_POOL[@]}"; do
+    for entry in "${GLOBAL_PROXY_PORTS[@]}"; do
         local port=${entry%%:*}
         local proto=${entry#*:}
         if timeout 0.1 bash -c "</dev/tcp/127.0.0.1/$port" 2>/dev/null; then
@@ -85,31 +79,83 @@ auto_load_proxy_env() {
     fi
 }
 
-find_fastest_mirror() {
-    local repo_path=$1
+# --- 核心修改：交互式镜像选择器 ---
+select_mirror_interactive() {
+    if [ -n "$SELECTED_MIRROR" ]; then return 0; fi
+
+    echo -e "\n${CYAN}>>> 正在并发测速镜像源...${NC}"
+    echo "----------------------------------------"
+    
     local tmp_race_file="$TAVX_DIR/.mirror_race"
     rm -f "$tmp_race_file"
 
     for mirror in "${GLOBAL_MIRRORS[@]}"; do
         (
             local start=$(date +%s%N)
-            local test_url="${mirror}https://github.com/${repo_path}"
+            local test_url="${mirror}https://github.com/Future-404/TAV-X/info/refs?service=git-upload-pack"
+            
             if curl -s -I -m 3 "$test_url" >/dev/null 2>&1; then
                 local end=$(date +%s%N)
-                local dur=$(( (end - start) / 1000000 ))
-                echo "$dur $mirror" >> "$tmp_race_file"
+                local dur=$(( (end - start) / 1000000 )) # 毫秒
+                echo "$dur|$mirror" >> "$tmp_race_file"
             fi
         ) &
     done
     wait
-    
-    if [ -s "$tmp_race_file" ]; then
-        sort -n "$tmp_race_file" | head -n 1 | awk '{print $2}'
-    fi
-}
 
-get_dynamic_proxy() {
-    get_active_proxy
+    if [ ! -s "$tmp_race_file" ]; then
+        ui_print error "所有镜像源均连接超时！请检查网络。"
+        return 1
+    fi
+
+    sort -n "$tmp_race_file" -o "$tmp_race_file"
+    
+    local OPTIONS=()
+    local RAW_URLS=()
+    local idx=1
+    
+    while IFS='|' read -r dur url; do
+        local mark="${GREEN}🟢${NC}"
+        if [ "$dur" -gt 800 ]; then mark="${YELLOW}🟡${NC}"; fi
+        if [ "$dur" -gt 1500 ]; then mark="${RED}🔴${NC}"; fi
+        
+        # 提取域名显示
+        local domain=$(echo "$url" | awk -F/ '{print $3}')
+        OPTIONS+=("$mark ${dur}ms | $domain")
+        RAW_URLS+=("$url")
+        ((idx++))
+    done < "$tmp_race_file"
+    
+    OPTIONS+=("🌐 官方源 (直连)")
+    RAW_URLS+=("https://github.com/")
+
+    echo -e "${YELLOW}请根据延迟选择最稳定的源：${NC}"
+    local CHOICE_IDX
+    
+    if [ "$HAS_GUM" = true ]; then
+        local SELECTED_TEXT=$(gum choose "${OPTIONS[@]}" --header "选择镜像源")
+        for i in "${!OPTIONS[@]}"; do
+            if [[ "${OPTIONS[$i]}" == "$SELECTED_TEXT" ]]; then
+                CHOICE_IDX=$i
+                break
+            fi
+        done
+    else
+        local i=1
+        for opt in "${OPTIONS[@]}"; do echo "$i. $opt"; ((i++)); done
+        read -p "请输入序号: " input_idx
+        CHOICE_IDX=$((input_idx - 1))
+    fi
+
+    if [ -n "$CHOICE_IDX" ] && [ "$CHOICE_IDX" -ge 0 ] && [ "$CHOICE_IDX" -lt "${#RAW_URLS[@]}" ]; then
+        SELECTED_MIRROR="${RAW_URLS[$CHOICE_IDX]}"
+        ui_print success "已选定: $SELECTED_MIRROR"
+        return 0
+    else
+        ui_print warn "无效选择，默认使用第一项。"
+        SELECTED_MIRROR="${RAW_URLS[0]}"
+        return 0
+    fi
 }
 
 _auto_heal_network_config() {
@@ -149,65 +195,33 @@ git_clone_smart() {
     clean_repo=${clean_repo#"git@github.com:"}
 
     if [ $proxy_active -eq 0 ]; then
-        echo -e "${CYAN}[网络]${NC} 探测到代理加速..."
+        echo -e "${CYAN}[网络]${NC} 探测到代理，尝试直连..."
         if git clone --depth 1 $branch_arg "https://github.com/${clean_repo}" "$target_dir"; then return 0; fi
-        echo -e "${YELLOW}[重试]${NC} 代理直连失败，尝试切换镜像..."
+        echo -e "${YELLOW}[重试]${NC} 代理连接失败，切换至镜像模式..."
     fi
 
-    echo -e "${BLUE}[镜像]${NC} 正在并发测速寻找最快线路..."
-    local best_mirror=$(find_fastest_mirror "$clean_repo")
+    select_mirror_interactive
     
-    if [ -n "$best_mirror" ]; then
-        echo -e "✔ 选中: $(echo $best_mirror | awk -F/ '{print $3}')"
-        if env -u http_proxy -u https_proxy git clone --depth 1 $branch_arg "${best_mirror}https://github.com/${clean_repo}" "$target_dir"; then
+    if [ -n "$SELECTED_MIRROR" ]; then
+        local final_url="${SELECTED_MIRROR}https://github.com/${clean_repo}"
+        if [[ "$SELECTED_MIRROR" == *"github.com"* ]]; then final_url="https://github.com/${clean_repo}"; fi
+        
+        echo -e "🚀 正在通过 [${SELECTED_MIRROR}] 下载..."
+        if env -u http_proxy -u https_proxy git clone --depth 1 $branch_arg "$final_url" "$target_dir"; then
             return 0
         fi
     fi
-
-    for mirror in "${GLOBAL_MIRRORS[@]}"; do
-        if [ "$mirror" == "$best_mirror" ]; then continue; fi
-        if curl -s -I -m 2 "${mirror}https://github.com/${clean_repo}" >/dev/null; then
-             if env -u http_proxy -u https_proxy git clone --depth 1 $branch_arg "${mirror}https://github.com/${clean_repo}" "$target_dir"; then return 0; fi
-        fi
-    done
     
+    echo -e "${RED}[失败]${NC} 镜像下载失败，尝试官方直连..."
     if env -u http_proxy -u https_proxy git clone --depth 1 $branch_arg "https://github.com/${clean_repo}" "$target_dir"; then return 0; fi
 
     return 1
 }
 
-fix_git_remote() {
-    local target_dir=$1; local repo_path=$2
-    [ ! -d "$target_dir/.git" ] && return 1
-    cd "$target_dir" || return 1
-    
-    auto_load_proxy_env
-    local proxy_active=$?
-    
-    if [ $proxy_active -eq 0 ]; then
-        echo -e "\033[1;36m[Mode]\033[0m 本地代理"
-        git remote set-url origin "https://github.com/$repo_path"
-        git config http.proxy "$http_proxy"
-        git config https.proxy "$https_proxy"
-    else
-        echo -e "\033[1;36m[Mode]\033[0m 镜像加速"
-        git config --unset http.proxy
-        git config --unset https.proxy
-        
-        local best_mirror=$(find_fastest_mirror "$repo_path")
-        
-        if [ -n "$best_mirror" ]; then 
-            echo -e "\033[0;32m✔ 选中: $best_mirror\033[0m"
-            git remote set-url origin "${best_mirror}https://github.com/${repo_path}"
-        else
-            git remote set-url origin "https://github.com/$repo_path"
-        fi
-    fi
-}
-
 download_file_smart() {
     local url=$1; local filename=$2
-    
+    local try_mirror=${3:-true}
+
     auto_load_proxy_env
     local proxy_active=$?
 
@@ -215,32 +229,17 @@ download_file_smart() {
         if curl -L -o "$filename" --proxy "$http_proxy" --retry 2 --max-time 60 "$url"; then return 0; fi
     fi
     
-    if [[ "$url" == *"github.com"* ]]; then
-        local path=${url#*github.com/}
-        local best_mirror=$(find_fastest_mirror "$path") # 注意：find_fastest_mirror 主要是测 clone，这里简单复用
-    fi
-
-    local success=false
-    for mirror in "${GLOBAL_MIRRORS[@]}"; do
-        if [[ "$url" == *"github.com"* ]]; then
-            if curl -L -o "$filename" --max-time 15 "${mirror}${url}"; then return 0; fi
+    if [ "$try_mirror" == "true" ] && [[ "$url" == *"github.com"* ]]; then
+        select_mirror_interactive
+        
+        if [ -n "$SELECTED_MIRROR" ]; then
+             local final_url="${SELECTED_MIRROR}${url}"
+             if [[ "$SELECTED_MIRROR" == *"github.com"* ]]; then final_url="$url"; fi
+             
+             if curl -L -o "$filename" --max-time 60 "$final_url"; then return 0; fi
         fi
-    done
-    
-    if curl -L -o "$filename" "$url"; then return 0; else return 1; fi
-}
-
-download_file_proxy_only() {
-    local url=$1; local filename=$2
-    auto_load_proxy_env
-    local proxy_active=$?
-
-    if [ $proxy_active -eq 0 ]; then
-        info "使用代理下载: $http_proxy"
-        if curl -L -o "$filename" --proxy "$http_proxy" "$url"; then return 0; fi
-        warn "代理下载失败，切换直连..."
     fi
-    info "正在直连下载..."
+    
     if curl -L -o "$filename" "$url"; then return 0; else return 1; fi
 }
 

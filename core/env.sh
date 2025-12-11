@@ -19,6 +19,20 @@ export BLUE='\033[1;34m'
 export CYAN='\033[1;36m'
 export NC='\033[0m'
 
+# 1. 常用代理端口池 (协议:端口)
+export GLOBAL_PROXY_PORTS=(
+    "7890:socks5h"
+    "7891:socks5h"
+    "10809:http"
+    "10808:socks5h"
+    "20171:http"
+    "20170:socks5h"
+    "9090:http"
+    "8080:http"
+    "1080:socks5h"
+)
+
+# 2. GitHub 镜像源池
 export GLOBAL_MIRRORS=(
     "https://ghproxy.net/"
     "https://mirror.ghproxy.com/"

@@ -1,5 +1,4 @@
 #!/bin/bash
-# TAV-X Core: Service Launcher (V3.3 Refactored - Dual Tunnel Mode)
 
 source "$TAVX_DIR/core/env.sh"
 source "$TAVX_DIR/core/ui.sh"
@@ -44,7 +43,7 @@ is_port_open() {
 }
 
 ensure_critical_configs() {
-    ui_print info "正在配置..."
+    ui_print info "正在校验配置..."
     local CONF="$INSTALL_DIR/config.yaml"
 
     config_set listen true
@@ -78,17 +77,23 @@ stop_services() {
     pkill -f "cloudflared"
     termux-wake-unlock 2>/dev/null
     
-    local count=0
-    while is_port_open "127.0.0.1" "$PORT"; do
-        if [ "$count" -eq 0 ]; then
+    local wait_count=0
+    while pgrep -f "node server.js" > /dev/null; do
+        if [ "$wait_count" -eq 0 ]; then
             ui_print info "正在停止旧进程..."
         fi
         sleep 0.5
-        ((count++))
-        if [ "$count" -ge 6 ]; then fuser -k -9 "$PORT/tcp" >/dev/null 2>&1; fi
-        if [ "$count" -ge 10 ]; then ui_print warn "强制终止旧进程..."; break; fi
+        ((wait_count++))
+        
+        if [ "$wait_count" -ge 10 ]; then 
+            ui_print warn "进程响应超时，执行强制清理..."
+            pkill -9 -f "node server.js"
+        fi
+        
+        if [ "$wait_count" -ge 20 ]; then break; fi
     done
-    sleep 0.5
+    
+    sleep 1
 }
 
 start_node_server() {
@@ -96,7 +101,9 @@ start_node_server() {
     cd "$INSTALL_DIR" || return 1
     termux-wake-lock
     rm -f "$SERVER_LOG"
+    
     ensure_critical_configs
+    
     ui_spinner "正在启动酒馆服务..." "nohup node $MEM_ARGS server.js > '$SERVER_LOG' 2>&1 & sleep 2"
 }
 
@@ -181,7 +188,8 @@ start_temp_tunnel() {
 start_menu() {
     check_install_integrity || return
     
-    ensure_critical_configs
+    # 优化：删除了这里的 ensure_critical_configs 调用
+    # 现在进入菜单是“瞬开”的，不再会有卡顿。
     
     local PORT=$(get_active_port)
 

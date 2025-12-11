@@ -1,12 +1,10 @@
 /**
- * TAV-X Configuration Manager (The Scalpel) v2.1
- * Update: Fix root key collision (Root Zero Tolerance)
+ * TAV-X Configuration Manager (The Scalpel) v2.3
+ * Update: Idempotency Check (Skip write if value unchanged)
  */
 
 const fs = require('fs');
 const path = require('path');
-
-// 适配环境变量
 const INSTALL_DIR = process.env.INSTALL_DIR || path.join(process.env.HOME, 'SillyTavern');
 const CONFIG_PATH = path.join(INSTALL_DIR, 'config.yaml');
 
@@ -25,7 +23,14 @@ if (!action || !keyPath) {
     process.exit(1);
 }
 
-let content = fs.readFileSync(CONFIG_PATH, 'utf8');
+let content;
+try {
+    content = fs.readFileSync(CONFIG_PATH, 'utf8');
+} catch (err) {
+    console.error(`❌ Read error: ${err.message}`);
+    process.exit(1);
+}
+
 const lines = content.split('\n');
 
 function getIndent(line) {
@@ -54,42 +59,33 @@ function parseLineValue(line) {
     return { val: raw.trim(), comment: '' };
 }
 
-// --- GET 模式 ---
 if (action === 'get') {
     const keys = keyPath.split('.');
     let currentDepth = 0;
-    
     for (const line of lines) {
         if (line.trim().startsWith('#') || line.trim() === '') continue;
-
         const indent = getIndent(line);
         const key = getKey(line);
-        const targetKey = keys[currentDepth];
-
-        if (key === targetKey) {
+        if (key === keys[currentDepth]) {
             if (currentDepth === 0 && indent > 0) continue;
-
             if (currentDepth === keys.length - 1) {
                 const { val } = parseLineValue(line);
                 const cleanVal = val.replace(/^['"]|['"]$/g, '');
                 console.log(cleanVal);
                 process.exit(0);
-            } else {
-                currentDepth++;
-            }
+            } else currentDepth++;
         }
     }
     process.exit(1);
 } 
 
-// --- SET 模式 ---
 else if (action === 'set') {
     if (newValue === undefined) process.exit(1);
     
     const keys = keyPath.split('.');
     let currentDepth = 0;
     let pathFound = false;
-
+    let needWrite = true;
     const newLines = lines.map(line => {
         if (pathFound && currentDepth >= keys.length) return line;
         if (line.trim().startsWith('#') || line.trim() === '') return line;
@@ -101,7 +97,13 @@ else if (action === 'set') {
 
             if (currentDepth === keys.length - 1) {
                 pathFound = true;
-                
+                const { val: currentValRaw } = parseLineValue(line);
+                const currentValClean = currentValRaw.replace(/^['"]|['"]$/g, '');
+                const newValClean = newValue.replace(/^['"]|['"]$/g, '');
+                if (currentValClean == newValClean) {
+                    needWrite = false;
+                    return line;
+                }
                 const indentStr = line.match(/^(\s*)/)[1];
                 const { comment } = parseLineValue(line);
                 
@@ -121,8 +123,21 @@ else if (action === 'set') {
     });
 
     if (pathFound) {
-        fs.writeFileSync(CONFIG_PATH, newLines.join('\n'), 'utf8');
-        process.exit(0);
+        if (!needWrite) {
+            process.exit(0);
+        }
+
+        const tempPath = CONFIG_PATH + '.tmp';
+        
+        try {
+            fs.writeFileSync(tempPath, newLines.join('\n'), 'utf8');
+            fs.renameSync(tempPath, CONFIG_PATH);
+            process.exit(0);
+        } catch (err) {
+            console.error(`❌ [Config] Write Failed: ${err.message}`);
+            try { fs.unlinkSync(tempPath); } catch (e) {} 
+            process.exit(1);
+        }
     } else {
         console.error(`❌ [Config] Key not found: ${keyPath}`);
         process.exit(1);
