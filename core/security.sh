@@ -10,28 +10,32 @@ MEMORY_CONFIG="$TAVX_DIR/config/memory.conf"
 
 configure_server_settings() {
     [ ! -f "$INSTALL_DIR/config.yaml" ] && { ui_print error "配置文件不存在，请先安装酒馆。"; ui_pause; return; }
+
     local CONFIG_MAP=(
         "SEPARATOR|--- 基础连接设置 ---"
-        "listen|允许外部网络连接"
-        "whitelistMode|白名单模式"
-        "basicAuthMode|强制密码登录"
+        "listen|允许外部网络连接 (0.0.0.0)"
+        "whitelistMode|白名单模式 (限制IP访问)"
+        "basicAuthMode|强制密码登录 (BasicAuth)"
         "enableUserAccounts|多用户账号系统"
-        "enableDiscreetLogin|谨慎登录模式"
+        "enableDiscreetLogin|谨慎登录模式 (隐藏用户名)"
         
         "SEPARATOR|--- 网络与安全进阶 ---"
-        "disableCsrfProtection|禁用 CSRF 保护"
-        "enableCorsProxy|启用 CORS 代理"
+        "disableCsrfProtection|禁用 CSRF 保护 (解决跨域报错)"
+        "enableCorsProxy|启用 CORS 代理 (允许外部前端)"
         "protocol.ipv6|启用 IPv6 协议支持"
         "ssl.enabled|启用 SSL/HTTPS"
         "hostWhitelist.enabled|Host 头白名单检查"
 
         "SEPARATOR|--- 性能与更新优化 ---"
-        "performance.lazyLoadCharacters|懒加载角色卡"
-        "performance.useDiskCache|启用硬盘缓存"
+        "performance.lazyLoadCharacters|懒加载角色卡 (极大提升启动速度)"
+        "performance.useDiskCache|启用硬盘缓存 (DiskCache)"
         "extensions.enabled|加载扩展插件"
-        "extensions.autoUpdate|自动更新扩展"
+        "extensions.autoUpdate|自动更新扩展 (建议关闭)"
         "enableServerPlugins|加载服务端插件"
         "enableServerPluginsAutoUpdate|自动更新服务端插件"
+
+        "SEPARATOR|--- 危险区域 ---"
+        "RESET_CONFIG|⚠️ 恢复默认配置 (删除当前文件)"
     )
 
     while true; do
@@ -45,15 +49,18 @@ configure_server_settings() {
         for item in "${CONFIG_MAP[@]}"; do
             local key="${item%%|*}"
             local label="${item#*|}"
-
             if [ "$key" == "SEPARATOR" ]; then
                 MENU_OPTS+=("📂 $label")
                 KEY_LIST+=("SEPARATOR")
                 continue
             fi
+            if [ "$key" == "RESET_CONFIG" ]; then
+                MENU_OPTS+=("💥 $label")
+                KEY_LIST+=("RESET_CONFIG")
+                continue
+            fi
             
             local val=$(config_get "$key")
-            
             local icon="🔴"
             local stat="[关闭]"
             
@@ -97,7 +104,19 @@ configure_server_settings() {
 
         if [ -n "$CHOICE_IDX" ] && [ "$CHOICE_IDX" -ge 0 ] && [ "$CHOICE_IDX" -lt "${#KEY_LIST[@]}" ]; then
             local target_key="${KEY_LIST[$CHOICE_IDX]}"
-            if [ "$target_key" == "SEPARATOR" ]; then
+            if [ "$target_key" == "SEPARATOR" ]; then continue; fi
+            if [ "$target_key" == "RESET_CONFIG" ]; then
+                echo ""
+                echo -e "${RED}警告：此操作将彻底删除当前的 config.yaml 文件！${NC}"
+                echo -e "所有自定义设置都将丢失，酒馆下次启动时会生成全新的默认配置。"
+                echo ""
+                if ui_confirm "确定要执行恢复出厂设置吗？"; then
+                    rm -f "$INSTALL_DIR/config.yaml"
+                    ui_print success "配置文件已删除。"
+                    echo -e "${YELLOW}请前往 [🚀 启动服务] -> [本地启动] 以生成新配置。${NC}"
+                    ui_pause
+                    return
+                fi
                 continue
             fi
 

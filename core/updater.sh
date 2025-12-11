@@ -40,7 +40,6 @@ update_sillytavern() {
     
     if ui_spinner "正在同步最新代码..." "$UPDATE_CMD"; then
         ui_print success "代码同步完成。"
-        
         echo ""
         if npm_install_smart "$INSTALL_DIR"; then
             ui_print success "依赖更新完成！"
@@ -97,12 +96,10 @@ rollback_sillytavern() {
                     else ui_print error "恢复失败"; fi
                 fi
                 ui_pause ;;
-                
             *"强制刷新"*)
                 rm -f "$TAG_CACHE"
                 ui_print info "缓存已清除。"
                 sleep 0.5 ;;
-
             *"回退至历史版本"*)
                 prepare_network_strategy "SillyTavern/SillyTavern"
                 if [ ! -f "$TAG_CACHE" ]; then
@@ -112,16 +109,12 @@ rollback_sillytavern() {
                     fi
                     git tag --sort=-v:refname | head -n 10 > "$TAG_CACHE"
                 fi
-                
                 mapfile -t TAG_LIST < "$TAG_CACHE"
                 if [ ${#TAG_LIST[@]} -eq 0 ]; then ui_print warn "列表为空"; rm -f "$TAG_CACHE"; ui_pause; continue; fi
-                
                 TAG_LIST+=("🔙 取消")
                 TAG_CHOICE=$(ui_menu "选择版本" "${TAG_LIST[@]}")
-                
                 if [[ "$TAG_CHOICE" != *"取消"* ]]; then
                     echo -e "${RED}警告：即将重置核心文件以解决冲突。${NC}"
-                    echo -e "您的聊天记录和配置不会丢失，但手动修改的代码将被还原。"
                     if ui_confirm "确认回退到 $TAG_CHOICE ？"; then
                         local ROLLBACK_CMD="source \"$TAVX_DIR/core/utils.sh\"; fix_git_remote \"$INSTALL_DIR\" \"SillyTavern/SillyTavern\"; git fetch origin tag \"$TAG_CHOICE\" --depth=1; git reset --hard; git checkout \"$TAG_CHOICE\""
                         if ui_spinner "时光倒流..." "$ROLLBACK_CMD"; then
@@ -131,7 +124,6 @@ rollback_sillytavern() {
                     fi
                 fi
                 ui_pause ;;
-                
             *"切换通道"*)
                 local TARGET=""; [[ "$CHOICE" == *"Release"* ]] && TARGET="release"; [[ "$CHOICE" == *"Staging"* ]] && TARGET="staging"
                 prepare_network_strategy "SillyTavern/SillyTavern"
@@ -141,7 +133,6 @@ rollback_sillytavern() {
                     ui_print success "切换成功！"
                 else ui_print error "切换失败"; fi
                 ui_pause ;;
-                
             *"返回"*) return ;;
         esac
     done

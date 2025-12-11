@@ -3,7 +3,6 @@
 
 if [ -n "$TAVX_DIR" ]; then
     [ -f "$TAVX_DIR/core/env.sh" ] && source "$TAVX_DIR/core/env.sh"
-    # 修复：必须引用 UI 模块，否则在 Spinner 子 Shell 中会报错
     [ -f "$TAVX_DIR/core/ui.sh" ] && source "$TAVX_DIR/core/ui.sh"
 fi
 
@@ -81,14 +80,11 @@ auto_load_proxy_env() {
     fi
 }
 
-# --- 新增：网络策略预检 ---
-# 在执行耗时操作前调用此函数，确保镜像已选择
 prepare_network_strategy() {
     auto_load_proxy_env
     local proxy_active=$?
     
-    # 如果没有代理，必须先选好镜像，防止在 Spinner 内部弹出菜单导致无法输入
-    if [ $proxy_active -ne 0 ]; then
+    if [ $proxy_active -ne 0 ] && [ -z "$SELECTED_MIRROR" ]; then
         select_mirror_interactive
     fi
 }
@@ -102,7 +98,6 @@ select_mirror_interactive() {
     
     local tmp_race_file="$TAVX_DIR/.mirror_race"
     rm -f "$tmp_race_file"
-
     for mirror in "${GLOBAL_MIRRORS[@]}"; do
         (
             local start=$(date +%s%N)
@@ -130,6 +125,7 @@ select_mirror_interactive() {
         local mark="🟢"
         if [ "$dur" -gt 800 ]; then mark="🟡"; fi
         if [ "$dur" -gt 1500 ]; then mark="🔴"; fi
+        
         local domain=$(echo "$url" | awk -F/ '{print $3}')
         OPTIONS+=("$mark ${dur}ms | $domain")
         RAW_URLS+=("$url")
@@ -139,6 +135,7 @@ select_mirror_interactive() {
     RAW_URLS+=("https://github.com/")
 
     local CHOICE_TEXT=$(ui_menu "请根据延迟选择最稳定的源" "${OPTIONS[@]}")
+    
     local CHOICE_IDX=-1
     for i in "${!OPTIONS[@]}"; do
         if [[ "${OPTIONS[$i]}" == "$CHOICE_TEXT" ]]; then CHOICE_IDX=$i; break; fi
@@ -146,7 +143,6 @@ select_mirror_interactive() {
 
     if [ "$CHOICE_IDX" -ge 0 ]; then
         SELECTED_MIRROR="${RAW_URLS[$CHOICE_IDX]}"
-        # 关键：导出变量，使其在 Spinner 子 Shell 中可见
         export SELECTED_MIRROR
         ui_print success "已选定: $SELECTED_MIRROR"
         return 0
@@ -190,19 +186,13 @@ git_clone_smart() {
     clean_repo=${clean_repo#"git@github.com:"}
 
     if [ $proxy_active -eq 0 ]; then
-        # echo -e "${CYAN}[网络]${NC} 探测到代理，尝试直连..."
         if git clone --depth 1 $branch_arg "https://github.com/${clean_repo}" "$target_dir"; then return 0; fi
-        # echo -e "${YELLOW}[重试]${NC} 代理连接失败..."
     fi
 
-    # 如果没有 SELECTED_MIRROR，说明没在 Spinner 外调用 prepare_network_strategy
-    # 此时如果是在 Spinner 内部，我们不能调用 select_mirror_interactive (会卡死)
-    # 所以这里做一个静默降级处理：直接尝试官方源或报错，或者依赖外部已设置的变量
     if [ -n "$SELECTED_MIRROR" ]; then
         local final_url="${SELECTED_MIRROR}https://github.com/${clean_repo}"
         if [[ "$SELECTED_MIRROR" == *"github.com"* ]]; then final_url="https://github.com/${clean_repo}"; fi
         
-        # echo -e "🚀 正在通过 [${SELECTED_MIRROR}] 下载..."
         if env -u http_proxy -u https_proxy git clone --depth 1 $branch_arg "$final_url" "$target_dir"; then
             return 0
         fi
@@ -216,7 +206,6 @@ git_clone_smart() {
 download_file_smart() {
     local url=$1; local filename=$2
     local try_mirror=${3:-true}
-
     auto_load_proxy_env
     local proxy_active=$?
 
@@ -225,7 +214,6 @@ download_file_smart() {
     fi
     
     if [ "$try_mirror" == "true" ] && [[ "$url" == *"github.com"* ]]; then
-        # 如果已选镜像，直接用
         if [ -n "$SELECTED_MIRROR" ]; then
              local final_url="${SELECTED_MIRROR}${url}"
              if [[ "$SELECTED_MIRROR" == *"github.com"* ]]; then final_url="$url"; fi
@@ -248,7 +236,6 @@ npm_install_smart() {
         if ui_spinner "NPM 安装 (代理加速)..." "env http_proxy='$http_proxy' https_proxy='$https_proxy' $NPM_BASE"; then return 0; fi
     fi
     
-    # NPM 源选择也应该提到 Spinner 外面，这里简化处理，默认使用官方或淘宝
     npm config set registry "https://registry.npmmirror.com"
     if ui_spinner "NPM 安装中 (淘宝源)..." "$NPM_BASE"; then
         npm config delete registry; return 0
@@ -258,15 +245,31 @@ npm_install_smart() {
 }
 
 JS_TOOL="$TAVX_DIR/scripts/config_mgr.js"
+
 config_get() {
     local key=$1
     if [ ! -f "$JS_TOOL" ]; then return 1; fi
     node "$JS_TOOL" get "$key" 2>/dev/null
 }
+
 config_set() {
     local key=$1; local value=$2
     if [ ! -f "$JS_TOOL" ]; then ui_print error "找不到配置工具"; return 1; fi
     local output; output=$(node "$JS_TOOL" set "$key" "$value" 2>&1)
     local status=$?
     if [ $status -eq 0 ]; then return 0; else ui_print error "设置失败 [$key]: $output"; sleep 1; return 1; fi
+}
+
+config_set_batch() {
+    local json_str=$1
+    if [ ! -f "$JS_TOOL" ]; then ui_print error "找不到配置工具"; return 1; fi
+    
+    local output; output=$(node "$JS_TOOL" set-batch "$json_str" 2>&1)
+    local status=$?
+
+    if [ $status -eq 0 ]; then
+        return 0
+    else
+        ui_print error "批量配置失败: $output"; sleep 1; return 1
+    fi
 }

@@ -41,19 +41,25 @@ get_smart_proxy_url() {
 apply_recommended_settings() {
     ui_print info "正在应用推荐配置..."
     
-    config_set listen true
-    config_set whitelistMode false
-    config_set basicAuthMode false
-    config_set ssl.enabled false
-    config_set hostWhitelist.enabled false
-    config_set enableUserAccounts true
-    config_set enableDiscreetLogin true
-    config_set extensions.enabled true
-    config_set enableServerPlugins true 
-    config_set performance.useDiskCache false
-    config_set performance.lazyLoadCharacters true
+    local BATCH_JSON='{
+        "listen": true,
+        "whitelistMode": false,
+        "basicAuthMode": false,
+        "ssl.enabled": false,
+        "hostWhitelist.enabled": false,
+        "enableUserAccounts": true,
+        "enableDiscreetLogin": true,
+        "extensions.enabled": true,
+        "enableServerPlugins": true,
+        "performance.useDiskCache": false,
+        "performance.lazyLoadCharacters": true
+    }'
     
-    ui_print success "推荐配置已应用！"
+    if config_set_batch "$BATCH_JSON"; then
+        ui_print success "推荐配置已应用！"
+    else
+        ui_print error "配置应用失败，请检查日志。"
+    fi
     sleep 1
 }
 
@@ -70,27 +76,21 @@ check_install_integrity() {
 
 stop_services() {
     local PORT=$(get_active_port)
-    
     pkill -f "node server.js"
     pkill -f "cloudflared"
     termux-wake-unlock 2>/dev/null
     
     local wait_count=0
     while pgrep -f "node server.js" > /dev/null; do
-        if [ "$wait_count" -eq 0 ]; then
-            ui_print info "正在停止旧进程..."
-        fi
+        if [ "$wait_count" -eq 0 ]; then ui_print info "正在停止旧进程..."; fi
         sleep 0.5
         ((wait_count++))
-        
         if [ "$wait_count" -ge 10 ]; then 
             ui_print warn "进程响应超时，执行强制清理..."
             pkill -9 -f "node server.js"
         fi
-        
         if [ "$wait_count" -ge 20 ]; then break; fi
     done
-    
     sleep 1
 }
 
@@ -99,7 +99,7 @@ start_node_server() {
     cd "$INSTALL_DIR" || return 1
     termux-wake-lock
     rm -f "$SERVER_LOG"
-    ui_spinner "正在启动酒馆服务..." "nohup node $MEM_ARGS server.js > '$SERVER_LOG' 2>&1 & sleep 2"
+    ui_spinner "正在启动酒馆服务..." "setsid nohup node $MEM_ARGS server.js > '$SERVER_LOG' 2>&1 & sleep 2"
 }
 
 detect_protocol_logic() {
@@ -125,17 +125,14 @@ wait_for_link_logic() {
 }
 
 start_fixed_tunnel() {
-    local PORT=$1
-    local PROXY_URL=$2
-    local CF_TOKEN=$3
-    
+    local PORT=$1; local PROXY_URL=$2; local CF_TOKEN=$3
     local CF_CMD="tunnel run --token $CF_TOKEN"
     
     if [ -n "$PROXY_URL" ]; then
         ui_print info "代理已注入: $PROXY_URL"
-        env TUNNEL_HTTP_PROXY="$PROXY_URL" cloudflared $CF_CMD --protocol http2 > "$CF_LOG" 2>&1 &
+        setsid env TUNNEL_HTTP_PROXY="$PROXY_URL" nohup cloudflared $CF_CMD --protocol http2 > "$CF_LOG" 2>&1 &
     else
-        cloudflared $CF_CMD > "$CF_LOG" 2>&1 &
+        setsid nohup cloudflared $CF_CMD > "$CF_LOG" 2>&1 &
     fi
     
     ui_print success "服务已启动！"
@@ -145,12 +142,10 @@ start_fixed_tunnel() {
 }
 
 start_temp_tunnel() {
-    local PORT=$1
-    local PROXY_URL=$2
-    
+    local PORT=$1; local PROXY_URL=$2
     local PROTOCOL="http2"
     if [ -n "$PROXY_URL" ]; then
-        ui_print info "检测到代理，强制使用 HTTP2 协议以透传流量..."
+        ui_print info "检测到代理，强制使用 HTTP2..."
     else
         PROTOCOL=$(detect_protocol_logic "")
     fi
@@ -159,9 +154,9 @@ start_temp_tunnel() {
     
     if [ -n "$PROXY_URL" ]; then
         ui_print info "隧道已接入代理网关: $PROXY_URL"
-        env TUNNEL_HTTP_PROXY="$PROXY_URL" cloudflared "${CF_ARGS[@]}" > "$CF_LOG" 2>&1 &
+        setsid env TUNNEL_HTTP_PROXY="$PROXY_URL" nohup cloudflared "${CF_ARGS[@]}" > "$CF_LOG" 2>&1 &
     else
-        cloudflared "${CF_ARGS[@]}" > "$CF_LOG" 2>&1 &
+        setsid nohup cloudflared "${CF_ARGS[@]}" > "$CF_LOG" 2>&1 &
     fi
     
     rm -f "$TAVX_DIR/.temp_link"
@@ -219,14 +214,9 @@ start_menu() {
                 stop_services
                 start_node_server
                 rm -f "$CF_LOG"
-                
-                local PORT=$(get_active_port)
-                local PROXY_URL=$(get_smart_proxy_url)
-                
+                local PORT=$(get_active_port); local PROXY_URL=$(get_smart_proxy_url)
                 local TOKEN_FILE="$TAVX_DIR/config/cf_token"
-                local CF_TOKEN=""
-                [ -f "$TOKEN_FILE" ] && [ -s "$TOKEN_FILE" ] && CF_TOKEN=$(cat "$TOKEN_FILE")
-
+                local CF_TOKEN=""; [ -f "$TOKEN_FILE" ] && [ -s "$TOKEN_FILE" ] && CF_TOKEN=$(cat "$TOKEN_FILE")
                 if [ -n "$CF_TOKEN" ]; then
                     ui_print info "检测到 Token，启动固定隧道..."
                     start_fixed_tunnel "$PORT" "$PROXY_URL" "$CF_TOKEN"

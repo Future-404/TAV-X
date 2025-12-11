@@ -111,20 +111,14 @@ while true; do
                                 kill -9 \$HB_PID >/dev/null 2>&1
                                 rm -f '$TAVX_DIR/.audio_heartbeat.pid'
                             fi
-                            # 补刀：清理残留的播放器子进程
                             pkill -f 'mpv --no-terminal'
-
-                            # 2. 优雅关闭 ADB 服务
                             adb kill-server >/dev/null 2>&1
-                            pkill -f 'adb' # 强制补刀
-
-                            # 3. 停止其他业务进程
+                            pkill -f 'adb'
                             pkill -f 'node server.js'
                             pkill -f 'cloudflared'
                             pkill -f 'clewd'
-                            pkill -f 'run.py' # Gemini
+                            pkill -f 'run.py'
                             
-                            # 4. 释放资源与锁
                             termux-wake-unlock 2>/dev/null
                             rm -f '$TAVX_DIR/.temp_link'
                         "

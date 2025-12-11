@@ -189,7 +189,6 @@ authenticate_google() {
     pkill -f "$VENV_PYTHON run.py"
 
     echo -e "${GREEN}>>> 正在后台启动认证进程...${NC}"
-    
     nohup env -u GEMINI_CREDENTIALS \
         GEMINI_AUTH_PASSWORD="init" \
         PYTHONUNBUFFERED=1 \
@@ -257,9 +256,9 @@ start_tunnel() {
         ui_print info "检测到固定 Token，正在启动固定隧道..."
         
         if [ -n "$proxy" ]; then
-            env TUNNEL_HTTP_PROXY="$proxy" nohup cloudflared tunnel run --token "$token" > "$TUNNEL_LOG" 2>&1 &
+            setsid env TUNNEL_HTTP_PROXY="$proxy" nohup cloudflared tunnel run --token "$token" > "$TUNNEL_LOG" 2>&1 &
         else
-            nohup cloudflared tunnel run --token "$token" > "$TUNNEL_LOG" 2>&1 &
+            setsid nohup cloudflared tunnel run --token "$token" > "$TUNNEL_LOG" 2>&1 &
         fi
         
         sleep 3
@@ -275,9 +274,9 @@ start_tunnel() {
         local cf_cmd="tunnel --url http://localhost:$port --no-autoupdate"
         
         if [ -n "$proxy" ]; then
-            env TUNNEL_HTTP_PROXY="$proxy" nohup cloudflared $cf_cmd --protocol http2 > "$TUNNEL_LOG" 2>&1 &
+            setsid env TUNNEL_HTTP_PROXY="$proxy" nohup cloudflared $cf_cmd --protocol http2 > "$TUNNEL_LOG" 2>&1 &
         else
-            nohup cloudflared $cf_cmd > "$TUNNEL_LOG" 2>&1 &
+            setsid nohup cloudflared $cf_cmd > "$TUNNEL_LOG" 2>&1 &
         fi
         
         echo -ne "正在获取链接..."
@@ -353,8 +352,7 @@ start_service() {
     
     ui_header "启动服务"
     cd "$GEMINI_DIR" || return
-    
-    local START_CMD="$proxy_env GEMINI_AUTH_PASSWORD='$pass' nohup $VENV_PYTHON run.py > '$LOG_FILE' 2>&1 &"
+    local START_CMD="$proxy_env GEMINI_AUTH_PASSWORD='$pass' setsid nohup $VENV_PYTHON run.py > '$LOG_FILE' 2>&1 &"
     
     if ui_spinner "正在启动服务..." "eval \"$START_CMD\" sleep 3"; then
         if pgrep -f "run.py" >/dev/null; then
@@ -437,7 +435,7 @@ configure_params() {
 
 gemini_menu() {
     while true; do
-        ui_header "Gemini 3.0 智能代理"
+        ui_header "Gemini 2.0 智能代理"
         local s="${RED}● 已停止${NC}"; pgrep -f "$VENV_PYTHON run.py" >/dev/null && s="${GREEN}● 运行中${NC}"
         local cf="${RED}关${NC}"; pgrep -f "cloudflared" >/dev/null && cf="${GREEN}开${NC}"
         local a="${YELLOW}未认证${NC}"; [ -f "$CREDS_FILE" ] && a="${GREEN}已认证${NC}"

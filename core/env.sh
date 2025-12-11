@@ -11,7 +11,7 @@ mkdir -p "$CONFIG_DIR"
 
 export NETWORK_CONFIG="$CONFIG_DIR/network.conf"
 
-export CURRENT_VERSION="v2.4.8"
+export CURRENT_VERSION="v2.4.9"
 export RED='\033[0;31m'
 export GREEN='\033[0;32m'
 export YELLOW='\033[1;33m'
@@ -19,7 +19,7 @@ export BLUE='\033[1;34m'
 export CYAN='\033[1;36m'
 export NC='\033[0m'
 
-# 1. 常用代理端口池 (协议:端口)
+# 1. 常用代理端口池
 export GLOBAL_PROXY_PORTS=(
     "7890:socks5h"
     "7891:socks5h"

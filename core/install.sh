@@ -32,8 +32,8 @@ install_sillytavern() {
     if npm_install_smart "$INSTALL_DIR"; then
         echo ""
         ui_print success "依赖安装完成！"
-        
         chmod +x "$INSTALL_DIR/start.sh" 2>/dev/null
+        
         if ui_confirm "是否应用推荐配置 (自动优化)?"; then
              source "$TAVX_DIR/core/launcher.sh"
              apply_recommended_settings

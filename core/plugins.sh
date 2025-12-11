@@ -20,7 +20,7 @@ install_single_plugin() {
     if is_installed "$dir"; then
         if ! ui_confirm "插件已存在，是否重新安装？"; then return; fi
     fi
-    
+
     prepare_network_strategy "$repo"
 
     local TASKS=""
@@ -82,29 +82,13 @@ submit_plugin() {
     echo -e "${YELLOW}欢迎贡献插件！${NC}"
     echo -e "${CYAN}提示: 必填项留空或输入 '0' 可取消操作。${NC}"
     echo ""
-    
     local name=$(ui_input "1. 插件名称 (必填)" "" "false")
-    if [[ -z "$name" || "$name" == "0" ]]; then
-        ui_print info "操作已取消。"
-        ui_pause; return
-    fi
-    
+    if [[ -z "$name" || "$name" == "0" ]]; then ui_print info "已取消"; ui_pause; return; fi
     local url=$(ui_input "2. GitHub 地址 (必填)" "https://github.com/" "false")
-    if [[ -z "$url" || "$url" == "0" || "$url" == "https://github.com/" ]]; then
-        ui_print info "操作已取消。"
-        ui_pause; return
-    fi
-    
-    if [[ "$url" != http* ]]; then
-        ui_print error "地址格式错误 (必须包含 http/https)"
-        ui_pause; return
-    fi
-    
+    if [[ -z "$url" || "$url" == "0" || "$url" == "https://github.com/" ]]; then ui_print info "已取消"; ui_pause; return; fi
+    if [[ "$url" != http* ]]; then ui_print error "地址格式错误"; ui_pause; return; fi
     local dir=$(ui_input "3. 英文目录名 (选填，0取消)" "" "false")
-    if [[ "$dir" == "0" ]]; then
-        ui_print info "操作已取消。"
-        ui_pause; return
-    fi
+    if [[ "$dir" == "0" ]]; then ui_print info "已取消"; ui_pause; return; fi
     
     echo -e "------------------------"
     echo -e "名称: $name"
@@ -112,10 +96,7 @@ submit_plugin() {
     echo -e "目录: ${dir:-自动推断}"
     echo -e "------------------------"
     
-    if ! ui_confirm "确认提交吗？"; then
-        ui_print info "已取消。"
-        ui_pause; return
-    fi
+    if ! ui_confirm "确认提交吗？"; then ui_print info "已取消"; ui_pause; return; fi
     
     local JSON=$(printf '{"name":"%s", "url":"%s", "dirName":"%s"}' "$name" "$url" "$dir")
     
