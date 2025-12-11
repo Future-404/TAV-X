@@ -24,7 +24,7 @@ check_storage_permission() {
 }
 
 perform_backup() {
-    ui_header "数据备份 (优化版)"
+    ui_header "数据备份"
     if [ ! -d "$INSTALL_DIR" ]; then ui_print error "请先安装酒馆！"; ui_pause; return; fi
     check_storage_permission || { ui_pause; return; }
 
@@ -57,7 +57,7 @@ perform_backup() {
 }
 
 perform_restore() {
-    ui_header "数据恢复 (智能覆盖)"
+    ui_header "数据恢复"
     if [ ! -d "$INSTALL_DIR" ]; then ui_print error "请先安装酒馆！"; ui_pause; return; fi
     check_storage_permission || { ui_pause; return; }
     
@@ -112,7 +112,7 @@ perform_restore() {
 
             if [ -f "$TEMP_DIR/secrets.json" ]; then 
                 cp "$TEMP_DIR/secrets.json" .
-                ui_print success "API 密钥 (Root) 已恢复"
+                ui_print success "API 密钥 已恢复"
             fi
             
             if [ -d "$TEMP_DIR/plugins" ]; then
