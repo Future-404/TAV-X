@@ -38,7 +38,6 @@ export GLOBAL_MIRRORS=(
     "https://mirror.ghproxy.com/"
     "https://ghproxy.cc/"
     "https://gh.likk.cc/"
-    "https://github.akams.cn/"
     "https://hub.gitmirror.com/"
     "https://hk.gh-proxy.com/"
     "https://ui.ghproxy.cc/"

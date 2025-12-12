@@ -1,13 +1,11 @@
 #!/bin/bash
-# TAV-X Universal Installer (V3.6 Active Probe & Port Sniffing)
+# TAV-X Universal Installer
 
-# --- 全局配置 ---
 DEFAULT_POOL=(
     "https://ghproxy.net/"
     "https://mirror.ghproxy.com/"
     "https://ghproxy.cc/"
     "https://gh.likk.cc/"
-    "https://github.akams.cn/"
     "https://hub.gitmirror.com/"
     "https://hk.gh-proxy.com/"
     "https://ui.ghproxy.cc/"
@@ -50,10 +48,6 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-##########################################################################
-#                        ★ 开发者模式自动识别 ★
-##########################################################################
-
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
 if [ -f "$SCRIPT_DIR/core/main.sh" ]; then
@@ -67,10 +61,6 @@ if [ -f "$SCRIPT_DIR/core/main.sh" ]; then
     exit 0
 fi
 
-##########################################################################
-#                     ★ 正常生产模式（安装或启动） ★
-##########################################################################
-
 export TAVX_DIR="$HOME/.tav_x"
 CORE_FILE="$TAVX_DIR/core/main.sh"
 
@@ -79,9 +69,6 @@ if [ -f "$CORE_FILE" ]; then
     exec bash "$CORE_FILE"
 fi
 
-##########################################################################
-#                         以下为原版安装器逻辑
-##########################################################################
 
 clear
 echo -e "${RED}"
@@ -167,62 +154,80 @@ probe_local_ports() {
 }
 
 select_mirror_interactive() {
-    echo -e "\n${YELLOW}>>> [3/3] 启动镜像测速...${NC}"
+    echo -e "\n${YELLOW}>>> [3/3] 启动镜像并发测速 (Smart Race)...${NC}"
+    echo "------------------------------------------------"
+
+    local tmp_race_file="/data/data/com.termux/files/usr/tmp/tav_mirror_race"
+    rm -f "$tmp_race_file"
+    mkdir -p "$(dirname "$tmp_race_file")"
+
+    for mirror in "${MIRRORS[@]}"; do
+        (
+            if [[ "$mirror" == *"github.com"* ]]; then
+                 TEST_URL="${mirror}${REPO_PATH}"
+            else
+                 TEST_URL="${mirror}https://github.com/${REPO_PATH}/info/refs?service=git-upload-pack"
+            fi
+            
+            TIME_START=$(date +%s%N)
+            if curl -s -I -m 3 "$TEST_URL" >/dev/null 2>&1; then
+                TIME_END=$(date +%s%N)
+                DURATION=$(( (TIME_END - TIME_START) / 1000000 ))
+                echo "$DURATION|$mirror" >> "$tmp_race_file"
+                echo -ne "."
+            fi
+        ) & 
+    done
+    wait
+    echo ""
+    if [ ! -s "$tmp_race_file" ]; then
+        echo -e "${RED}❌ 所有线路均连接超时，请检查网络或开启/关闭飞行模式。${NC}"
+        exit 1
+    fi
+
+    sort -n "$tmp_race_file" -o "$tmp_race_file"
+
+    echo "------------------------------------------------"
+    echo -e " 延迟(ms) | 镜像源"
     echo "------------------------------------------------"
 
     VALID_URLS=()
     local idx=1
-
-    for mirror in "${MIRRORS[@]}"; do
-        if [[ "$mirror" == *"github.com"* ]]; then
-             TEST_URL="${mirror}${REPO_PATH}"
-             DL_URL="${mirror}${REPO_PATH}"
+    while IFS='|' read -r dur url; do
+        if [ $dur -lt 500 ]; then C_CODE=$GREEN;
+        elif [ $dur -lt 1000 ]; then C_CODE=$YELLOW;
+        else C_CODE=$RED; fi
+        if [[ "$url" == *"github.com"* ]]; then
              DISPLAY_NAME="GitHub 官方"
+             DL_LINK="https://github.com/${REPO_PATH}"
         else
-             TEST_URL="${mirror}https://github.com/${REPO_PATH}/info/refs?service=git-upload-pack"
-             DL_URL="${mirror}https://github.com/${REPO_PATH}"
-             DISPLAY_NAME=$(echo $mirror | awk -F/ '{print $3}')
+             DISPLAY_NAME=$(echo $url | awk -F/ '{print $3}')
+             DL_LINK="${url}https://github.com/${REPO_PATH}"
         fi
 
-        TIME_START=$(date +%s%N)
-        if curl -s -I -m 2 "$TEST_URL" >/dev/null 2>&1; then
-            TIME_END=$(date +%s%N)
-            DURATION=$(( (TIME_END - TIME_START) / 1000000 ))
-
-            if [ $DURATION -lt 500 ]; then C_CODE=$GREEN;
-            elif [ $DURATION -lt 1000 ]; then C_CODE=$YELLOW;
-            else C_CODE=$RED; fi
-
-            printf " [%2d] %b%4dms%b | %s\n" "$idx" "$C_CODE" "$DURATION" "$NC" "$DISPLAY_NAME"
-            VALID_URLS+=("$DL_URL")
-            ((idx++))
-        else
-            echo -e " [XX] ${RED}Timeout${NC} | $DISPLAY_NAME"
-        fi
-    done
+        printf " [%2d] %b%4d%b | %s\n" "$idx" "$C_CODE" "$dur" "$NC" "$DISPLAY_NAME"
+        
+        VALID_URLS+=("$DL_LINK")
+        ((idx++))
+    done < "$tmp_race_file"
+    rm -f "$tmp_race_file"
 
     echo "------------------------------------------------"
-
-    if [ ${#VALID_URLS[@]} -eq 0 ]; then
-        echo -e "${RED}❌ 所有线路均不可用${NC}"
-        exit 1
-    fi
-
-    echo -e "${CYAN}输入序号选择下载源：${NC}"
+    echo -e "${CYAN}系统已自动排序，建议选择前几项。${NC}"
+    echo -e "${CYAN}请输入序号选择下载源 (默认 1)：${NC}"
     read -p ">>> " USER_CHOICE
+    if [[ -z "$USER_CHOICE" ]]; then
+        USER_CHOICE=1
+    fi
 
     if [[ "$USER_CHOICE" =~ ^[0-9]+$ ]] && [ "$USER_CHOICE" -ge 1 ] && [ "$USER_CHOICE" -le "${#VALID_URLS[@]}" ]; then
         DL_URL="${VALID_URLS[$((USER_CHOICE-1))]}"
         echo -e "${GREEN}✔ 已选择: $DL_URL${NC}"
     else
-        echo -e "${RED}无效输入，默认第一项${NC}"
+        echo -e "${RED}无效输入，自动选择最快线路 (第1项)${NC}"
         DL_URL="${VALID_URLS[0]}"
     fi
 }
-
-########################################################
-# 主逻辑：选择下载方式
-########################################################
 
 if probe_direct_or_env; then
     DL_URL="https://github.com/${REPO_PATH}"
@@ -233,10 +238,6 @@ elif probe_local_ports; then
 else
     select_mirror_interactive
 fi
-
-########################################################
-# 执行下载并安装
-########################################################
 
 if [ -d "$TAVX_DIR" ]; then rm -rf "$TAVX_DIR"; fi
 
