@@ -1,10 +1,22 @@
-#!/bin/bash                                                                                      # [METADATA]                                                                                     # MODULE_NAME: ♊ Gemini CLI代理                                                                 # MODULE_ENTRY: gemini_menu                                                                      # [END_METADATA]                                                                                 source "$TAVX_DIR/core/env.sh"                                                                   source "$TAVX_DIR/core/ui.sh"                                                                    source "$TAVX_DIR/core/utils.sh"                                                                                                                                                                  GEMINI_DIR="$TAVX_DIR/gemini_proxy"                                                              VENV_DIR="$GEMINI_DIR/venv"                                                                      VENV_PYTHON="$VENV_DIR/bin/python"    
-VENV_PIP="$VENV_DIR/bin/pip"    
-REPO_URL="gzzhongqi/geminicli2api"    
-CREDS_FILE="$GEMINI_DIR/oauth_creds.json"    
-ENV_FILE="$GEMINI_DIR/.env"    
-LOG_FILE="$GEMINI_DIR/service.log"    
-TUNNEL_LOG="$GEMINI_DIR/tunnel.log"    
+#!/bin/bash
+# [METADATA]
+# MODULE_NAME: ♊ Gemini CLI代理
+# MODULE_ENTRY: gemini_menu
+# [END_METADATA]
+
+source "$TAVX_DIR/core/env.sh"
+source "$TAVX_DIR/core/ui.sh"
+source "$TAVX_DIR/core/utils.sh"
+
+GEMINI_DIR="$TAVX_DIR/gemini_proxy"
+VENV_DIR="$GEMINI_DIR/venv"
+VENV_PYTHON="$VENV_DIR/bin/python"
+VENV_PIP="$VENV_DIR/bin/pip"
+REPO_URL="gzzhongqi/geminicli2api"
+CREDS_FILE="$GEMINI_DIR/oauth_creds.json"
+ENV_FILE="$GEMINI_DIR/.env"
+LOG_FILE="$GEMINI_DIR/service.log"
+TUNNEL_LOG="$GEMINI_DIR/tunnel.log"
     
 get_proxy_address() {    
     get_active_proxy    
