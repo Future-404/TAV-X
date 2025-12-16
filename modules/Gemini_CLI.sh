@@ -1,475 +1,494 @@
-#!/bin/bash
-# [METADATA]
-# MODULE_NAME: ♊ Gemini CLI代理
-# MODULE_ENTRY: gemini_menu
-# [END_METADATA]
-source "$TAVX_DIR/core/env.sh"
-source "$TAVX_DIR/core/ui.sh"
-source "$TAVX_DIR/core/utils.sh"
-
-GEMINI_DIR="$TAVX_DIR/gemini_proxy"
-VENV_DIR="$GEMINI_DIR/venv"
-VENV_PYTHON="$VENV_DIR/bin/python"
-VENV_PIP="$VENV_DIR/bin/pip"
-REPO_URL="gzzhongqi/geminicli2api"
-CREDS_FILE="$GEMINI_DIR/oauth_creds.json"
-ENV_FILE="$GEMINI_DIR/.env"
-LOG_FILE="$GEMINI_DIR/service.log"
-TUNNEL_LOG="$GEMINI_DIR/tunnel.log"
-
-get_proxy_address() {
-    get_active_proxy
-}
-
-check_google_connectivity() {
-    local timeout_sec=5
-    local target_url="https://www.google.com"
-    local proxy=$(get_proxy_address)
+#!/bin/bash                                                                                      # [METADATA]                                                                                     # MODULE_NAME: ♊ Gemini CLI代理                                                                 # MODULE_ENTRY: gemini_menu                                                                      # [END_METADATA]                                                                                 source "$TAVX_DIR/core/env.sh"                                                                   source "$TAVX_DIR/core/ui.sh"                                                                    source "$TAVX_DIR/core/utils.sh"                                                                                                                                                                  GEMINI_DIR="$TAVX_DIR/gemini_proxy"                                                              VENV_DIR="$GEMINI_DIR/venv"                                                                      VENV_PYTHON="$VENV_DIR/bin/python"    
+VENV_PIP="$VENV_DIR/bin/pip"    
+REPO_URL="gzzhongqi/geminicli2api"    
+CREDS_FILE="$GEMINI_DIR/oauth_creds.json"    
+ENV_FILE="$GEMINI_DIR/.env"    
+LOG_FILE="$GEMINI_DIR/service.log"    
+TUNNEL_LOG="$GEMINI_DIR/tunnel.log"    
     
-    ui_print info "正在检测 Google 连通性..."
+get_proxy_address() {    
+    get_active_proxy    
+}    
     
-    local cmd="curl -I -s --max-time $timeout_sec"
-    local proxy_msg="直连"
+check_google_connectivity() {    
+    local timeout_sec=5    
+    local target_url="https://www.google.com"    
+    local proxy=$(get_proxy_address)    
     
-    if [ -n "$proxy" ]; then
-        cmd="$cmd --proxy '$proxy'"
-        proxy_msg="代理 ($proxy)"
-    fi
+    ui_print info "正在检测 Google 连通性..."    
     
-    if eval "$cmd '$target_url'" >/dev/null 2>&1; then
-        return 0
-    else
-        ui_print error "Google 连接失败！当前模式: $proxy_msg"
-        echo -e "${YELLOW}可能原因:${NC}"
-        echo -e "1. 未配置代理 (Gemini 必须使用魔法)。"
-        echo -e "2. 代理节点不稳定或不支持 UDP/TCP。"
-        echo -e "3. 网络超时。"
-        echo ""
-        if ui_confirm "是否跳转到网络设置进行配置？"; then
-            configure_download_network
-        fi
-        return 1
-    fi
-}
-
-pip_install_smart() {
-    local pip_cmd="$1"; shift; local args="$@"
-    local proxy=$(get_proxy_address); local success=false
-
-    export CARGO_BUILD_JOBS=1
-    export CC=clang
-    export CXX=clang++
-    export CFLAGS="-Wno-implicit-function-declaration"
-
-    args="$args -v"
-
-    if [ -n "$proxy" ]; then
-        ui_print info "正在使用代理下载依赖..."
-        if env http_proxy="$proxy" https_proxy="$proxy" $pip_cmd $args; then success=true; else ui_print warn "代理下载失败，尝试切换国内镜像源..."; fi
-    fi
-
-    if [ "$success" = false ]; then
-        local mirrors=("https://pypi.tuna.tsinghua.edu.cn/simple" "https://mirrors.aliyun.com/pypi/simple/")
-        for mirror in "${mirrors[@]}"; do
-            ui_print info "尝试镜像源: $(echo $mirror | awk -F/ '{print $3}')"
-            if env -u http_proxy -u https_proxy $pip_cmd $args -i "$mirror"; then success=true; break; fi
-        done
-    fi
+    local cmd="curl -I -s --max-time $timeout_sec"    
+    local proxy_msg="直连"    
     
-    unset CARGO_BUILD_JOBS CC CXX CFLAGS
+    if [ -n "$proxy" ]; then    
+        cmd="$cmd --proxy '$proxy'"    
+        proxy_msg="代理 ($proxy)"    
+    fi    
     
-    if [ "$success" = true ]; then return 0; else ui_print error "依赖安装失败 (编译错误)。"; return 1; fi
-}
-
-check_auth_dependencies() {
-    local missing=""
-    command -v stdbuf >/dev/null || missing="$missing coreutils"
+    if eval "$cmd '$target_url'" >/dev/null 2>&1; then    
+        return 0    
+    else    
+        ui_print error "Google 连接失败！当前模式: $proxy_msg"    
+        echo -e "${YELLOW}可能原因:${NC}"    
+        echo -e "1. 未配置代理 (Gemini 必须使用魔法)。"    
+        echo -e "2. 代理节点不稳定或不支持 UDP/TCP。"    
+        echo -e "3. 网络超时。"    
+        echo ""    
+        if ui_confirm "是否跳转到网络设置进行配置？"; then    
+            configure_download_network    
+        fi    
+        return 1    
+    fi    
+}    
     
-    if [ -n "$missing" ]; then
-        ui_print info "安装认证依赖: $missing"
-        pkg install $missing -y
-    fi
-}
-
-install_gemini() {
-    ui_header "部署 Gemini 代理服务"
+pip_install_smart() {    
+    local pip_cmd="$1"; shift; local args="$@"    
+    local proxy=$(get_proxy_address); local success=false    
     
-    cd "$TAVX_DIR" || exit 1
-
-    local NEED_PKGS=""
-    if ! command -v python &> /dev/null; then NEED_PKGS="$NEED_PKGS python"; fi
-    if ! command -v rustc &> /dev/null; then NEED_PKGS="$NEED_PKGS rust"; fi
-    if ! command -v ar &> /dev/null; then NEED_PKGS="$NEED_PKGS binutils"; fi
-    if ! command -v clang &> /dev/null; then NEED_PKGS="$NEED_PKGS clang"; fi
-    if ! command -v make &> /dev/null; then NEED_PKGS="$NEED_PKGS make"; fi
-    if ! command -v cmake &> /dev/null; then NEED_PKGS="$NEED_PKGS cmake"; fi
-    if ! command -v cloudflared &> /dev/null; then NEED_PKGS="$NEED_PKGS cloudflared"; fi
-
-    if [ -n "$NEED_PKGS" ]; then 
-        ui_print info "正在预装编译环境..."
-        echo -e "${CYAN}安装组件: $NEED_PKGS${NC}"
-        pkg update -y
-        pkg install $NEED_PKGS -y
-    fi
+    export CARGO_BUILD_JOBS=1    
+    export CC=clang    
+    export CXX=clang++    
+    export CFLAGS="-Wno-implicit-function-declaration"    
     
-    check_auth_dependencies
-
-    safe_rm "$GEMINI_DIR"
+    args="$args -v"    
     
-    # --- 修复点：提前确立网络策略 ---
-    prepare_network_strategy "$REPO_URL"
-
-    local CLONE_CMD="source \"$TAVX_DIR/core/utils.sh\"; git_clone_smart '' '$REPO_URL' '$GEMINI_DIR'"
-    if ! ui_spinner "正在下载源码..." "$CLONE_CMD"; then ui_print error "源码下载失败。"; ui_pause; return 1; fi
-
-    cd "$GEMINI_DIR" || return
-
-    ui_print info "创建 Python 虚拟环境..."
-    python -m venv venv || { ui_print error "Venv 创建失败"; ui_pause; return 1; }
-
-    ui_print info "正在编译安装依赖..."
-    echo -e "${YELLOW}⚠️ 注意：此处可能耗时较长，请保持亮屏！${NC}"
+    if [ -n "$proxy" ]; then    
+        ui_print info "正在使用代理下载依赖..."    
+        if env http_proxy="$proxy" https_proxy="$proxy" $pip_cmd $args; then success=true; else ui_print warn "代理下载失败，尝试切换国内镜像源..."; fi    
+    fi    
     
-    pip_install_smart "$VENV_PIP" install --upgrade pip --no-cache-dir
+    if [ "$success" = false ]; then    
+        local mirrors=("https://pypi.tuna.tsinghua.edu.cn/simple" "https://mirrors.aliyun.com/pypi/simple/")    
+        for mirror in "${mirrors[@]}"; do    
+            ui_print info "尝试镜像源: $(echo $mirror | awk -F/ '{print $3}')"    
+            if env -u http_proxy -u https_proxy $pip_cmd $args -i "$mirror"; then success=true; break; fi    
+        done    
+    fi    
     
-    if ! pip_install_smart "$VENV_PIP" install "requests[socks]" --no-cache-dir; then
-        ui_print warn "SOCKS 库安装失败，可能影响代理连接。"
-    fi
+    unset CARGO_BUILD_JOBS CC CXX CFLAGS    
     
-    if pip_install_smart "$VENV_PIP" install -r requirements.txt --no-cache-dir; then
-        echo "HOST=0.0.0.0" > "$ENV_FILE"
-        echo "PORT=8888" >> "$ENV_FILE"
-        echo "GEMINI_AUTH_PASSWORD=password" >> "$ENV_FILE"
-        ui_print success "Gemini 服务部署成功！"
-    else
-        ui_print error "严重：依赖编译失败。"
-        echo -e "${YELLOW}请尝试运行 'pkg upgrade' 更新系统库后重试。${NC}"
-        ui_pause; return 1
-    fi
-    ui_pause
-}
-
-ensure_installed() {
-    if [ ! -d "$GEMINI_DIR" ]; then
-        ui_print warn "检测到 Gemini 模块尚未安装。"
-        echo -e "${YELLOW}需要先下载核心组件才能继续。${NC}"
-        echo ""
-        if ui_confirm "是否立即开始安装？"; then
-            install_gemini
-            if [ ! -d "$GEMINI_DIR" ]; then return 1; fi
-        else
-            ui_print info "已取消操作。"; return 1
-        fi
-    fi
-    return 0
-}
-
-authenticate_google() {
-    ensure_installed || return
-    check_google_connectivity || return
-    check_auth_dependencies
-
-    if [ -f "$CREDS_FILE" ]; then
-        ui_print warn "检测到已存在登录凭据！"
-        if ! ui_confirm "重新认证将覆盖现有文件，是否继续？"; then return; fi
-        rm -f "$CREDS_FILE"
-    fi
-
-    ui_header "Google 账号授权"
-    echo -e "${CYAN}流程说明:${NC}"
-    echo -e "1. 脚本将在后台生成认证链接。"
-    echo -e "2. 如果浏览器未自动弹出，请去 [📜 查看运行日志] 复制链接。"
-    echo -e "3. 浏览器登录成功后，直接回来点击 [🚀 启动服务] 即可。"
-    echo ""
+    if [ "$success" = true ]; then return 0; else ui_print error "依赖安装失败 (编译错误)。"; return 1; fi    
+}    
     
-    local proxy=$(get_proxy_address)
-    local proxy_env=""
-    [ -n "$proxy" ] && proxy_env="http_proxy=$proxy https_proxy=$proxy"
-
-    cd "$GEMINI_DIR" || return
+check_auth_dependencies() {    
+    local missing=""    
+    command -v stdbuf >/dev/null || missing="$missing coreutils"    
     
-    rm -f "$LOG_FILE"
-    pkill -f "$VENV_PYTHON run.py"
-
-    echo -e "${GREEN}>>> 正在后台启动认证进程...${NC}"
-    nohup env -u GEMINI_CREDENTIALS \
-        GEMINI_AUTH_PASSWORD="init" \
-        PYTHONUNBUFFERED=1 \
-        $proxy_env \
-        "$VENV_PYTHON" -u run.py > "$LOG_FILE" 2>&1 &
+    if [ -n "$missing" ]; then    
+        ui_print info "安装认证依赖: $missing"    
+        pkg install $missing -y    
+    fi    
+}    
     
-    local APP_PID=$!
-    local CRASHED=0
-
-    echo -ne "正在获取链接..."
-    local url=""
-    for i in {1..10}; do
-        if ! kill -0 $APP_PID 2>/dev/null; then CRASHED=1; break; fi
-        if grep -q "https://accounts.google.com" "$LOG_FILE"; then
-            url=$(grep -o "https://accounts.google.com[^\ ]*" "$LOG_FILE" | head -n 1 | tr -d '\r\n')
-            break
-        fi
-        echo -ne "."
-        sleep 1
-    done
-    echo ""
-
-    if [ $CRASHED -eq 1 ]; then
-        ui_print error "认证程序意外崩溃！"
-        echo -e "${YELLOW}--- 错误日志 (最后10行) ---${NC}"
-        tail -n 10 "$LOG_FILE"
-        echo -e "${YELLOW}----------------------------${NC}"
-        ui_pause; return
-    fi
-
-    if [ -n "$url" ]; then
-        termux-open "$url" 2>/dev/null
-        ui_print success "已唤起浏览器！请前往登录。"
-    else
-        ui_print info "未能自动获取链接。"
-        echo -e "${YELLOW}请手动前往主菜单 -> [📜 查看运行日志] 复制链接。${NC}"
-    fi
+install_gemini() {    
+    ui_header "部署 Gemini 代理服务"    
     
-    echo -e "------------------------------------------------"
-    echo -e "✅ 操作步骤：浏览器登录成功后，直接回来点击 [🚀 启动服务]。"
+    cd "$TAVX_DIR" || exit 1    
     
-    ui_pause
-}
-
-start_tunnel() {
-    ensure_installed || return
+    local NEED_PKGS=""    
+    if ! command -v python &> /dev/null; then NEED_PKGS="$NEED_PKGS python"; fi    
+    if ! command -v rustc &> /dev/null; then NEED_PKGS="$NEED_PKGS rust"; fi    
+    if ! command -v ar &> /dev/null; then NEED_PKGS="$NEED_PKGS binutils"; fi    
+    if ! command -v clang &> /dev/null; then NEED_PKGS="$NEED_PKGS clang"; fi    
+    if ! command -v make &> /dev/null; then NEED_PKGS="$NEED_PKGS make"; fi    
+    if ! command -v cmake &> /dev/null; then NEED_PKGS="$NEED_PKGS cmake"; fi    
+    if ! command -v cloudflared &> /dev/null; then NEED_PKGS="$NEED_PKGS cloudflared"; fi    
     
-    if ! pgrep -f "$VENV_PYTHON run.py" >/dev/null; then
-        ui_print error "Gemini 服务未启动！"
-        echo -e "请先点击 [🚀 启动/重启服务]。"
-        ui_pause; return
-    fi
-
-    local port=$(grep "^PORT=" "$ENV_FILE" 2>/dev/null | cut -d= -f2); [ -z "$port" ] && port=8888
-    local token_file="$TAVX_DIR/config/cf_token"
-    local proxy=$(get_proxy_address)
+    if [ -n "$NEED_PKGS" ]; then    
+        ui_print info "正在预装编译环境..."    
+        echo -e "${CYAN}安装组件: $NEED_PKGS${NC}"    
+        pkg update -y    
+        pkg install $NEED_PKGS -y    
+    fi    
     
-    ui_header "Cloudflare 远程穿透"
+    check_auth_dependencies    
     
-    pkill -f "cloudflared tunnel"
-    rm -f "$TUNNEL_LOG"
-
-    if [ -f "$token_file" ] && [ -s "$token_file" ]; then
-        local token=$(cat "$token_file")
-        ui_print info "检测到固定 Token，正在启动固定隧道..."
-        
-        if [ -n "$proxy" ]; then
-            setsid env TUNNEL_HTTP_PROXY="$proxy" nohup cloudflared tunnel run --token "$token" > "$TUNNEL_LOG" 2>&1 &
-        else
-            setsid nohup cloudflared tunnel run --token "$token" > "$TUNNEL_LOG" 2>&1 &
-        fi
-        
-        sleep 3
-        if pgrep -f "cloudflared" >/dev/null; then
-            ui_print success "固定隧道已启动！"
-            echo -e "请访问您绑定的自定义域名。"
-        else
-            ui_print error "启动失败，请检查 Log。"
-        fi
-        
-    else
-        ui_print info "启动临时隧道 (TryCloudflare)..."
-        local cf_cmd="tunnel --url http://localhost:$port --no-autoupdate"
-        
-        if [ -n "$proxy" ]; then
-            setsid env TUNNEL_HTTP_PROXY="$proxy" nohup cloudflared $cf_cmd --protocol http2 > "$TUNNEL_LOG" 2>&1 &
-        else
-            setsid nohup cloudflared $cf_cmd > "$TUNNEL_LOG" 2>&1 &
-        fi
-        
-        echo -ne "正在获取链接..."
-        local link=""
-        for i in {1..15}; do
-            if grep -q "trycloudflare.com" "$TUNNEL_LOG"; then
-                link=$(grep -o "https://[-a-zA-Z0-9]*\.trycloudflare\.com" "$TUNNEL_LOG" | grep -v "api" | tail -n 1)
-                if [ -n "$link" ]; then break; fi
-            fi
-            echo -ne "."
-            sleep 1
-        done
-        echo ""
-        
-        if [ -n "$link" ]; then
-            ui_print success "穿透成功！"
-            echo -e "\n${YELLOW}👉 $link${NC}\n"
-            echo -e "${CYAN}(长按复制，填入远程酒馆的 API 地址)${NC}"
-        else
-            ui_print error "获取链接超时。请检查网络或代理配置。"
-        fi
-    fi
-    ui_pause
-}
-
-stop_tunnel() {
-    pkill -f "cloudflared tunnel"
-    ui_print success "远程隧道已关闭。"
-    sleep 1
-}
-
-start_service() {
-    ensure_installed || return
-    check_google_connectivity || return
+    safe_rm "$GEMINI_DIR"    
     
-    local port=$(grep "^PORT=" "$ENV_FILE" 2>/dev/null | cut -d= -f2); [ -z "$port" ] && port=8888
-
-    pkill -f "$VENV_PYTHON run.py"
-    pkill -f "cloudflared tunnel"
+    prepare_network_strategy "$REPO_URL"    
     
-    if command -v fuser >/dev/null; then
-        fuser -k -9 "$port/tcp" >/dev/null 2>&1
-    elif command -v lsof >/dev/null; then
-        local pid=$(lsof -t -i:"$port")
-        if [ -n "$pid" ]; then kill -9 $pid >/dev/null 2>&1; fi
-    fi
-    sleep 1
-
-    if [ ! -f "$CREDS_FILE" ]; then
-        if ls "$GEMINI_DIR"/*creds*.json 1> /dev/null 2>&1; then
-            mv "$GEMINI_DIR"/*creds*.json "$CREDS_FILE" 2>/dev/null
-            ui_print success "检测到新凭据，已自动应用！"
-        else
-            ui_print error "未找到授权凭据。"
-            echo -e "请先执行 [🔑 Google 账号授权] 并完成浏览器登录。"
-            ui_pause; return
-        fi
-    fi
-
-    local pass=$(grep "^GEMINI_AUTH_PASSWORD=" "$ENV_FILE" 2>/dev/null | cut -d= -f2); [ -z "$pass" ] && pass="password"
+    local CLONE_CMD="source \"$TAVX_DIR/core/utils.sh\"; git_clone_smart '' '$REPO_URL' '$GEMINI_DIR'"    
+    if ! ui_spinner "正在下载源码..." "$CLONE_CMD"; then ui_print error "源码下载失败。"; ui_pause; return 1; fi    
     
-    if grep -q "^PORT=" "$ENV_FILE"; then sed -i "s/^PORT=.*/PORT=$port/" "$ENV_FILE"; else echo "PORT=$port" >> "$ENV_FILE"; fi
-    if grep -q "^GEMINI_AUTH_PASSWORD=" "$ENV_FILE"; then sed -i "s/^GEMINI_AUTH_PASSWORD=.*/GEMINI_AUTH_PASSWORD=$pass/" "$ENV_FILE"; else echo "GEMINI_AUTH_PASSWORD=$pass" >> "$ENV_FILE"; fi
+    cd "$GEMINI_DIR" || return    
     
-    if ! grep -q "^GEMINI_CREDENTIALS=" "$ENV_FILE"; then
-        echo -n "GEMINI_CREDENTIALS='" >> "$ENV_FILE"
-        cat "$CREDS_FILE" >> "$ENV_FILE"
-        echo "'" >> "$ENV_FILE"
-    fi
-
-    local proxy=$(get_proxy_address); local proxy_env=""
-    [ -n "$proxy" ] && proxy_env="env http_proxy='$proxy' https_proxy='$proxy' all_proxy='$proxy'"
+    ui_print info "创建 Python 虚拟环境..."    
+    python -m venv venv || { ui_print error "Venv 创建失败"; ui_pause; return 1; }    
     
-    ui_header "启动服务"
-    cd "$GEMINI_DIR" || return
-    local START_CMD="$proxy_env GEMINI_AUTH_PASSWORD='$pass' setsid nohup $VENV_PYTHON run.py > '$LOG_FILE' 2>&1 &"
+    ui_print info "正在编译安装依赖..."    
+    echo -e "${YELLOW}⚠️ 注意：此处可能耗时较长，请保持亮屏！${NC}"    
     
-    if ui_spinner "正在启动服务..." "eval \"$START_CMD\" sleep 3"; then
-        if pgrep -f "run.py" >/dev/null; then
-            ui_print success "服务已启动！端口: $port"
-        else
-            ui_print error "启动失败，进程立刻退出了。"
-            echo -e "${YELLOW}--- 错误日志 ---${NC}"
-            tail -n 5 "$LOG_FILE"
-            echo -e "${YELLOW}---------------${NC}"
-        fi
-    else ui_print error "启动超时。"; fi
-    ui_pause
-}
-
-stop_service() {
-    pkill -f "$VENV_PYTHON run.py"
-    pkill -f "cloudflared tunnel"
-    ui_print success "服务与隧道已停止。"
-    sleep 1
-}
-
-show_info() {
-    local port=$(grep "^PORT=" "$ENV_FILE" 2>/dev/null | cut -d= -f2); [ -z "$port" ] && port=8888
-    local pass=$(grep "^GEMINI_AUTH_PASSWORD=" "$ENV_FILE" 2>/dev/null | cut -d= -f2); [ -z "$pass" ] && pass="password"
+    pip_install_smart "$VENV_PIP" install --upgrade pip --no-cache-dir    
     
-    ui_header "连接信息"
+    ui_print info "预装 SOCKS 代理支持库..."    
+    if ! pip_install_smart "$VENV_PIP" install "requests[socks]" "PySocks" --no-cache-dir; then    
+        ui_print warn "SOCKS 库安装遇到问题，稍后将尝试继续安装主依赖..."    
+    fi    
     
-    local tunnel_url=""
-    if pgrep -f "cloudflared" >/dev/null; then
-        if [ -s "$TAVX_DIR/config/cf_token" ]; then
-            tunnel_url="请使用您的固定域名"
-        elif [ -f "$TUNNEL_LOG" ]; then
-            tunnel_url=$(grep -o "https://[-a-zA-Z0-9]*\.trycloudflare\.com" "$TUNNEL_LOG" | grep -v "api" | tail -n 1)
-        fi
-    fi
-
-    echo -e "${YELLOW}请将以下信息填入酒馆或其他 AI 客户端:${NC}\n"
+    if pip_install_smart "$VENV_PIP" install -r requirements.txt --no-cache-dir; then    
+        echo "HOST=0.0.0.0" > "$ENV_FILE"    
+        echo "PORT=8888" >> "$ENV_FILE"    
+        echo "GEMINI_AUTH_PASSWORD=password" >> "$ENV_FILE"    
+        ui_print success "Gemini 服务部署成功！"    
+    else    
+        ui_print error "严重：依赖编译失败。"    
+        echo -e "${YELLOW}请尝试运行 'pkg upgrade' 更新系统库后重试。${NC}"    
+        ui_pause; return 1    
+    fi    
+    ui_pause    
+}    
     
-    if [ -n "$tunnel_url" ]; then
-        echo -e "${GREEN}🌍 公网远程地址 (Cloudflare):${NC}"
-        echo -e "   $tunnel_url/v1"
-        echo ""
-    fi
-
-    echo -e "🏠 本地局域网地址:"
-    echo -e "   http://127.0.0.1:$port/v1"
-    echo ""
-    echo -e "🔑 API 密钥 (Password):"
-    echo -e "   $pass"
+ensure_installed() {    
+    if [ ! -d "$GEMINI_DIR" ]; then    
+        ui_print warn "检测到 Gemini 模块尚未安装。"    
+        echo -e "${YELLOW}需要先下载核心组件才能继续。${NC}"    
+        echo ""    
+        if ui_confirm "是否立即开始安装？"; then    
+            install_gemini    
+            if [ ! -d "$GEMINI_DIR" ]; then return 1; fi    
+        else    
+            ui_print info "已取消操作。"; return 1    
+        fi    
+    fi    
+    return 0    
+}    
     
-    ui_pause
-}
-
-configure_params() {
-    if [ ! -f "$ENV_FILE" ]; then touch "$ENV_FILE"; fi
-    local port=$(grep "^PORT=" "$ENV_FILE" | cut -d= -f2); [ -z "$port" ] && port=8888
-    local pass=$(grep "^GEMINI_AUTH_PASSWORD=" "$ENV_FILE" | cut -d= -f2); [ -z "$pass" ] && pass="password"
+authenticate_google() {    
+    ensure_installed || return    
+    check_google_connectivity || return    
+    check_auth_dependencies    
     
-    while true; do
-        ui_header "参数配置"
-        echo -e "端口: $port | 密码: $pass\n"
-        CHOICE=$(ui_menu "选择修改项" "🔌 修改端口" "🔑 修改密码" "🔙 返回")
-        case "$CHOICE" in
-            *"端口"*) 
-                p=$(ui_input "输入新端口" "$port" "false")
-                if [[ "$p" =~ ^[0-9]+$ ]]; then 
-                    if grep -q "^PORT=" "$ENV_FILE"; then sed -i "s/^PORT=.*/PORT=$p/" "$ENV_FILE"; else echo "PORT=$p" >> "$ENV_FILE"; fi
-                    port=$p; ui_print success "已保存 (重启生效)"
-                fi ;;
-            *"密码"*) 
-                p=$(ui_input "输入新密码" "$pass" "false")
-                if [ -n "$p" ]; then 
-                    if grep -q "^GEMINI_AUTH_PASSWORD=" "$ENV_FILE"; then sed -i "s/^GEMINI_AUTH_PASSWORD=.*/GEMINI_AUTH_PASSWORD=$p/" "$ENV_FILE"; else echo "GEMINI_AUTH_PASSWORD=$p" >> "$ENV_FILE"; fi
-                    pass=$p; ui_print success "已保存 (重启生效)"
-                fi ;;
-            *"返回"*) return ;;
-        esac
-    done
-}
-
-gemini_menu() {
-    while true; do
-        ui_header "Gemini 2.0 智能代理"
-        local s="${RED}● 已停止${NC}"; pgrep -f "$VENV_PYTHON run.py" >/dev/null && s="${GREEN}● 运行中${NC}"
-        local cf="${RED}关${NC}"; pgrep -f "cloudflared" >/dev/null && cf="${GREEN}开${NC}"
-        local a="${YELLOW}未认证${NC}"; [ -f "$CREDS_FILE" ] && a="${GREEN}已认证${NC}"
-        
-        echo -e "状态: $s | 隧道: $cf | 授权: $a"
-        echo "----------------------------------------"
-
-        CHOICE=$(ui_menu "请选择操作" \
-            "🚀 启动/重启服务" \
-            "🌍 开启/关闭远程穿透" \
-            "🔑 Google 账号授权" \
-            "📥 安装/重装服务" \
-            "📝 查看连接信息" \
-            "⚙️  配置密码与端口" \
-            "📜 查看运行日志" \
-            "🛑 停止所有服务" \
-            "🔙 返回上级"
-        )
-        case "$CHOICE" in
-            *"启动"*) start_service ;;
-            *"远程穿透"*) 
-                if pgrep -f "cloudflared" >/dev/null; then stop_tunnel; else start_tunnel; fi ;;
-            *"授权"*) authenticate_google ;;
-            *"安装"*) install_gemini ;;
-            *"连接信息"*) show_info ;;
-            *"配置"*) configure_params ;;
-            *"日志"*) safe_log_monitor "$LOG_FILE" ;;
-            *"停止"*) stop_service ;;
-            *"返回"*) return ;;
-        esac
-    done
-}
-
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then gemini_menu; fi
+    if [ -f "$CREDS_FILE" ]; then    
+        ui_print warn "检测到已存在登录凭据！"    
+        if ! ui_confirm "重新认证将覆盖现有文件，是否继续？"; then return; fi    
+        rm -f "$CREDS_FILE"    
+    fi    
+    
+    ui_header "Google 账号授权"    
+    echo -e "${CYAN}流程说明:${NC}"    
+    echo -e "1. 脚本将在后台生成认证链接。"    
+    echo -e "2. 如果浏览器未自动弹出，请去 [📜 查看运行日志] 复制链接。"    
+    echo -e "3. 浏览器登录成功后，直接回来点击 [🚀 启动服务] 即可。"    
+    echo ""    
+    
+    local proxy=$(get_proxy_address)    
+    local proxy_env=""    
+    [ -n "$proxy" ] && proxy_env="http_proxy=$proxy https_proxy=$proxy"    
+    
+    cd "$GEMINI_DIR" || return    
+    
+    rm -f "$LOG_FILE"    
+    pkill -f "$VENV_PYTHON run.py"    
+    
+    echo -e "${GREEN}>>> 正在后台启动认证进程...${NC}"    
+    nohup env -u GEMINI_CREDENTIALS \    
+        GEMINI_AUTH_PASSWORD="init" \    
+        PYTHONUNBUFFERED=1 \    
+        $proxy_env \    
+        "$VENV_PYTHON" -u run.py > "$LOG_FILE" 2>&1 &    
+    
+    local APP_PID=$!    
+    local CRASHED=0    
+    
+    echo -ne "正在获取链接..."    
+    local url=""    
+    for i in {1..10}; do    
+        if ! kill -0 $APP_PID 2>/dev/null; then CRASHED=1; break; fi    
+        if grep -q "https://accounts.google.com" "$LOG_FILE"; then    
+            url=$(grep -o "https://accounts.google.com[^\ ]*" "$LOG_FILE" | head -n 1 | tr -d '\r\n')    
+            break    
+        fi    
+        echo -ne "."    
+        sleep 1    
+    done    
+    echo ""    
+    
+    if [ $CRASHED -eq 1 ]; then    
+        ui_print error "认证程序意外崩溃！"    
+        echo -e "${YELLOW}--- 错误日志 (最后10行) ---${NC}"    
+        tail -n 10 "$LOG_FILE"    
+        echo -e "${YELLOW}----------------------------${NC}"    
+        ui_pause; return    
+    fi    
+    
+    if [ -n "$url" ]; then    
+        termux-open "$url" 2>/dev/null    
+        ui_print success "已唤起浏览器！请前往登录。"    
+    else    
+        ui_print info "未能自动获取链接。"    
+        echo -e "${YELLOW}请手动前往主菜单 -> [📜 查看运行日志] 复制链接。${NC}"    
+    fi    
+    
+    echo -e "------------------------------------------------"    
+    echo -e "✅ 操作步骤：浏览器登录成功后，直接回来点击 [🚀 启动服务]。"    
+    
+    ui_pause    
+}    
+    
+start_tunnel() {    
+    ensure_installed || return    
+    
+    if ! pgrep -f "$VENV_PYTHON run.py" >/dev/null; then    
+        ui_print error "Gemini 服务未启动！"    
+        echo -e "请先点击 [🚀 启动/重启服务]。"    
+        ui_pause; return    
+    fi    
+    
+    local port=$(grep "^PORT=" "$ENV_FILE" 2>/dev/null | cut -d= -f2); [ -z "$port" ] && port=8888    
+    local token_file="$TAVX_DIR/config/cf_token"    
+    local proxy=$(get_proxy_address)    
+    
+    ui_header "Cloudflare 远程穿透"    
+    
+    pkill -f "cloudflared tunnel"    
+    rm -f "$TUNNEL_LOG"    
+    
+    if [ -f "$token_file" ] && [ -s "$token_file" ]; then    
+        local token=$(cat "$token_file")    
+        ui_print info "检测到固定 Token，正在启动固定隧道..."    
+    
+        if [ -n "$proxy" ]; then    
+            setsid env TUNNEL_HTTP_PROXY="$proxy" nohup cloudflared tunnel run --token "$token" > "$TUNNEL_LOG" 2>&1 &    
+        else    
+            setsid nohup cloudflared tunnel run --token "$token" > "$TUNNEL_LOG" 2>&1 &    
+        fi    
+    
+        sleep 3    
+        if pgrep -f "cloudflared" >/dev/null; then    
+            ui_print success "固定隧道已启动！"    
+            echo -e "请访问您绑定的自定义域名。"    
+        else    
+            ui_print error "启动失败，请检查 Log。"    
+        fi    
+    
+    else    
+        ui_print info "启动临时隧道 (TryCloudflare)..."    
+        local cf_cmd="tunnel --url http://localhost:$port --no-autoupdate"    
+    
+        if [ -n "$proxy" ]; then    
+            setsid env TUNNEL_HTTP_PROXY="$proxy" nohup cloudflared $cf_cmd --protocol http2 > "$TUNNEL_LOG" 2>&1 &    
+        else    
+            setsid nohup cloudflared $cf_cmd > "$TUNNEL_LOG" 2>&1 &    
+        fi    
+    
+        echo -ne "正在获取链接..."    
+        local link=""    
+        for i in {1..15}; do    
+            if grep -q "trycloudflare.com" "$TUNNEL_LOG"; then    
+                link=$(grep -o "https://[-a-zA-Z0-9]*\.trycloudflare\.com" "$TUNNEL_LOG" | grep -v "api" | tail -n 1)    
+                if [ -n "$link" ]; then break; fi    
+            fi    
+            echo -ne "."    
+            sleep 1    
+        done    
+        echo ""    
+    
+        if [ -n "$link" ]; then    
+            ui_print success "穿透成功！"    
+            echo -e "\n${YELLOW}👉 $link${NC}\n"    
+            echo -e "${CYAN}(长按复制，填入远程酒馆的 API 地址)${NC}"    
+        else    
+            ui_print error "获取链接超时。请检查网络或代理配置。"    
+        fi    
+    fi    
+    ui_pause    
+}    
+    
+stop_tunnel() {    
+    pkill -f "cloudflared tunnel"    
+    ui_print success "远程隧道已关闭。"    
+    sleep 1    
+}    
+    
+start_service() {    
+    ensure_installed || return    
+    check_google_connectivity || return    
+    
+    local port=$(grep "^PORT=" "$ENV_FILE" 2>/dev/null | cut -d= -f2); [ -z "$port" ] && port=8888    
+    
+    pkill -f "$VENV_PYTHON run.py"    
+    pkill -f "cloudflared tunnel"    
+    
+    if command -v fuser >/dev/null; then    
+        fuser -k -9 "$port/tcp" >/dev/null 2>&1    
+    elif command -v lsof >/dev/null; then    
+        local pid=$(lsof -t -i:"$port")    
+        if [ -n "$pid" ]; then kill -9 $pid >/dev/null 2>&1; fi    
+    fi    
+    sleep 1    
+    
+    if [ ! -f "$CREDS_FILE" ]; then    
+        if ls "$GEMINI_DIR"/*creds*.json 1> /dev/null 2>&1; then    
+            mv "$GEMINI_DIR"/*creds*.json "$CREDS_FILE" 2>/dev/null    
+            ui_print success "检测到新凭据，已自动应用！"    
+        else    
+            ui_print error "未找到授权凭据。"    
+            echo -e "请先执行 [🔑 Google 账号授权] 并完成浏览器登录。"    
+            ui_pause; return    
+        fi    
+    fi    
+    
+    local pass=$(grep "^GEMINI_AUTH_PASSWORD=" "$ENV_FILE" 2>/dev/null | cut -d= -f2); [ -z "$pass" ] && pass="password"    
+    
+    # --- 写入配置 (端口、密码) ---    
+    if grep -q "^PORT=" "$ENV_FILE"; then sed -i "s/^PORT=.*/PORT=$port/" "$ENV_FILE"; else echo "PORT=$port" >> "$ENV_FILE"; fi    
+    if grep -q "^GEMINI_AUTH_PASSWORD=" "$ENV_FILE"; then sed -i "s/^GEMINI_AUTH_PASSWORD=.*/GEMINI_AUTH_PASSWORD=$pass/" "$ENV_FILE"; else echo "GEMINI_AUTH_PASSWORD=$pass" >> "$ENV_FILE"; fi    
+    
+    if ! grep -q "^GEMINI_CREDENTIALS=" "$ENV_FILE"; then    
+        echo -n "GEMINI_CREDENTIALS='" >> "$ENV_FILE"    
+        cat "$CREDS_FILE" >> "$ENV_FILE"    
+        echo "'" >> "$ENV_FILE"    
+    fi    
+    
+    local proxy=$(get_proxy_address); local proxy_env=""    
+    [ -n "$proxy" ] && proxy_env="env http_proxy='$proxy' https_proxy='$proxy' all_proxy='$proxy'"    
+    
+    ui_header "启动服务"    
+    cd "$GEMINI_DIR" || return    
+    local START_CMD="$proxy_env GEMINI_AUTH_PASSWORD='$pass' setsid nohup $VENV_PYTHON run.py > '$LOG_FILE' 2>&1 &"    
+    
+    if ui_spinner "正在启动服务..." "eval \"$START_CMD\" sleep 3"; then    
+        if pgrep -f "run.py" >/dev/null; then    
+            ui_print success "服务已启动！端口: $port"    
+        else    
+            ui_print error "启动失败，进程立刻退出了。"    
+            echo -e "${YELLOW}--- 错误日志 ---${NC}"    
+            tail -n 5 "$LOG_FILE"    
+            echo -e "${YELLOW}---------------${NC}"    
+        fi    
+    else ui_print error "启动超时。"; fi    
+    ui_pause    
+}    
+    
+stop_service() {    
+    pkill -f "$VENV_PYTHON run.py"    
+    pkill -f "cloudflared tunnel"    
+    ui_print success "服务与隧道已停止。"    
+    sleep 1    
+}    
+    
+show_info() {    
+    local port=$(grep "^PORT=" "$ENV_FILE" 2>/dev/null | cut -d= -f2); [ -z "$port" ] && port=8888    
+    local pass=$(grep "^GEMINI_AUTH_PASSWORD=" "$ENV_FILE" 2>/dev/null | cut -d= -f2); [ -z "$pass" ] && pass="password"    
+    local proj=$(grep "^GOOGLE_CLOUD_PROJECT=" "$ENV_FILE" 2>/dev/null | cut -d= -f2); [ -z "$proj" ] && proj="未设置 (自动)"    
+    
+    ui_header "连接信息"    
+    
+    local tunnel_url=""    
+    if pgrep -f "cloudflared" >/dev/null; then    
+        if [ -s "$TAVX_DIR/config/cf_token" ]; then    
+            tunnel_url="请使用您的固定域名"    
+        elif [ -f "$TUNNEL_LOG" ]; then    
+            tunnel_url=$(grep -o "https://[-a-zA-Z0-9]*\.trycloudflare\.com" "$TUNNEL_LOG" | grep -v "api" | tail -n 1)    
+        fi    
+    fi    
+    
+    echo -e "${YELLOW}请将以下信息填入酒馆或其他 AI 客户端:${NC}\n"    
+    
+    if [ -n "$tunnel_url" ]; then    
+        echo -e "${GREEN}🌍 公网远程地址 (Cloudflare):${NC}"    
+        echo -e "   $tunnel_url/v1"    
+        echo ""    
+    fi    
+    
+    echo -e "🏠 本地局域网地址:"    
+    echo -e "   http://127.0.0.1:$port/v1"    
+    echo ""    
+    echo -e "🔑 API 密钥 (Password):"    
+    echo -e "   $pass"    
+    echo ""    
+    echo -e "🆔 Google Cloud 项目ID:"    
+    echo -e "   $proj"    
+    
+    ui_pause    
+}    
+    
+configure_params() {    
+    if [ ! -f "$ENV_FILE" ]; then touch "$ENV_FILE"; fi    
+    local port=$(grep "^PORT=" "$ENV_FILE" | cut -d= -f2); [ -z "$port" ] && port=8888    
+    local pass=$(grep "^GEMINI_AUTH_PASSWORD=" "$ENV_FILE" | cut -d= -f2); [ -z "$pass" ] && pass="password"    
+    local proj=$(grep "^GOOGLE_CLOUD_PROJECT=" "$ENV_FILE" | cut -d= -f2); [ -z "$proj" ] && proj="未设置 (自动)"    
+    
+    while true; do    
+        ui_header "参数配置"    
+        echo -e "端口: $port | 密码: $pass"    
+        echo -e "项目ID: $proj"    
+        echo ""    
+    
+        CHOICE=$(ui_menu "选择修改项" "🆔 修改项目标识ID" "🔌 修改端口" "🔑 修改密码" "🔙 返回")    
+        case "$CHOICE" in    
+            *"项目标识"*)    
+                echo -e "${CYAN}提示: 请输入您的 Google Cloud Project ID (如: my-project-123)${NC}"    
+                echo -e "${YELLOW}留空则使用自动探测模式。${NC}"    
+                new_id=$(ui_input "输入 Project ID" "$proj" "false")    
+    
+                if [ -n "$new_id" ] && [ "$new_id" != "未设置 (自动)" ]; then    
+                    if grep -q "^GOOGLE_CLOUD_PROJECT=" "$ENV_FILE"; then    
+                        sed -i "s/^GOOGLE_CLOUD_PROJECT=.*/GOOGLE_CLOUD_PROJECT=$new_id/" "$ENV_FILE"    
+                    else    
+                        echo "GOOGLE_CLOUD_PROJECT=$new_id" >> "$ENV_FILE"    
+                    fi    
+                    proj=$new_id    
+                    ui_print success "项目 ID 已保存！"    
+                else    
+                    sed -i '/^GOOGLE_CLOUD_PROJECT=/d' "$ENV_FILE"    
+                    proj="未设置 (自动)"    
+                    ui_print info "已恢复自动探测模式。"    
+                fi    
+                ui_pause    
+                ;;    
+            *"端口"*)    
+                p=$(ui_input "输入新端口" "$port" "false")    
+                if [[ "$p" =~ ^[0-9]+$ ]]; then    
+                    if grep -q "^PORT=" "$ENV_FILE"; then sed -i "s/^PORT=.*/PORT=$p/" "$ENV_FILE"; else echo "PORT=$p" >> "$ENV_FILE"; fi    
+                    port=$p; ui_print success "已保存 (重启生效)"    
+                fi ;;    
+            *"密码"*)    
+                p=$(ui_input "输入新密码" "$pass" "false")    
+                if [ -n "$p" ]; then    
+                    if grep -q "^GEMINI_AUTH_PASSWORD=" "$ENV_FILE"; then sed -i "s/^GEMINI_AUTH_PASSWORD=.*/GEMINI_AUTH_PASSWORD=$p/" "$ENV_FILE"; else echo "GEMINI_AUTH_PASSWORD=$p" >> "$ENV_FILE"; fi    
+                    pass=$p; ui_print success "已保存 (重启生效)"    
+                fi ;;    
+            *"返回"*) return ;;    
+        esac    
+    done    
+}    
+    
+gemini_menu() {    
+    while true; do    
+        ui_header "Gemini 2.0 智能代理"    
+        local s="${RED}● 已停止${NC}"; pgrep -f "$VENV_PYTHON run.py" >/dev/null && s="${GREEN}● 运行中${NC}"    
+        local cf="${RED}关${NC}"; pgrep -f "cloudflared" >/dev/null && cf="${GREEN}开${NC}"    
+        local a="${YELLOW}未认证${NC}"; [ -f "$CREDS_FILE" ] && a="${GREEN}已认证${NC}"    
+    
+        echo -e "状态: $s | 隧道: $cf | 授权: $a"    
+        echo "----------------------------------------"    
+    
+        CHOICE=$(ui_menu "请选择操作" \    
+            "🚀 启动/重启服务" \    
+            "🌍 开启/关闭远程穿透" \    
+            "🔑 Google 账号授权" \    
+            "📥 安装/重装服务" \    
+            "📝 查看连接信息" \    
+            "⚙️  配置参数" \    
+            "📜 查看运行日志" \    
+            "🛑 停止所有服务" \    
+            "🔙 返回上级"    
+        )    
+        case "$CHOICE" in    
+            *"启动"*) start_service ;;    
+            *"远程穿透"*)    
+                if pgrep -f "cloudflared" >/dev/null; then stop_tunnel; else start_tunnel; fi ;;    
+            *"授权"*) authenticate_google ;;    
+            *"安装"*) install_gemini ;;    
+            *"连接信息"*) show_info ;;    
+            *"配置"*) configure_params ;;    
+            *"日志"*) safe_log_monitor "$LOG_FILE" ;;    
+            *"停止"*) stop_service ;;    
+            *"返回"*) return ;;    
+        esac    
+    done    
+}    
+    
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then gemini_menu; fi    
+    
