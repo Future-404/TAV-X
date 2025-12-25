@@ -80,7 +80,8 @@ install_cloudflared_linux() {
 # --- Python Environment Management ---
 
 check_python_installed() {
-    if command -v python3 &>/dev/null && command -v pip3 &>/dev/null; then
+    if command -v python3 &>/dev/null && command -v pip3 &>/dev/null;
+ then
         return 0
     fi
     return 1
@@ -103,7 +104,8 @@ install_python_system() {
     if [ "$OS_TYPE" == "TERMUX" ]; then
         install_cmd="pkg install -y python"
     else
-        if command -v apt-get &>/dev/null; then
+        if command -v apt-get &>/dev/null;
+ then
             install_cmd="$SUDO_CMD apt-get update && $SUDO_CMD apt-get install -y python3 python3-pip python3-venv"
         else
             ui_print error "暂不支持非 Apt 系 Linux 的自动安装。"
@@ -127,8 +129,6 @@ install_python_system() {
 }
 
 check_dependencies() {
-    # ... (existing code)
-}
     if [ "$DEPS_CHECKED" == "true" ]; then return 0; fi
 
     local MISSING_PKGS=""
@@ -140,7 +140,8 @@ check_dependencies() {
     local HAS_GUM=false; command -v gum &> /dev/null && HAS_GUM=true
     local HAS_TAR=false; command -v tar &> /dev/null && HAS_TAR=true
 
-    if $HAS_NODE && $HAS_GIT && $HAS_CF && $HAS_GUM && $HAS_TAR; then
+    if $HAS_NODE && $HAS_GIT && $HAS_CF && $HAS_GUM && $HAS_TAR;
+ then
         export DEPS_CHECKED="true"
         return 0
     fi
@@ -188,7 +189,8 @@ check_dependencies() {
     if command -v node &> /dev/null && \
        command -v git &> /dev/null && \
        command -v cloudflared &> /dev/null && \
-       command -v gum &> /dev/null; then
+       command -v gum &> /dev/null;
+ then
         
         echo -e "${GREEN}[DONE]${NC} 环境全量修复完成！"
         export DEPS_CHECKED="true"
