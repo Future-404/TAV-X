@@ -52,35 +52,6 @@ check_google_connectivity() {
     fi
 }
 
-pip_install_smart() {
-    local pip_cmd="$1"; shift; local args="$@"
-    local proxy=$(get_proxy_address); local success=false
-
-    export CARGO_BUILD_JOBS=1
-    export CC=clang
-    export CXX=clang++
-    export CFLAGS="-Wno-implicit-function-declaration"
-
-    args="$args -v"
-
-    if [ -n "$proxy" ]; then
-        ui_print info "正在使用代理下载依赖..."
-        if env http_proxy="$proxy" https_proxy="$proxy" $pip_cmd $args; then success=true; else ui_print warn "代理下载失败，尝试切换国内镜像源..."; fi
-    fi
-
-    if [ "$success" = false ]; then
-        local mirrors=("https://pypi.tuna.tsinghua.edu.cn/simple" "https://mirrors.aliyun.com/pypi/simple/")
-        for mirror in "${mirrors[@]}"; do
-            ui_print info "尝试镜像源: $(echo $mirror | awk -F/ '{print $3}')"
-            if env -u http_proxy -u https_proxy $pip_cmd $args -i "$mirror"; then success=true; break; fi
-        done
-    fi
-    
-    unset CARGO_BUILD_JOBS CC CXX CFLAGS
-    
-    if [ "$success" = true ]; then return 0; else ui_print error "依赖安装失败 (编译错误)。"; return 1; fi
-}
-
 check_auth_dependencies() {
     local missing=""
     command -v stdbuf >/dev/null || missing="$missing coreutils"
@@ -98,46 +69,24 @@ check_auth_dependencies() {
 install_gemini() {
     ui_header "部署 Gemini 代理服务"
     
-    cd "$TAVX_DIR" || exit 1
+    # --- 1. Python 环境前置检查 ---
+    if ! command -v python3 &>/dev/null; then
+        ui_print error "系统未检测到 Python3。"
+        echo -e "${YELLOW}请前往 [高级工具] -> [🐍 Python 环境管理] 进行安装。${NC}"
+        ui_pause; return 1
+    fi
 
-    local NEED_PKGS=""
-    if ! command -v python &> /dev/null; then NEED_PKGS="$NEED_PKGS python"; fi
-    if ! command -v rustc &> /dev/null; then NEED_PKGS="$NEED_PKGS rust"; fi
-    if ! command -v ar &> /dev/null; then NEED_PKGS="$NEED_PKGS binutils"; fi
-    if ! command -v clang &> /dev/null; then NEED_PKGS="$NEED_PKGS clang"; fi
-    if ! command -v make &> /dev/null; then NEED_PKGS="$NEED_PKGS make"; fi
-    if ! command -v cmake &> /dev/null; then NEED_PKGS="$NEED_PKGS cmake"; fi
-    if ! command -v cloudflared &> /dev/null; then NEED_PKGS="$NEED_PKGS cloudflared"; fi
-
-    if [ -n "$NEED_PKGS" ]; then 
-        ui_print info "正在预装编译环境..."
-        echo -e "${CYAN}安装组件: $NEED_PKGS${NC}"
-        if [ "$OS_TYPE" == "TERMUX" ]; then
-            pkg update -y
-            pkg install $NEED_PKGS -y
-        else
-            # Map package names for Debian/Ubuntu
-            local LINUX_PKGS=""
-            [[ "$NEED_PKGS" == *"python"* ]] && LINUX_PKGS="$LINUX_PKGS python3 python3-pip python3-venv"
-            [[ "$NEED_PKGS" == *"rust"* ]] && LINUX_PKGS="$LINUX_PKGS rustc cargo"
-            [[ "$NEED_PKGS" == *"binutils"* ]] && LINUX_PKGS="$LINUX_PKGS binutils"
-            [[ "$NEED_PKGS" == *"clang"* ]] && LINUX_PKGS="$LINUX_PKGS clang"
-            [[ "$NEED_PKGS" == *"make"* ]] && LINUX_PKGS="$LINUX_PKGS make"
-            [[ "$NEED_PKGS" == *"cmake"* ]] && LINUX_PKGS="$LINUX_PKGS cmake"
-            # cloudflared is handled by core/deps.sh usually, but we can skip it here as check_dependencies handles it
-            
-            if [ -n "$LINUX_PKGS" ]; then
-                $SUDO_CMD apt-get update -y
-                $SUDO_CMD apt-get install -y $LINUX_PKGS
-            fi
+    # Termux 编译环境检查
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        if ! command -v rustc &>/dev/null || ! command -v clang &>/dev/null; then
+            ui_print warn "Gemini 依赖需要本地编译，但缺少 Rust/Clang。"
+            echo -e "${YELLOW}建议前往 [高级工具] -> [🐍 Python 环境管理] 补全编译环境。${NC}"
+            if ! ui_confirm "强制继续 (可能失败)?"; then return 1; fi
         fi
     fi
-    
-    check_auth_dependencies
 
+    # --- 2. 源码下载 ---
     safe_rm "$GEMINI_DIR"
-    
-    # --- 这里完全保持你的原样，调用你的自定义策略 ---
     prepare_network_strategy "$REPO_URL"
 
     local CLONE_CMD="source \"$TAVX_DIR/core/utils.sh\"; git_clone_smart '' '$REPO_URL' '$GEMINI_DIR'"
@@ -145,39 +94,59 @@ install_gemini() {
 
     cd "$GEMINI_DIR" || return
 
+    # --- 3. 虚拟环境与依赖 ---
     ui_print info "创建 Python 虚拟环境..."
-    python -m venv venv || { ui_print error "Venv 创建失败"; ui_pause; return 1; }
+    python3 -m venv venv || { ui_print error "Venv 创建失败"; ui_pause; return 1; }
 
-    ui_print info "正在编译安装依赖..."
-    echo -e "${YELLOW}⚠️ 注意：此处可能耗时较长，请保持亮屏！${NC}"
+    ui_print info "正在安装依赖..."
+    echo -e "${YELLOW}提示: Gemini 依赖较为复杂，请耐心等待编译...${NC}"
     
-    pip_install_smart "$VENV_PIP" install --upgrade pip --no-cache-dir
+    # 代理设置
+    local proxy=$(get_proxy_address)
+    local proxy_env=""
+    [ -n "$proxy" ] && proxy_env="env http_proxy='$proxy' https_proxy='$proxy'"
     
-    # --- 新增/增强 SOCKS 支持 ---
-    # Python 的 requests 库需要 'requests[socks]' 或 'PySocks' 才能通过 SOCKS 代理连接
-    # 很多用户的魔法是 socks5 协议，如果不装这个，Python 脚本会报错 Invalid Schema
-    ui_print info "预装 SOCKS 代理支持库..."
-    if ! pip_install_smart "$VENV_PIP" install "requests[socks]" "PySocks" --no-cache-dir; then
-        ui_print warn "SOCKS 库安装遇到问题，稍后将尝试继续安装主依赖..."
-    fi
+    # 编译优化参数
+    export CARGO_BUILD_JOBS=1
+    export CC=clang
+    export CXX=clang++
+    export CFLAGS="-Wno-implicit-function-declaration"
+
+    (
+        set -e
+        # 基础升级
+        $proxy_env "$VENV_PIP" install --upgrade pip
+        
+        # 预装 SOCKS 支持 (关键修复)
+        $proxy_env "$VENV_PIP" install "requests[socks]" "PySocks"
+        
+        # 安装主依赖
+        # 尝试使用清华源加速
+        if ! $proxy_env "$VENV_PIP" install -r requirements.txt; then
+            echo ">>> 官方源失败，切换镜像源重试..."
+            "$VENV_PIP" install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+        fi
+    )
     
-    if pip_install_smart "$VENV_PIP" install -r requirements.txt --no-cache-dir; then
+    if [ $? -eq 0 ]; then
         echo "HOST=0.0.0.0" > "$ENV_FILE"
         echo "PORT=8888" >> "$ENV_FILE"
         echo "GEMINI_AUTH_PASSWORD=password" >> "$ENV_FILE"
         ui_print success "Gemini 服务部署成功！"
     else
-        ui_print error "严重：依赖编译失败。"
-        echo -e "${YELLOW}请尝试运行 'pkg upgrade' 更新系统库后重试。${NC}"
+        ui_print error "依赖安装失败。"
+        echo -e "${YELLOW}可能是 Rust/Clang 环境问题，请检查 [Python 环境管理]。${NC}"
         ui_pause; return 1
     fi
+    
+    unset CARGO_BUILD_JOBS CC CXX CFLAGS
     ui_pause
 }
 
 ensure_installed() {
     if [ ! -d "$GEMINI_DIR" ]; then
         ui_print warn "检测到 Gemini 模块尚未安装。"
-        echo -e "${YELLOW}需要先下载核心组件才能继续。${NC}"
+        echo -e "${YELLOW}需要先部署服务才能继续。${NC}"
         echo ""
         if ui_confirm "是否立即开始安装？"; then
             install_gemini
@@ -218,7 +187,7 @@ authenticate_google() {
 
     echo -e "${GREEN}>>> 正在后台启动认证进程...${NC}"
     nohup env -u GEMINI_CREDENTIALS \
-        GEMINI_AUTH_PASSWORD="init" \
+        GEMINI_AUTH_PASSWORD=\"init\" \
         PYTHONUNBUFFERED=1 \
         $proxy_env \
         "$VENV_PYTHON" -u run.py > "$LOG_FILE" 2>&1 &
@@ -231,7 +200,7 @@ authenticate_google() {
     for i in {1..10}; do
         if ! kill -0 $APP_PID 2>/dev/null; then CRASHED=1; break; fi
         if grep -q "https://accounts.google.com" "$LOG_FILE"; then
-            url=$(grep -o "https://accounts.google.com[^\ ]*" "$LOG_FILE" | head -n 1 | tr -d '\r\n')
+            url=$(grep -o "https://accounts.google.com[^ ]*" "$LOG_FILE" | head -n 1 | tr -d '\r\n')
             break
         fi
         echo -ne "."
@@ -385,7 +354,7 @@ start_service() {
     
     ui_header "启动服务"
     cd "$GEMINI_DIR" || return
-    local START_CMD="$proxy_env GEMINI_AUTH_PASSWORD='$pass' setsid nohup $VENV_PYTHON run.py > '$LOG_FILE' 2>&1 & echo \$! > '$GEMINI_PID_FILE'"
+    local START_CMD="$proxy_env GEMINI_AUTH_PASSWORD='$pass' setsid nohup $VENV_PYTHON run.py > '$LOG_FILE' 2>&1 & echo \\$! > '$GEMINI_PID_FILE'"
     
     if ui_spinner "正在启动服务..." "eval \"$START_CMD\" sleep 3"; then
         if [ -f "$GEMINI_PID_FILE" ] && kill -0 $(cat "$GEMINI_PID_FILE") 2>/dev/null; then
@@ -465,7 +434,7 @@ configure_params() {
         
         CHOICE=$(ui_menu "选择修改项" "🆔 修改项目标识 (Project ID)" "🔌 修改端口" "🔑 修改密码" "🔙 返回")
         case "$CHOICE" in
-            *"项目标识"*)
+            *"项目标识"*) 
                 echo -e "${CYAN}提示: 请输入您的 Google Cloud Project ID (如: my-project-123)${NC}"
                 echo -e "${YELLOW}留空则使用自动探测模式。${NC}"
                 new_id=$(ui_input "输入 Project ID" "$proj" "false")
@@ -499,7 +468,7 @@ configure_params() {
                     if grep -q "^GEMINI_AUTH_PASSWORD=" "$ENV_FILE"; then sed -i "s/^GEMINI_AUTH_PASSWORD=.*/GEMINI_AUTH_PASSWORD=$p/" "$ENV_FILE"; else echo "GEMINI_AUTH_PASSWORD=$p" >> "$ENV_FILE"; fi
                     pass=$p; ui_print success "已保存 (重启生效)"
                 fi ;;
-            *"返回"*) return ;;
+            *"返回"*) return ;; 
         esac
     done
 }
@@ -530,16 +499,16 @@ gemini_menu() {
             "🔙 返回上级"
         )
         case "$CHOICE" in
-            *"启动"*) start_service ;;
+            *"启动"*) start_service ;; 
             *"远程穿透"*) 
-                if pgrep -f "cloudflared" >/dev/null; then stop_tunnel; else start_tunnel; fi ;;
-            *"授权"*) authenticate_google ;;
-            *"安装"*) install_gemini ;;
-            *"连接信息"*) show_info ;;
-            *"配置"*) configure_params ;;
-            *"日志"*) safe_log_monitor "$LOG_FILE" ;;
-            *"停止"*) stop_service ;;
-            *"返回"*) return ;;
+                if pgrep -f "cloudflared" >/dev/null; then stop_tunnel; else start_tunnel; fi ;; 
+            *"授权"*) authenticate_google ;; 
+            *"安装"*) install_gemini ;; 
+            *"连接信息"*) show_info ;; 
+            *"配置"*) configure_params ;; 
+            *"日志"*) safe_log_monitor "$LOG_FILE" ;; 
+            *"停止"*) stop_service ;; 
+            *"返回"*) return ;; 
         esac
     done
 }

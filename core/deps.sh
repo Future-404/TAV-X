@@ -77,7 +77,58 @@ install_cloudflared_linux() {
     return 1
 }
 
+# --- Python Environment Management ---
+
+check_python_installed() {
+    if command -v python3 &>/dev/null && command -v pip3 &>/dev/null; then
+        return 0
+    fi
+    return 1
+}
+
+install_python_system() {
+    ui_header "Python 环境安装"
+    ui_print info "检测到当前模块需要 Python 运行时..."
+    
+    if check_python_installed; then
+        ui_print success "Python 环境已就绪。"
+        sleep 1
+        return 0
+    fi
+
+    echo -e "${YELLOW}即将安装 Python 及其基础组件...${NC}"
+    echo "----------------------------------------"
+    
+    local install_cmd=""
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        install_cmd="pkg install -y python"
+    else
+        if command -v apt-get &>/dev/null; then
+            install_cmd="$SUDO_CMD apt-get update && $SUDO_CMD apt-get install -y python3 python3-pip python3-venv"
+        else
+            ui_print error "暂不支持非 Apt 系 Linux 的自动安装。"
+            ui_print info "请手动安装: python3, pip, venv"
+            ui_pause; return 1
+        fi
+    fi
+    
+    if ui_spinner "正在安装 Python..." "$install_cmd"; then
+        if check_python_installed; then
+            ui_print success "Python 安装成功！"
+            # 配置 pip 默认源
+            pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple >/dev/null 2>&1
+            return 0
+        fi
+    fi
+    
+    ui_print error "Python 安装失败，请检查网络或软件源。"
+    ui_pause
+    return 1
+}
+
 check_dependencies() {
+    # ... (existing code)
+}
     if [ "$DEPS_CHECKED" == "true" ]; then return 0; fi
 
     local MISSING_PKGS=""
