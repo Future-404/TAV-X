@@ -188,39 +188,160 @@ configure_memory() {
     ui_pause
 }
 
-configure_download_network() {
-    ui_header "下载网络配置"
-    local curr_mode="自动 (智能自愈)"
-    if [ -f "$NETWORK_CONFIG" ]; then
-        local c=$(cat "$NETWORK_CONFIG"); curr_mode="${c#*|}"
-        [ ${#curr_mode} -gt 30 ] && curr_mode="${curr_mode:0:28}..."
-    fi
-    echo -e "当前策略: ${CYAN}$curr_mode${NC}\n"
-    echo -e "说明: 脚本默认会自动探测代理或使用镜像源，无需手动设置。"
-    echo -e "仅当您使用非标准端口或需要强制指定时才使用自定义。"
+change_pip_source() {
+    ui_header "PIP 源配置 (Python)"
+    local current=$(pip config get global.index-url 2>/dev/null)
+    [ -z "$current" ] && current="官方源 (默认)"
+    echo -e "当前源: ${CYAN}$current${NC}"
     echo ""
 
-    CHOICE=$(ui_menu "请选择模式" "🔧 配置自定义代理 (Custom)" "🔄 重置为自动模式 (Reset)" "🔙 返回")
+    local OPTIONS=(
+        "清华源|https://pypi.tuna.tsinghua.edu.cn/simple"
+        "阿里源|https://mirrors.aliyun.com/pypi/simple/"
+        "腾讯源|https://mirrors.cloud.tencent.com/pypi/simple"
+        "官方源|https://pypi.org/simple"
+    )
 
-    case "$CHOICE" in
-        *"自定义"*)
-            local url=$(ui_input "输入代理 (如 http://127.0.0.1:7890)" "" "false")
-            if [[ "$url" =~ ^(http|https|socks5|socks5h)://.* ]]; then 
-                echo "PROXY|$url" > "$NETWORK_CONFIG"
-                ui_print success "已保存自定义代理。"
-            else 
-                ui_print error "格式错误，请包含协议头 (如 socks5://)"
-            fi
-            ui_pause ;;
-        *"重置"*)
-            if [ -f "$NETWORK_CONFIG" ]; then
-                rm -f "$NETWORK_CONFIG"
-                ui_print success "已重置。脚本将自动管理网络连接。"
+    local MENU_OPTS=()
+    local URLS=()
+    for item in "${OPTIONS[@]}"; do
+        MENU_OPTS+=("${item%%|*}")
+        URLS+=("${item#*|}")
+    done
+    MENU_OPTS+=("🔙 返回")
+
+    local CHOICE=$(ui_menu "选择镜像源" "${MENU_OPTS[@]}")
+    
+    if [[ "$CHOICE" == *"返回"* ]]; then return; fi
+
+    local TARGET_URL=""
+    for i in "${!MENU_OPTS[@]}"; do
+        if [[ "${MENU_OPTS[$i]}" == "$CHOICE" ]]; then TARGET_URL="${URLS[$i]}"; break; fi
+    done
+
+    if [ -n "$TARGET_URL" ]; then
+        if pip config set global.index-url "$TARGET_URL"; then
+            ui_print success "PIP 源已设置为: $CHOICE"
+        else
+            ui_print error "设置失败，请检查 pip 是否安装。"
+        fi
+    fi
+    ui_pause
+}
+
+change_npm_source() {
+    ui_header "NPM 源配置 (Node.js)"
+    local current=$(npm config get registry 2>/dev/null)
+    echo -e "当前源: ${CYAN}$current${NC}"
+    echo ""
+
+    local OPTIONS=(
+        "淘宝源 (npmmirror)|https://registry.npmmirror.com/"
+        "腾讯源|https://mirrors.cloud.tencent.com/npm/"
+        "官方源|https://registry.npmjs.org/"
+    )
+
+    local MENU_OPTS=()
+    local URLS=()
+    for item in "${OPTIONS[@]}"; do
+        MENU_OPTS+=("${item%%|*}")
+        URLS+=("${item#*|}")
+    done
+    MENU_OPTS+=("🔙 返回")
+
+    local CHOICE=$(ui_menu "选择镜像源" "${MENU_OPTS[@]}")
+    
+    if [[ "$CHOICE" == *"返回"* ]]; then return; fi
+
+    local TARGET_URL=""
+    for i in "${!MENU_OPTS[@]}"; do
+        if [[ "${MENU_OPTS[$i]}" == "$CHOICE" ]]; then TARGET_URL="${URLS[$i]}"; break; fi
+    done
+
+    if [ -n "$TARGET_URL" ]; then
+        if npm config set registry "$TARGET_URL"; then
+            ui_print success "NPM 源已设置为: $CHOICE"
+        else
+            ui_print error "设置失败，请检查 npm 是否安装。"
+        fi
+    fi
+    ui_pause
+}
+
+change_system_source() {
+    ui_header "系统软件源配置"
+    
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        if command -v termux-change-repo &> /dev/null; then
+            ui_print info "正在启动 Termux 官方换源工具..."
+            sleep 1
+            termux-change-repo
+        else
+            ui_print error "未找到 termux-change-repo 工具。"
+        fi
+    else
+        # Linux Logic
+        echo -e "${YELLOW}Linux 一键换源 (推荐使用 LinuxMirrors)${NC}"
+        echo -e "此脚本由 LinuxMirrors 开源项目提供，支持 Debian/Ubuntu/CentOS 等主流系统。"
+        echo -e "它可以自动检测系统版本并替换为最快的国内源。"
+        echo ""
+        
+        if ui_confirm "是否运行一键换源脚本？"; then
+            if command -v curl &> /dev/null; then
+                bash <(curl -sSL https://linuxmirrors.cn/main.sh)
             else
-                ui_print info "当前已是默认自动模式。"
+                ui_print error "未找到 curl，请先安装: sudo apt install curl"
             fi
-            ui_pause ;;
-    esac
+        fi
+    fi
+    ui_pause
+}
+
+configure_download_network() {
+    while true; do
+        ui_header "网络与软件源配置"
+        local curr_mode="自动 (智能自愈)"
+        if [ -f "$NETWORK_CONFIG" ]; then
+            local c=$(cat "$NETWORK_CONFIG"); curr_mode="${c#*|}"
+            [ ${#curr_mode} -gt 30 ] && curr_mode="${curr_mode:0:28}..."
+        fi
+        echo -e "下载代理策略: ${CYAN}$curr_mode${NC}"
+        echo "----------------------------------------"
+
+        CHOICE=$(ui_menu "请选择操作" \
+            "🔧 配置自定义代理 (Custom)" \
+            "🔄 重置为自动模式 (Reset)" \
+            "🐍 更换 PIP 源 (Python)" \
+            "📦 更换 NPM 源 (Node.js)" \
+            "🐧 更换系统源 (Apt/Pkg)" \
+            "🔙 返回" \
+        )
+
+        case "$CHOICE" in
+            *"自定义"*)
+                local url=$(ui_input "输入代理 (如 http://127.0.0.1:7890)" "" "false")
+                if [[ "$url" =~ ^(http|https|socks5|socks5h)://.* ]]; then 
+                    echo "PROXY|$url" > "$NETWORK_CONFIG"
+                    ui_print success "已保存自定义代理。"
+                else 
+                    ui_print error "格式错误，请包含协议头 (如 socks5://)"
+                fi
+                ui_pause ;;
+            *"重置"*)
+                if [ -f "$NETWORK_CONFIG" ]; then
+                    rm -f "$NETWORK_CONFIG"
+                    ui_print success "配置文件已清除。"
+                fi
+                # 清除内存中的镜像源缓存
+                unset SELECTED_MIRROR
+                ui_print success "网络策略已重置为自动模式。"
+                ui_pause ;;
+            *"PIP"*) change_pip_source ;;
+            *"NPM"*) change_npm_source ;;
+            *"系统源"*) change_system_source ;;
+            *"返回"*) return ;;
+        esac
+    done
 }
 
 change_port() {

@@ -1,6 +1,27 @@
 #!/bin/bash
 # TAV-X Core: Environment Context & Global Config
 
+# --- OS Detection ---
+if [ -n "$TERMUX_VERSION" ]; then
+    export OS_TYPE="TERMUX"
+    export SUDO_CMD=""
+    # Termux specific temp dir or fallback
+    export TMP_DIR="/data/data/com.termux/files/usr/tmp"
+    [ ! -d "$TMP_DIR" ] && export TMP_DIR="$PREFIX/tmp"
+else
+    export OS_TYPE="LINUX"
+    # Detect sudo availability
+    if [ "$EUID" -eq 0 ]; then
+        export SUDO_CMD=""
+    elif command -v sudo &> /dev/null; then
+        export SUDO_CMD="sudo"
+    else
+        export SUDO_CMD=""
+    fi
+    export TMP_DIR="${TMPDIR:-/tmp}"
+fi
+mkdir -p "$TMP_DIR"
+
 export TAVX_DIR="${TAVX_DIR:-$HOME/.tav_x}"
 export TAVX_ROOT="$TAVX_DIR"
 
@@ -11,7 +32,14 @@ mkdir -p "$CONFIG_DIR"
 
 export NETWORK_CONFIG="$CONFIG_DIR/network.conf"
 
-export CURRENT_VERSION="v2.5.3"
+# --- PID Files for Process Management ---
+export ST_PID_FILE="$TAVX_DIR/.st.pid"
+export CF_PID_FILE="$TAVX_DIR/.cf.pid"
+export CLEWD_PID_FILE="$TAVX_DIR/.clewd.pid"
+export GEMINI_PID_FILE="$TAVX_DIR/.gemini.pid"
+export AUDIO_PID_FILE="$TAVX_DIR/.audio_heartbeat.pid"
+
+export CURRENT_VERSION="v2.6.0"
 export RED='\033[0;31m'
 export GREEN='\033[0;32m'
 export YELLOW='\033[1;33m'
@@ -21,15 +49,15 @@ export NC='\033[0m'
 
 # 1. 常用代理端口池
 export GLOBAL_PROXY_PORTS=(
-    "7890:socks5h"
-    "7891:socks5h"
+    "7890:http"
+    "7891:http"
     "10809:http"
-    "10808:socks5h"
+    "10808:http"
     "20171:http"
-    "20170:socks5h"
+    "20170:http"
     "9090:http"
     "8080:http"
-    "1080:socks5h"
+    "1080:http"
 )
 
 # 2. GitHub 镜像源池

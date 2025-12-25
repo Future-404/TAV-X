@@ -30,7 +30,7 @@ get_memory_args() {
 
 get_smart_proxy_url() {
     if [ -f "$NETWORK_CONFIG" ]; then
-        local c=$(cat "$NETWORK_CONFIG"); local t=${c%%|*}; local v=${c#*|}
+        local c=$(cat "$NETWORK_CONFIG"); local t=${c%%|*}; local v=${c#*|};
         v=$(echo "$v"|tr -d '\n\r')
         if [ "$t" == "PROXY" ]; then
             echo "$v"
@@ -76,9 +76,19 @@ check_install_integrity() {
 
 stop_services() {
     local PORT=$(get_active_port)
+    
+    # Try stopping by PID first
+    for pid_file in "$ST_PID_FILE" "$CF_PID_FILE"; do
+        if [ -f "$pid_file" ]; then
+            local pid=$(cat "$pid_file")
+            [ -n "$pid" ] && kill -9 "$pid" >/dev/null 2>&1
+            rm -f "$pid_file"
+        fi
+    done
+
     pkill -f "node server.js"
     pkill -f "cloudflared"
-    termux-wake-unlock 2>/dev/null
+    if command -v termux-wake-unlock &>/dev/null; then termux-wake-unlock; fi
     
     local wait_count=0
     while pgrep -f "node server.js" > /dev/null; do
@@ -97,9 +107,11 @@ stop_services() {
 start_node_server() {
     local MEM_ARGS=$(get_memory_args)
     cd "$INSTALL_DIR" || return 1
-    termux-wake-lock
+    if command -v termux-wake-lock &>/dev/null; then termux-wake-lock; fi
     rm -f "$SERVER_LOG"
-    ui_spinner "正在启动酒馆服务..." "setsid nohup node $MEM_ARGS server.js > '$SERVER_LOG' 2>&1 & sleep 2"
+    
+    # Start and save PID
+    ui_spinner "正在启动酒馆服务..." "setsid nohup node $MEM_ARGS server.js > '$SERVER_LOG' 2>&1 & sleep 2; pgrep -f 'node server.js' | head -n 1 > '$ST_PID_FILE'"
 }
 
 detect_protocol_logic() {
@@ -134,6 +146,7 @@ start_fixed_tunnel() {
     else
         setsid nohup cloudflared $CF_CMD > "$CF_LOG" 2>&1 &
     fi
+    echo $! > "$CF_PID_FILE"
     
     ui_print success "服务已启动！"
     echo ""
@@ -158,9 +171,10 @@ start_temp_tunnel() {
     else
         setsid nohup cloudflared "${CF_ARGS[@]}" > "$CF_LOG" 2>&1 &
     fi
+    echo $! > "$CF_PID_FILE"
     
     rm -f "$TAVX_DIR/.temp_link"
-    local wait_cmd="source \"$TAVX_DIR/core/launcher.sh\"; link=\$(wait_for_link_logic); if [ -n \"\$link\" ]; then echo \"\$link\" > \"$TAVX_DIR/.temp_link\"; exit 0; else exit 1; fi"
+    local wait_cmd="source \"$TAVX_DIR/core/launcher.sh\"; link=\\\$(wait_for_link_logic\"); if [ -n \"\\$link\" ]; then echo \"\\$link\" > \"$TAVX_DIR/.temp_link\"; exit 0; else exit 1; fi"
     
     if ui_spinner "建立隧道 ($PROTOCOL)..." "$wait_cmd"; then
         local LINK=$(cat "$TAVX_DIR/.temp_link")
@@ -185,12 +199,18 @@ start_menu() {
         local MEM_ARGS=$(get_memory_args)
         
         local status_txt=""
-        if pgrep -f "cloudflared" >/dev/null; then 
+        
+        # Check Cloudflared by PID
+        if [ -f "$CF_PID_FILE" ] && kill -0 $(cat "$CF_PID_FILE") 2>/dev/null; then
             if grep -q "protocol=quic" "$CF_LOG" 2>/dev/null; then P="QUIC"; else P="HTTP2"; fi
             status_txt="${GREEN}● 穿透运行中 ($P)${NC}"
-        elif pgrep -f "node server.js" >/dev/null; then 
+        
+        # Check SillyTavern by PID
+        elif [ -f "$ST_PID_FILE" ] && kill -0 $(cat "$ST_PID_FILE") 2>/dev/null; then
             status_txt="${GREEN}● 本地运行中${NC}"
-        else status_txt="${RED}● 已停止${NC}"; fi
+        else 
+            status_txt="${RED}● 已停止${NC}"
+        fi
         
         [ -n "$PROXY_URL" ] && status_txt="$status_txt ${CYAN}[代理活跃]${NC}"
         local MEM_SHOW=""
@@ -208,6 +228,8 @@ start_menu() {
                 start_node_server
                 local PORT=$(get_active_port)
                 ui_print success "本地启动: http://127.0.0.1:$PORT"
+                # Open browser support
+                open_browser "http://127.0.0.1:$PORT"
                 ui_pause ;;
                 
             *"远程穿透"*) 
@@ -225,9 +247,9 @@ start_menu() {
                 fi
                 ui_pause ;;
             
-            *"推荐配置"*) apply_recommended_settings ;;
+            *"推荐配置"*) apply_recommended_settings ;; 
             
-            *"远程链接"*)
+            *"远程链接"*) 
                 local TOKEN_FILE="$TAVX_DIR/config/cf_token"
                 if [ -f "$TOKEN_FILE" ] && [ -s "$TOKEN_FILE" ]; then
                     ui_print info "当前为固定隧道模式"
@@ -242,13 +264,13 @@ start_menu() {
                         ui_print warn "无法获取链接 (服务未启动或网络超时)"
                     fi
                 fi
-                ui_pause ;;
+                ui_pause ;; 
                 
             *"日志"*) 
                 SUB=$(ui_menu "选择日志" "📜 酒馆日志" "🚇 隧道日志" "🔙 返回")
-                case "$SUB" in *"酒馆"*) safe_log_monitor "$SERVER_LOG" ;; *"隧道"*) safe_log_monitor "$CF_LOG" ;; esac ;;
+                case "$SUB" in *"酒馆"*) safe_log_monitor "$SERVER_LOG" ;; *"隧道"*) safe_log_monitor "$CF_LOG" ;; esac ;; 
                 
-            *"停止"*) stop_services; ui_pause ;;
+            *"停止"*) stop_services; ui_pause ;; 
             *"返回"*) return ;;
         esac
     done

@@ -18,6 +18,47 @@ check_dependencies
 check_for_updates
 send_analytics
 
+stop_all_services_routine() {
+    # 辅助停止函数
+    _stop_by_pid() {
+        local pid_file="$1"; local pattern="$2"
+        if [ -f "$pid_file" ]; then
+            local pid=$(cat "$pid_file")
+            if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+                kill -9 "$pid" >/dev/null 2>&1
+            fi
+            rm -f "$pid_file"
+        fi
+        [ -n "$pattern" ] && pkill -9 -f "$pattern" >/dev/null 2>&1
+    }
+
+    # 1. Audio Heartbeat
+    _stop_by_pid "$AUDIO_PID_FILE" "mpv --no-terminal"
+    
+    # 2. ADB
+    if command -v adb &>/dev/null; then
+        adb kill-server >/dev/null 2>&1
+    fi
+    pkill -9 -f 'adb'
+    
+    # 3. Main Services
+    _stop_by_pid "$ST_PID_FILE" "node server.js"
+    _stop_by_pid "$CF_PID_FILE" "cloudflared"
+    
+    # 4. Plugins / Tools
+    _stop_by_pid "$CLEWD_PID_FILE" "node clewd.js"
+    pkill -9 -f 'clewdr'      # Binary fallback
+    
+    _stop_by_pid "$GEMINI_PID_FILE" "run.py"
+    
+    # Cleanup
+    if command -v termux-wake-unlock &> /dev/null; then
+        termux-wake-unlock >/dev/null 2>&1
+    fi
+    rm -f "$TAVX_DIR/.temp_link"
+}
+export -f stop_all_services_routine
+
 # --- 动态模块加载器 ---
 load_advanced_tools_menu() {
     local module_files=()
@@ -98,14 +139,24 @@ load_advanced_tools_menu() {
 
 while true; do
     S_ST=0; S_CF=0; S_ADB=0; S_CLEWD=0; S_GEMINI=0; S_AUDIO=0
-    pgrep -f "node server.js" >/dev/null && S_ST=1
-    pgrep -f "cloudflared" >/dev/null && S_CF=1
+    
+    # Check SillyTavern
+    if [ -f "$ST_PID_FILE" ] && kill -0 $(cat "$ST_PID_FILE") 2>/dev/null; then S_ST=1; fi
+    
+    # Check Cloudflared
+    if [ -f "$CF_PID_FILE" ] && kill -0 $(cat "$CF_PID_FILE") 2>/dev/null; then S_CF=1; fi
+    
+    # Check ADB (This is a connectivity check, keeps strictly checking for connected devices)
     command -v adb &>/dev/null && adb devices 2>/dev/null | grep -q "device$" && S_ADB=1
-    pgrep -f "clewd" >/dev/null && S_CLEWD=1
-    pgrep -f "run.py" >/dev/null && S_GEMINI=1
-    if [ -f "$TAVX_DIR/.audio_heartbeat.pid" ] && kill -0 $(cat "$TAVX_DIR/.audio_heartbeat.pid") 2>/dev/null; then
-        S_AUDIO=1
-    fi
+    
+    # Check Clewd
+    if [ -f "$CLEWD_PID_FILE" ] && kill -0 $(cat "$CLEWD_PID_FILE") 2>/dev/null; then S_CLEWD=1; fi
+    
+    # Check Gemini
+    if [ -f "$GEMINI_PID_FILE" ] && kill -0 $(cat "$GEMINI_PID_FILE") 2>/dev/null; then S_GEMINI=1; fi
+    
+    # Check Audio
+    if [ -f "$AUDIO_PID_FILE" ] && kill -0 $(cat "$AUDIO_PID_FILE") 2>/dev/null; then S_AUDIO=1; fi
 
     NET_DL="自动优选"
     if [ -f "$NETWORK_CONFIG" ]; then
@@ -172,23 +223,7 @@ while true; do
                 *"结束所有"*)
                     echo ""
                     if ui_confirm "确定要关闭所有服务（酒馆、穿透、保活等）吗？"; then
-                        ui_spinner "正在停止所有进程..." "
-                            if [ -f '$TAVX_DIR/.audio_heartbeat.pid' ]; then
-                                HB_PID=\$(cat '$TAVX_DIR/.audio_heartbeat.pid')
-                                kill -9 \$HB_PID >/dev/null 2>&1
-                                rm -f '$TAVX_DIR/.audio_heartbeat.pid'
-                            fi
-                            pkill -f 'mpv --no-terminal'
-                            adb kill-server >/dev/null 2>&1
-                            pkill -f 'adb'
-                            pkill -f 'node server.js'
-                            pkill -f 'cloudflared'
-                            pkill -f 'clewd'
-                            pkill -f 'run.py'
-                            
-                            termux-wake-unlock 2>/dev/null
-                            rm -f '$TAVX_DIR/.temp_link'
-                        "
+                        ui_spinner "正在停止所有进程..." "stop_all_services_routine"
                         ui_print success "所有服务已停止，资源已释放。"
                         exit 0
                     else

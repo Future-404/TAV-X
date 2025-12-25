@@ -75,6 +75,29 @@ uninstall_gemini() {
     ui_pause
 }
 
+uninstall_autoglm() {
+    local AUTOGLM_DIR="$TAVX_DIR/autoglm"
+    ui_header "卸载 AutoGLM 智能体"
+    
+    if [ ! -d "$AUTOGLM_DIR" ]; then
+        ui_print warn "未检测到 AutoGLM 模块。"
+        ui_pause; return
+    fi
+
+    if ! verify_kill_switch; then return; fi
+    
+    # Kill any potential running python process for autoglm (if any running background)
+    # Usually it's run foreground, but just in case
+    
+    if ui_spinner "正在清除 AutoGLM 模块..." "source \"$TAVX_DIR/core/utils.sh\"; safe_rm '$AUTOGLM_DIR'"; then
+        sed -i '/alias ai=/d' "$HOME/.bashrc"
+        ui_print success "AutoGLM 已卸载，ai 命令已移除。"
+    else
+        ui_print error "删除失败。"
+    fi
+    ui_pause
+}
+
 uninstall_adb() {
     local ADB_DIR="$TAVX_DIR/adb_tools"
     ui_header "卸载 ADB 组件"
@@ -110,6 +133,27 @@ uninstall_adb() {
     ui_pause
 }
 
+uninstall_aistudio() {
+    ui_header "卸载 AIStudio 插件"
+    local PATH_SERVER="$INSTALL_DIR/plugins/AIStudioBuildProxy"
+    local PATH_CLIENT="$INSTALL_DIR/public/scripts/extensions/third-party/AIStudioBuildProxy"
+    
+    if [ ! -d "$PATH_SERVER" ] && [ ! -d "$PATH_CLIENT" ]; then
+        ui_print warn "未检测到 AIStudio 插件。"
+        ui_pause; return
+    fi
+    
+    if ! verify_kill_switch; then return; fi
+    
+    ui_spinner "正在清理文件..." "
+        source \"$TAVX_DIR/core/utils.sh\"
+        safe_rm '$PATH_SERVER'
+        safe_rm '$PATH_CLIENT'
+    "
+    ui_print success "已卸载。重启酒馆后生效。"
+    ui_pause
+}
+
 uninstall_deps() {
     ui_header "卸载环境依赖"
     echo -e "${RED}警告：这将卸载 Node.js, Cloudflared 等组件。${NC}"
@@ -134,7 +178,7 @@ full_wipe() {
     echo -e "${RED}危险等级：⭐⭐⭐⭐⭐${NC}"
     echo -e "此操作将执行以下所有动作："
     echo -e "  1. 删除 SillyTavern 所有数据"
-    echo -e "  2. 删除 ClewdR、Gemini、ADB 等扩展模块"
+    echo -e "  2. 删除 ClewdR、Gemini、AutoGLM 等扩展模块"
     echo -e "  3. 删除 TAV-X 脚本及配置"
     echo -e "  4. 清理环境变量 (.bashrc)"
     echo ""
@@ -151,8 +195,10 @@ full_wipe() {
         safe_rm '$INSTALL_DIR'
         safe_rm '$TAVX_DIR/clewdr'
         safe_rm '$TAVX_DIR/gemini_proxy'
+        safe_rm '$TAVX_DIR/autoglm'
         safe_rm '$TAVX_DIR/adb_tools'
         sed -i '/alias st=/d' '$HOME/.bashrc'
+        sed -i '/alias ai=/d' '$HOME/.bashrc'
         sed -i '/adb_tools\/platform-tools/d' '$HOME/.bashrc'
     "
     
@@ -176,7 +222,9 @@ uninstall_menu() {
             "🗑️ 卸载 SillyTavern" \
             "🦀 卸载 ClewdR 模块" \
             "♊ 卸载 Gemini 模块" \
-            "🤖 卸载 ADB 组件" \
+            "🤖 卸载 AutoGLM 智能体" \
+            "🏗️ 卸载 AIStudio 插件" \
+            "📟 卸载 ADB 组件" \
             "📦 卸载环境依赖" \
             "💥 一键彻底毁灭(全清)" \
             "🔙 返回上级"
@@ -186,6 +234,8 @@ uninstall_menu() {
             *"SillyTavern"*) uninstall_st ;;
             *"ClewdR"*) uninstall_clewd ;;
             *"Gemini"*) uninstall_gemini ;;
+            *"AutoGLM"*) uninstall_autoglm ;;
+            *"AIStudio"*) uninstall_aistudio ;;
             *"ADB"*) uninstall_adb ;;
             *"环境依赖"*) uninstall_deps ;;
             *"彻底毁灭"*) full_wipe ;;

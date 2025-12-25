@@ -18,11 +18,35 @@ safe_rm() {
 
 pause() { echo ""; read -n 1 -s -r -p "按任意键继续..."; echo ""; }
 
+open_browser() {
+    local url=$1
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        command -v termux-open &>/dev/null && termux-open "$url"
+    else
+        # Linux / Generic
+        if [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ]; then
+            if command -v xdg-open &>/dev/null; then 
+                xdg-open "$url" >/dev/null 2>&1
+                return
+            elif command -v python3 &>/dev/null; then 
+                python3 -m webbrowser "$url" >/dev/null 2>&1
+                return
+            fi
+        fi
+        
+        # Headless fallback
+        echo ""
+        echo -e "${YELLOW}>>> 请在浏览器中访问以下链接:${NC}"
+        echo -e "${CYAN}$url${NC}"
+        echo ""
+    fi
+}
 send_analytics() {
     (
         local STAT_URL="https://tav-api.future404.qzz.io"
-        if command -v curl &> /dev/null; then
-            curl -s -m 5 "${STAT_URL}?ver=${CURRENT_VERSION}&type=runtime" > /dev/null 2>&1
+        if command -v curl &> /dev/null;
+ then
+            curl -s -m 5 "${STAT_URL}?ver=${CURRENT_VERSION}&type=runtime&os=${OS_TYPE}" > /dev/null 2>&1
         fi
     ) &
 }
@@ -58,8 +82,9 @@ get_active_proxy() {
 
     for entry in "${GLOBAL_PROXY_PORTS[@]}"; do
         local port=${entry%%:*}
-        local proto=${entry#*:}
-        if timeout 0.1 bash -c "</dev/tcp/127.0.0.1/$port" 2>/dev/null; then
+        local proto=${entry#*:} 
+        if timeout 0.1 bash -c "</dev/tcp/127.0.0.1/$port" 2>/dev/null;
+ then
             if [[ "$proto" == "socks5h" ]]; then echo "socks5h://127.0.0.1:$port"; else echo "http://127.0.0.1:$port"; fi
             return 0
         fi
@@ -96,8 +121,11 @@ select_mirror_interactive() {
     echo -e "${CYAN}正在并发测速，请稍候...${NC}"
     echo "----------------------------------------"
     
-    local tmp_race_file="$TAVX_DIR/.mirror_race"
+    # Use global TMP_DIR if available
+    local tmp_dir="${TMP_DIR:-$TAVX_DIR}"
+    local tmp_race_file="$tmp_dir/.mirror_race"
     rm -f "$tmp_race_file"
+    
     for mirror in "${GLOBAL_MIRRORS[@]}"; do
         (
             local start=$(date +%s%N)
@@ -121,7 +149,8 @@ select_mirror_interactive() {
     local OPTIONS=()
     local RAW_URLS=()
     
-    while IFS='|' read -r dur url; do
+    while IFS='|' read -r dur url;
+ do
         local mark="🟢"
         if [ "$dur" -gt 800 ]; then mark="🟡"; fi
         if [ "$dur" -gt 1500 ]; then mark="🔴"; fi
@@ -201,6 +230,31 @@ git_clone_smart() {
     if env -u http_proxy -u https_proxy git clone --depth 1 $branch_arg "https://github.com/${clean_repo}" "$target_dir"; then return 0; fi
 
     return 1
+}
+
+fix_git_remote() {
+    local dir=$1
+    local repo=$2
+    
+    [ ! -d "$dir/.git" ] && return 1
+    cd "$dir" || return 1
+    
+    auto_load_proxy_env
+    local proxy_active=$?
+    
+    if [ $proxy_active -eq 0 ]; then
+         git remote set-url origin "https://github.com/${repo}"
+         return 0
+    fi
+    
+    if [ -n "$SELECTED_MIRROR" ]; then
+         local final_url="${SELECTED_MIRROR}https://github.com/${repo}"
+         if [[ "$SELECTED_MIRROR" == *"github.com"* ]]; then final_url="https://github.com/${repo}"; fi
+         git remote set-url origin "$final_url"
+         return 0
+    fi
+    
+    git remote set-url origin "https://github.com/${repo}"
 }
 
 download_file_smart() {

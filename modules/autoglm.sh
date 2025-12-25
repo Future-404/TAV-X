@@ -20,26 +20,36 @@ TERMUX_API_PKG="com.termux.api"
 check_uv_installed() {
     if command -v uv &> /dev/null; then return 0; fi
     
-    ui_print info "准备安装 uv (本地编译模式)..."
+    ui_print info "正在尝试快速安装 uv..."
+    if pip install uv >/dev/null 2>&1; then
+        ui_print success "uv 安装成功 (Fast)"
+        return 0
+    fi
+
+    ui_print info "快速安装失败，准备从源码编译安装..."
     echo "----------------------------------------"
-    echo ">>> [Setup] 正在补全 Rust 编译环境..."
+    echo ">>> [Setup] 正在补全编译环境..."
     
-    # 1. 必须安装 Rust 和 Binutils 才能编译 uv
-    pkg install rust binutils -y
+    # 1. 只有在 pip 直接安装失败时才补全编译环境
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        pkg install rust binutils -y
+    else
+        if command -v apt-get &>/dev/null; then
+            $SUDO_CMD apt-get install -y rustc cargo binutils
+        fi
+    fi
     
     # 2. 确保 pip 支持代理
-    echo ">>> [Setup] 检查代理支持..."
-    pip install pysocks
+    pip install pysocks >/dev/null 2>&1
     
     # 3. 编译安装 uv
     echo ">>> [Build] 正在编译安装 uv (耗时较长，请耐心等待)..."
-    # 限制并发防止手机卡死
     export CARGO_BUILD_JOBS=1
     if pip install uv; then
         ui_print success "uv 安装成功 (Native)"
         return 0
     else
-        ui_print error "uv 安装失败，请检查上方报错。"
+        ui_print error "uv 安装失败，请尝试手动安装: pip install uv"
         return 1
     fi
 }
@@ -152,9 +162,22 @@ install_autoglm() {
     (
         set -e
         echo ">>> [Phase 1] 安装系统基础库..."
-        local SYS_PKGS="termux-api python-numpy python-pillow python-cryptography libjpeg-turbo libpng libxml2 libxslt clang make rust binutils"
-        pkg install root-repo science-repo -y
-        pkg install -y -o Dpkg::Options::="--force-confold" $SYS_PKGS
+        
+        if [ "$OS_TYPE" == "TERMUX" ]; then
+            # Termux: 恢复全量编译环境，确保能构建所有 Python 扩展
+            local SYS_PKGS="termux-api python-numpy python-pillow python-cryptography libjpeg-turbo libpng libxml2 libxslt clang make rust binutils"
+            pkg install root-repo science-repo -y
+            pkg install -y -o Dpkg::Options::="--force-confold" $SYS_PKGS
+        else
+            # Linux: 基础运行环境 (尝试利用 PyPI 的预编译 Wheel)
+            local SYS_PKGS="python3-dev python3-pip python3-venv libjpeg-dev zlib1g-dev libxml2-dev libxslt1-dev"
+            if command -v apt-get &>/dev/null; then
+                $SUDO_CMD apt-get update -y
+                $SUDO_CMD apt-get install -y $SYS_PKGS
+            else
+                ui_print warn "非 Apt 系统，请手动安装运行依赖 (Python-Dev, libjpeg等)"
+            fi
+        fi
     ) >> "$INSTALL_LOG" 2>&1
     
     check_uv_installed || return

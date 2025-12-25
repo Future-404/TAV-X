@@ -87,7 +87,11 @@ check_auth_dependencies() {
     
     if [ -n "$missing" ]; then
         ui_print info "安装认证依赖: $missing"
-        pkg install $missing -y
+        if [ "$OS_TYPE" == "TERMUX" ]; then
+            pkg install $missing -y
+        else
+            $SUDO_CMD apt-get install -y $missing
+        fi
     fi
 }
 
@@ -108,8 +112,25 @@ install_gemini() {
     if [ -n "$NEED_PKGS" ]; then 
         ui_print info "正在预装编译环境..."
         echo -e "${CYAN}安装组件: $NEED_PKGS${NC}"
-        pkg update -y
-        pkg install $NEED_PKGS -y
+        if [ "$OS_TYPE" == "TERMUX" ]; then
+            pkg update -y
+            pkg install $NEED_PKGS -y
+        else
+            # Map package names for Debian/Ubuntu
+            local LINUX_PKGS=""
+            [[ "$NEED_PKGS" == *"python"* ]] && LINUX_PKGS="$LINUX_PKGS python3 python3-pip python3-venv"
+            [[ "$NEED_PKGS" == *"rust"* ]] && LINUX_PKGS="$LINUX_PKGS rustc cargo"
+            [[ "$NEED_PKGS" == *"binutils"* ]] && LINUX_PKGS="$LINUX_PKGS binutils"
+            [[ "$NEED_PKGS" == *"clang"* ]] && LINUX_PKGS="$LINUX_PKGS clang"
+            [[ "$NEED_PKGS" == *"make"* ]] && LINUX_PKGS="$LINUX_PKGS make"
+            [[ "$NEED_PKGS" == *"cmake"* ]] && LINUX_PKGS="$LINUX_PKGS cmake"
+            # cloudflared is handled by core/deps.sh usually, but we can skip it here as check_dependencies handles it
+            
+            if [ -n "$LINUX_PKGS" ]; then
+                $SUDO_CMD apt-get update -y
+                $SUDO_CMD apt-get install -y $LINUX_PKGS
+            fi
+        fi
     fi
     
     check_auth_dependencies
@@ -227,8 +248,12 @@ authenticate_google() {
     fi
 
     if [ -n "$url" ]; then
-        termux-open "$url" 2>/dev/null
-        ui_print success "已唤起浏览器！请前往登录。"
+        open_browser "$url"
+        if [ "$OS_TYPE" == "TERMUX" ] || [ -n "$DISPLAY" ] || [ -n "$WAYLAND_DISPLAY" ]; then
+            ui_print success "已唤起浏览器！请前往登录。"
+        else
+            ui_print success "请复制上方链接到本地浏览器进行登录。"
+        fi
     else
         ui_print info "未能自动获取链接。"
         echo -e "${YELLOW}请手动前往主菜单 -> [📜 查看运行日志] 复制链接。${NC}"
@@ -360,10 +385,10 @@ start_service() {
     
     ui_header "启动服务"
     cd "$GEMINI_DIR" || return
-    local START_CMD="$proxy_env GEMINI_AUTH_PASSWORD='$pass' setsid nohup $VENV_PYTHON run.py > '$LOG_FILE' 2>&1 &"
+    local START_CMD="$proxy_env GEMINI_AUTH_PASSWORD='$pass' setsid nohup $VENV_PYTHON run.py > '$LOG_FILE' 2>&1 & echo \$! > '$GEMINI_PID_FILE'"
     
     if ui_spinner "正在启动服务..." "eval \"$START_CMD\" sleep 3"; then
-        if pgrep -f "run.py" >/dev/null; then
+        if [ -f "$GEMINI_PID_FILE" ] && kill -0 $(cat "$GEMINI_PID_FILE") 2>/dev/null; then
             ui_print success "服务已启动！端口: $port"
         else
             ui_print error "启动失败，进程立刻退出了。"
@@ -376,6 +401,11 @@ start_service() {
 }
 
 stop_service() {
+    if [ -f "$GEMINI_PID_FILE" ]; then
+        local pid=$(cat "$GEMINI_PID_FILE")
+        [ -n "$pid" ] && kill -9 "$pid" >/dev/null 2>&1
+        rm -f "$GEMINI_PID_FILE"
+    fi
     pkill -f "$VENV_PYTHON run.py"
     pkill -f "cloudflared tunnel"
     ui_print success "服务与隧道已停止。"
@@ -477,7 +507,11 @@ configure_params() {
 gemini_menu() {
     while true; do
         ui_header "Gemini 2.0 智能代理"
-        local s="${RED}● 已停止${NC}"; pgrep -f "$VENV_PYTHON run.py" >/dev/null && s="${GREEN}● 运行中${NC}"
+        local s="${RED}● 已停止${NC}"
+        if [ -f "$GEMINI_PID_FILE" ] && kill -0 $(cat "$GEMINI_PID_FILE") 2>/dev/null; then 
+            s="${GREEN}● 运行中${NC}"
+        fi
+        
         local cf="${RED}关${NC}"; pgrep -f "cloudflared" >/dev/null && cf="${GREEN}开${NC}"
         local a="${YELLOW}未认证${NC}"; [ -f "$CREDS_FILE" ] && a="${GREEN}已认证${NC}"
         

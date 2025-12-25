@@ -22,15 +22,15 @@ DEFAULT_POOL=(
 )
 
 PROXY_PORTS=(
-    "7890:socks5h"
-    "7891:socks5h"
+    "7890:http"
+    "7891:http"
     "10809:http"
-    "10808:socks5h"
+    "10808:http"
     "20171:http"
-    "20170:socks5h"
+    "20170:http"
     "9090:http"
     "8080:http"
-    "1080:socks5h"
+    "1080:http"
 )
 
 : "${REPO_PATH:=Future-404/TAV-X.git}"
@@ -49,6 +49,17 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+# --- OS Detection ---
+if [ -n "$TERMUX_VERSION" ]; then
+    OS_TYPE="TERMUX"
+    TMP_DIR="/data/data/com.termux/files/usr/tmp"
+    [ ! -d "$TMP_DIR" ] && TMP_DIR="$PREFIX/tmp"
+else
+    OS_TYPE="LINUX"
+    TMP_DIR="/tmp"
+fi
+mkdir -p "$TMP_DIR"
 
 if [ -f "$SCRIPT_DIR/core/main.sh" ]; then
     echo -e "\033[1;35m🔧 [DEV MODE] 开发者模式已激活\033[0m"
@@ -84,10 +95,24 @@ echo -e "${NC}"
 echo -e "${CYAN}TAV-X 智能安装程序${NC} [Ver: ${TAV_VERSION}]"
 echo "------------------------------------------------"
 
+# --- Git Installation ---
 if ! command -v git &> /dev/null; then
     echo -e "${YELLOW}>>> 正在安装基础依赖 (Git)...${NC}"
-    pkg update -y >/dev/null 2>&1
-    pkg install git -y
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        pkg update -y >/dev/null 2>&1
+        pkg install git -y
+    else
+        # Linux (Debian/Ubuntu)
+        if command -v apt-get &> /dev/null; then
+            SUDO=""
+            [ "$EUID" -ne 0 ] && command -v sudo &> /dev/null && SUDO="sudo"
+            $SUDO apt-get update -y >/dev/null 2>&1
+            $SUDO apt-get install git -y
+        else
+             echo -e "${RED}❌ 未检测到 apt 包管理器，请手动安装 git。${NC}"
+             exit 1
+        fi
+    fi
 fi
 
 test_connection() {
@@ -157,7 +182,8 @@ select_mirror_interactive() {
     echo -e "\n${YELLOW}>>> [3/3] 启动镜像并发测速 (Smart Race)...${NC}"
     echo "------------------------------------------------"
 
-    local tmp_race_file="/data/data/com.termux/files/usr/tmp/tav_mirror_race"
+    # Use Dynamic Path
+    local tmp_race_file="$TMP_DIR/tav_mirror_race"
     rm -f "$tmp_race_file"
     mkdir -p "$(dirname "$tmp_race_file")"
 
@@ -253,14 +279,21 @@ if git clone --depth 1 "$DL_URL" "$TAVX_DIR"; then
     sed -i '/alias st=/d' "$SHELL_RC" 2>/dev/null
     echo "alias st='bash $TAVX_DIR/st.sh'" >> "$SHELL_RC"
 
+    # --- Gum Installation (Termux Only in Bootstrap) ---
     if ! command -v gum &> /dev/null; then
-        echo -e "${YELLOW}>>> 部署 UI 引擎 (Gum)...${NC}"
-        pkg install gum -y >/dev/null 2>&1
+        if [ "$OS_TYPE" == "TERMUX" ]; then
+            echo -e "${YELLOW}>>> 部署 UI 引擎 (Gum)...${NC}"
+            pkg install gum -y >/dev/null 2>&1
+        else
+            # Linux: gum is not usually in default apt repos.
+            # We defer this to core/deps.sh, or user can install manually.
+            echo -e "${YELLOW}>>> 提示: 正在准备环境...${NC}"
+        fi
     fi
 
     echo ""
     echo -e "${GREEN}🎉 TAV-X 安装成功！${NC}"
-    echo -e "👉 请输入 ${CYAN}source ~/.bashrc${NC} 生效，然后输入 ${CYAN}st${NC} 启动。"
+    echo -e "👉 请输入 ${CYAN}source $SHELL_RC${NC} 生效，然后输入 ${CYAN}st${NC} 启动。"
 
 else
     echo -e "\n${RED}❌ 下载失败${NC}"
