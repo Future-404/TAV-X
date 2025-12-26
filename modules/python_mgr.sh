@@ -46,52 +46,48 @@ install_system_python() {
 install_global_uv() {
     ui_header "安装/编译 UV (极速包管理器)"
     
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        echo -e "${RED}⚠️  Termux 兼容性提示${NC}"
+        echo -e "Astral 官方未提供 Android/Termux 平台的 UV 预编译包。"
+        echo -e "且本地编译 UV 极其耗时并极易失败 (Rust 环境限制)。"
+        echo ""
+        echo -e "${YELLOW}因此，TAV-X 在 Termux 上仅支持标准 PIP 模式。${NC}"
+        echo -e "这足以满足日常使用，且稳定性最高。"
+        ui_pause
+        return
+    fi
+    
     if command -v uv &>/dev/null; then
         ui_print success "UV 已安装: $(uv --version)"
         if ! ui_confirm "是否强制重新安装?"; then return; fi
     fi
 
     echo -e "${YELLOW}UV 安装策略:${NC}"
-    if [ "$OS_TYPE" == "TERMUX" ]; then
-        echo -e "Termux 无法直接使用官方预编译包，必须${RED}本地编译${NC}。"
-        echo -e "前提: 已安装 Rust, Clang, Make (在'安装系统级 Python'中包含)。"
-    else
-        echo -e "Linux 系统将尝试使用官方脚本安装预编译二进制。"
-        echo -e "这可以避免 'externally-managed-environment' 错误。"
-    fi
+    echo -e "Linux 系统将尝试使用官方脚本安装预编译二进制。"
+    echo -e "这可以避免 'externally-managed-environment' 错误。"
     echo "----------------------------------------"
     
     if ui_confirm "开始安装 UV?"; then
-        if [ "$OS_TYPE" == "TERMUX" ]; then
-            # Termux: 编译安装
-            if pip install uv; then
+        # Linux: 官方脚本安装
+        ui_print info "正在下载官方安装脚本..."
+        if command -v curl &>/dev/null; then
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            
+            # 尝试将 uv 软链接到系统路径以便全局可用
+            if [ -f "$HOME/.cargo/bin/uv" ]; then
+                $SUDO_CMD ln -sf "$HOME/.cargo/bin/uv" /usr/local/bin/uv
+            elif [ -f "$HOME/.local/bin/uv" ]; then
+                $SUDO_CMD ln -sf "$HOME/.local/bin/uv" /usr/local/bin/uv
+            fi
+            
+            if command -v uv &>/dev/null; then
                 ui_print success "UV 安装成功！"
             else
-                ui_print error "UV 编译失败。"
-                echo -e "提示: 请先确保已执行 [安装系统级 Python] 以补全编译环境。"
+                ui_print warn "安装脚本执行完毕，但 'uv' 命令未生效。"
+                echo -e "请尝试重启终端或手动添加 ~/.local/bin 到 PATH。"
             fi
         else
-            # Linux: 官方脚本安装
-            ui_print info "正在下载官方安装脚本..."
-            if command -v curl &>/dev/null; then
-                curl -LsSf https://astral.sh/uv/install.sh | sh
-                
-                # 尝试将 uv 软链接到系统路径以便全局可用
-                if [ -f "$HOME/.cargo/bin/uv" ]; then
-                    $SUDO_CMD ln -sf "$HOME/.cargo/bin/uv" /usr/local/bin/uv
-                elif [ -f "$HOME/.local/bin/uv" ]; then
-                    $SUDO_CMD ln -sf "$HOME/.local/bin/uv" /usr/local/bin/uv
-                fi
-                
-                if command -v uv &>/dev/null; then
-                    ui_print success "UV 安装成功！"
-                else
-                    ui_print warn "安装脚本执行完毕，但 'uv' 命令未生效。"
-                    echo -e "请尝试重启终端或手动添加 ~/.local/bin 到 PATH。"
-                fi
-            else
-                ui_print error "缺少 curl，无法下载安装脚本。"
-            fi
+            ui_print error "缺少 curl，无法下载安装脚本。"
         fi
     fi
     ui_pause

@@ -110,70 +110,101 @@ EOF
     fi
 }
 
-# --- 依赖配置 (仅负责 pip install) ---
+# --- 依赖配置 (智能混合模式) ---
 setup_autoglm_venv() {
     ui_header "AutoGLM 环境配置"
     
     if [ ! -d "$AUTOGLM_DIR" ]; then
-        ui_print error "请先执行 [⬇️ 安装/更新 AutoGLM] 下载源码。"
+        ui_print error "请先执行 [⬇️ 安装/更新 核心代码]。"
         ui_pause; return
     fi
     
-    # 1. 检查全局 Python 环境
+    # 全局环境检查
     if ! command -v python3 &>/dev/null; then
         ui_print error "系统未检测到 Python3。"
         echo -e "${YELLOW}请前往 [高级工具] -> [🐍 Python 环境管理] 进行安装。${NC}"
-        echo -e "完成安装后，请再次回到此处继续。"
         ui_pause; return
     fi
     
-    # Termux 特别检查：如果没有 rustc，uv 可能会挂
-    if [ "$OS_TYPE" == "TERMUX" ] && ! command -v rustc &>/dev/null; then
-        ui_print warn "检测到 Rust 编译环境缺失。"
-        echo -e "${YELLOW}建议前往 [高级工具] -> [🐍 Python 环境管理] 补全编译工具。${NC}"
-        if ! ui_confirm "仍要尝试强制安装依赖吗 (可能失败)?"; then return; fi
-    fi
-
     echo -e "${YELLOW}请选择依赖安装策略:${NC}"
-    echo -e "1. ${GREEN}标准模式 (Pip)${NC} - 稳定，无需编译工具 (慢)"
-    echo -e "2. ${CYAN}极速模式 (UV)${NC} - 极快，但 Termux 需提前配置好编译环境"
+    echo -e "1. ${GREEN}标准模式 (Pip)${NC} - 全量下载，兼容性一般"
+    
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        echo -e "2. ${CYAN}混合模式 (System + Pip)${NC} - ${YELLOW}强烈推荐${NC}"
+        echo -e "   (复用 Termux 系统库，免编译 NumPy/Pillow，速度极快)"
+    else
+        echo -e "2. ${CYAN}极速模式 (UV)${NC} - 推荐 Linux 用户"
+    fi
     echo "----------------------------------------"
     
-    local choice=$(ui_input "请输入序号 [1/2]" "1" "false")
-    local USE_UV=false
+    local choice=$(ui_input "请输入序号 [1/2]" "2" "false")
+    local MODE="standard"
+    [ "$choice" == "2" ] && MODE="optimized"
     
-    if [ "$choice" == "2" ]; then
+    # Linux 下 Optimized 模式依然尝试用 UV
+    local USE_UV=false
+    if [ "$OS_TYPE" != "TERMUX" ] && [ "$MODE" == "optimized" ]; then
         if command -v uv &>/dev/null; then
             USE_UV=true
         else
-            ui_print error "未检测到 UV。"
-            echo -e "请先去 [🐍 Python 环境管理] 中安装 UV。"
-            if ! ui_confirm "回退到 pip 模式继续?"; then return; fi
+            ui_print warn "未检测到 UV，将回退到 Pip。"
         fi
     fi
 
     rm -f "$INSTALL_LOG"; touch "$INSTALL_LOG"
     ui_print info "正在构建虚拟环境..."
-    echo -e "${YELLOW}日志已记录至: $INSTALL_LOG${NC}"
+    echo -e "${YELLOW}日志: $INSTALL_LOG${NC}"
     
+    # --- Termux 混合模式特有逻辑 ---
+    local USE_SYSTEM_SITE=false
+    if [ "$OS_TYPE" == "TERMUX" ] && [ "$MODE" == "optimized" ]; then
+        USE_SYSTEM_SITE=true
+        echo ">>> [Phase 0] 预装 Termux 系统库 (避免编译)..." >> "$INSTALL_LOG"
+        # 这一步是 Termux 安装成功的关键，避免了编译 uv，也避免了编译 numpy
+        pkg install -y python-numpy python-pillow python-cryptography libjpeg-turbo libpng libxml2 libxslt >> "$INSTALL_LOG" 2>&1
+    fi
+
     (
         set -e
         cd "$AUTOGLM_DIR" || exit 1
         
-        # 清理旧环境
+        # 1. 清理
         if [ -d "$VENV_DIR" ]; then rm -rf "$VENV_DIR"; fi
         
-        # 创建 venv (使用系统自带的 python3-venv)
-        python3 -m venv "$VENV_DIR"
+        # 2. 创建 venv
+        local VENV_ARGS=""
+        [ "$USE_SYSTEM_SITE" == "true" ] && VENV_ARGS="--system-site-packages"
+        
+        echo ">>> [Phase 1] 创建虚拟环境 (Args: $VENV_ARGS)..."
+        python3 -m venv "$VENV_DIR" $VENV_ARGS
         source "$VENV_DIR/bin/activate"
         
-        # 安装依赖
+        # 3. 安装依赖
         if [ "$USE_UV" == "true" ]; then
-            echo ">>> [Mode: UV] 安装依赖..."
+            # Linux UV 逻辑
+            echo ">>> [Phase 2] 使用 UV 安装依赖..."
             uv pip install -U pip
             uv pip install -r requirements.txt
+            uv pip install "httpx[socks]"
+            
+        elif [ "$USE_SYSTEM_SITE" == "true" ]; then
+            # Termux 混合逻辑 (System + Pip)
+            echo ">>> [Phase 2.1] 优化依赖列表..."
+            cp requirements.txt requirements.tmp
+            # 剔除已由 pkg 安装的库，防止 pip 重新编译
+            sed -i '/numpy/d' requirements.tmp
+            sed -i '/Pillow/d' requirements.tmp
+            sed -i '/cryptography/d' requirements.tmp
+            
+            echo ">>> [Phase 2.2] 使用 Pip 安装剩余依赖..."
+            pip install --upgrade pip
+            pip install -r requirements.tmp
+            pip install "httpx[socks]"
+            rm requirements.tmp
+            
         else
-            echo ">>> [Mode: Pip] 安装依赖 (请耐心等待)..."
+            # 标准 Pip 逻辑
+            echo ">>> [Phase 2] 使用 Pip 全量安装 (较慢)..."
             pip install --upgrade pip
             pip install -r requirements.txt
         fi
@@ -181,11 +212,11 @@ setup_autoglm_venv() {
     
     if [ $? -eq 0 ]; then
         ui_print success "环境配置成功！"
-        echo -e "现在可以启动智能体了。"
+        echo -e "输入 ${CYAN}ai${NC} 启动。"
     else
-        ui_print error "环境配置失败。"
-        echo -e "${YELLOW}--- 错误日志 (最后20行) ---${NC}"
-        tail -n 20 "$INSTALL_LOG"
+        ui_print error "安装失败。"
+        echo -e "${YELLOW}--- 错误日志 ---${NC}"
+        tail -n 10 "$INSTALL_LOG"
     fi
     ui_pause
 }
