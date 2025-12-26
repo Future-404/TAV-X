@@ -157,11 +157,32 @@ setup_autoglm_venv() {
     
     # --- Termux 混合模式特有逻辑 ---
     local USE_SYSTEM_SITE=false
+    local WHEEL_ARGS=""
+    local WHEEL_DIR="$AUTOGLM_DIR/wheels"
+    
     if [ "$OS_TYPE" == "TERMUX" ] && [ "$MODE" == "optimized" ]; then
         USE_SYSTEM_SITE=true
         echo ">>> [Phase 0] 预装 Termux 系统库 (避免编译)..." >> "$INSTALL_LOG"
-        # 这一步是 Termux 安装成功的关键，避免了编译 uv，也避免了编译 numpy
-        pkg install -y python-numpy python-pillow python-cryptography libjpeg-turbo libpng libxml2 libxslt >> "$INSTALL_LOG" 2>&1
+        # 预装重型库(numpy等) + 基础编译工具(clang/make)，确保当离线包过时回退到源码安装时能成功编译 C 扩展
+        pkg install -y python-numpy python-pillow python-cryptography libjpeg-turbo libpng libxml2 libxslt clang make >> "$INSTALL_LOG" 2>&1
+        
+        # --- 恢复离线包加速逻辑 ---
+        local WHEEL_URL="https://github.com/Future-404/TAV-X/releases/download/assets-v1/autoglm_wheels.tar.gz"
+        echo ">>> [Phase 0.5] 尝试下载预编译加速包..." >> "$INSTALL_LOG"
+        
+        # 在后台下载，不阻塞主流程太久，如果下载失败则回退在线安装
+        if download_file_smart "$WHEEL_URL" "$AUTOGLM_DIR/wheels.tar.gz"; then
+            echo ">>> 解压加速包..." >> "$INSTALL_LOG"
+            if tar -xzf "$AUTOGLM_DIR/wheels.tar.gz" -C "$AUTOGLM_DIR"; then
+                if [ -d "$WHEEL_DIR" ]; then
+                    WHEEL_ARGS="--no-index --find-links=$WHEEL_DIR" # 优先用本地包
+                    ui_print info "已加载预编译加速包 (Termux专用)"
+                fi
+            fi
+            rm -f "$AUTOGLM_DIR/wheels.tar.gz"
+        else
+            echo ">>> 加速包下载跳过，使用在线安装。" >> "$INSTALL_LOG"
+        fi
     fi
 
     (
@@ -188,19 +209,31 @@ setup_autoglm_venv() {
             uv pip install "httpx[socks]"
             
         elif [ "$USE_SYSTEM_SITE" == "true" ]; then
-            # Termux 混合逻辑 (System + Pip)
+            # Termux 混合逻辑 (System + Pip + Wheels)
             echo ">>> [Phase 2.1] 优化依赖列表..."
             cp requirements.txt requirements.tmp
-            # 剔除已由 pkg 安装的库，防止 pip 重新编译
             sed -i '/numpy/d' requirements.tmp
             sed -i '/Pillow/d' requirements.tmp
             sed -i '/cryptography/d' requirements.tmp
             
-            echo ">>> [Phase 2.2] 使用 Pip 安装剩余依赖..."
+            echo ">>> [Phase 2.2] 使用 Pip 安装剩余依赖 (混合模式)..."
             pip install --upgrade pip
-            pip install -r requirements.tmp
-            pip install "httpx[socks]"
-            rm requirements.tmp
+            
+            # 尝试先用离线包安装 (如果有)
+            if [ -n "$WHEEL_ARGS" ]; then
+                echo ">>> [Accelerated] 正在载入本地预编译包..."
+                # 这里不加 -r requirements.tmp 是因为 wheel 包可能不全
+                # 我们先尝试把 wheels 目录下的包都装进去
+                # 或者更稳妥的方式：允许 pip 联网补充缺失的包
+                # 修改策略：直接指定 find-links，让 pip 自己决定是用本地还是在线
+                WHEEL_ARGS="--find-links=$WHEEL_DIR" 
+            fi
+            
+            pip install $WHEEL_ARGS -r requirements.tmp
+            pip install $WHEEL_ARGS "httpx[socks]"
+            
+            rm -f requirements.tmp
+            rm -rf "$WHEEL_DIR"
             
         else
             # 标准 Pip 逻辑
@@ -235,7 +268,7 @@ install_autoglm() {
             # Termux: 仅安装运行时必须的库 (移除所有编译链)
             local SYS_PKGS="termux-api libjpeg-turbo libpng libxml2 libxslt"
             pkg install root-repo science-repo -y
-            pkg install -y -o Dpkg::Options::=\"--force-confold\" $SYS_PKGS
+            pkg install -y -o Dpkg::Options::="--force-confold" $SYS_PKGS
         else
             # Linux: 仅运行库
             local SYS_PKGS="libjpeg-dev zlib1g-dev libxml2-dev libxslt1-dev"
@@ -248,7 +281,7 @@ install_autoglm() {
 
     # 下载源码
     if [ -d "$AUTOGLM_DIR" ]; then rm -rf "$AUTOGLM_DIR"; fi
-    if git_clone_smart "" "https://github.com/THUDM/Open-AutoGLM" "$AUTOGLM_DIR"; then
+    if git_clone_smart "" "https://github.com/zai-org/Open-AutoGLM" "$AUTOGLM_DIR"; then
         check_adb_keyboard
         create_ai_launcher
         ui_print success "核心文件已就绪！"
