@@ -183,8 +183,8 @@ setup_autoglm_venv() {
     if [ "$OS_TYPE" == "TERMUX" ] && [ "$MODE" == "optimized" ]; then
         USE_SYSTEM_SITE=true
         echo ">>> [Phase 0] 预装 Termux 系统库 (避免编译)..." >> "$INSTALL_LOG"
-        # 预装重型库(numpy等) + 基础编译工具(clang/make)，确保当离线包过时回退到源码安装时能成功编译 C 扩展
-        pkg install -y python-numpy python-pillow python-cryptography libjpeg-turbo libpng libxml2 libxslt clang make >> "$INSTALL_LOG" 2>&1
+        # 预装重型库 + 编译工具链 (应对 jiter/maturin 等 Rust 库的现场编译)
+        pkg install -y python-numpy python-pillow python-cryptography libjpeg-turbo libpng libxml2 libxslt clang make rust >> "$INSTALL_LOG" 2>&1
         
         # --- 恢复离线包加速逻辑 ---
         local WHEEL_URL="https://github.com/Future-404/TAV-X/releases/download/assets-v1/autoglm_wheels.tar.gz"
@@ -231,6 +231,10 @@ setup_autoglm_venv() {
         elif [ "$USE_SYSTEM_SITE" == "true" ]; then
             # Termux 混合逻辑 (System + Pip + Wheels)
             echo ">>> [Phase 2.1] 优化依赖列表..."
+            
+            # 关键: 限制 Rust 编译并发数 (防止 jiter/maturin 编译崩溃)
+            export CARGO_BUILD_JOBS=1
+            
             cp requirements.txt requirements.tmp
             sed -i '/numpy/d' requirements.tmp
             sed -i '/Pillow/d' requirements.tmp
