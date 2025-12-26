@@ -184,7 +184,7 @@ setup_autoglm_venv() {
         USE_SYSTEM_SITE=true
         echo ">>> [Phase 0] 预装 Termux 系统库 (避免编译)..." >> "$INSTALL_LOG"
         # 预装重型库 + 编译工具链 (应对 jiter/maturin 等 Rust 库的现场编译)
-        pkg install -y python-numpy python-pillow python-cryptography libjpeg-turbo libpng libxml2 libxslt clang make rust >> "$INSTALL_LOG" 2>&1
+        pkg install -y python-numpy python-pillow python-cryptography libjpeg-turbo libpng libxml2 libxslt clang make rust patchelf >> "$INSTALL_LOG" 2>&1
         
         # --- 恢复离线包加速逻辑 ---
         local WHEEL_URL="https://github.com/Future-404/TAV-X/releases/download/assets-v1/autoglm_wheels.tar.gz"
@@ -246,12 +246,13 @@ setup_autoglm_venv() {
             # 尝试先用离线包安装 (如果有)
             if [ -n "$WHEEL_ARGS" ]; then
                 echo ">>> [Accelerated] 正在载入本地预编译包..."
-                # 这里不加 -r requirements.tmp 是因为 wheel 包可能不全
-                # 我们先尝试把 wheels 目录下的包都装进去
-                # 或者更稳妥的方式：允许 pip 联网补充缺失的包
                 # 修改策略：直接指定 find-links，让 pip 自己决定是用本地还是在线
                 WHEEL_ARGS="--find-links=$WHEEL_DIR" 
             fi
+            
+            # 关键：先单独安装构建工具 maturin (因为 jiter 依赖它)
+            echo ">>> [Phase 2.1.5] 预编译构建工具 (Maturin)..."
+            pip install $WHEEL_ARGS maturin
             
             pip install $WHEEL_ARGS -r requirements.tmp
             pip install $WHEEL_ARGS "httpx[socks]"
