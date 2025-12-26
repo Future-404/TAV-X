@@ -16,8 +16,28 @@ ADB_KEYBOARD_URL="https://github.com/senzhk/ADBKeyBoard/raw/master/ADBKeyboard.a
 
 # --- 辅助函数 ---
 check_adb_keyboard() {
+    # 1. 前置检查：ADB 连接状态
+    if ! command -v adb &>/dev/null || ! adb devices | grep -q "device$"; then
+        ui_print warn "检测到 ADB 未连接！"
+        echo -e "${YELLOW}AutoGLM 必须通过 ADB 才能控制手机。${NC}"
+        
+        if ui_confirm "是否跳转到 [📱 ADB 连接助手] 进行修复？"; then
+            source "$TAVX_DIR/modules/adb_keepalive.sh"
+            adb_menu_loop
+            # 递归重试
+            check_adb_keyboard
+            return
+        else
+            ui_print error "您选择了跳过 ADB 连接。"
+            echo -e "${RED}警告：在连接 ADB 之前，AutoGLM 将无法正常工作！${NC}"
+            return 0
+        fi
+    fi
+
+    # 2. 检查输入法是否已安装
     if adb shell ime list -s | grep -q "com.android.adbkeyboard/.AdbIME"; then return 0; fi
-    ui_print warn "未检测到 ADB Keyboard"
+    
+    ui_print warn "未检测到 ADB Keyboard (AutoGLM 必需组件)"
     if ui_confirm "自动下载并安装 ADB Keyboard?"; then
         local apk_path="$TAVX_DIR/temp_adbkeyboard.apk"
         prepare_network_strategy "$ADB_KEYBOARD_URL"
