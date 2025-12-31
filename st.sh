@@ -1,5 +1,5 @@
 #!/bin/bash
-# TAV-X Universal Installer
+# TAV-X Universal Installer & Launcher
 
 DEFAULT_POOL=(
     "https://ghproxy.net/"
@@ -31,15 +31,16 @@ PROXY_PORTS=(
     "9090:http"
     "8080:http"
     "1080:http"
+    "2080:http"
 )
 
 : "${REPO_PATH:=Future-404/TAV-X.git}"
 : "${TAV_VERSION:=Latest}"
 
 if [ -n "$TERMUX_VERSION" ]; then
-    export TAVX_DIR="/data/data/com.termux/files/home/TAV-X"
+    export TAVX_DIR="/data/data/com.termux/files/home/.tav_x"
 else
-    export TAVX_DIR="${HOME}/TAV-X"
+    export TAVX_DIR="${HOME}/.tav_x"
 fi
 
 if [ -f "$TAVX_DIR/core/main.sh" ]; then
@@ -47,7 +48,6 @@ if [ -f "$TAVX_DIR/core/main.sh" ]; then
 fi
 
 echo -e "\033[1;36m>>> TAV-X Installer initializing...\033[0m"
-
 if [ -n "$TERMUX_VERSION" ]; then
     pkg update -y >/dev/null 2>&1
     if ! command -v git &> /dev/null; then pkg install git -y; fi
@@ -161,7 +161,6 @@ select_mirror_interactive() {
     fi
 }
 
-# === 主流程逻辑 ===
 if probe_local_ports; then
     DL_URL="https://github.com/${REPO_PATH}"
 elif check_github_speed; then
@@ -170,33 +169,47 @@ else
     select_mirror_interactive
 fi
 
-if [ -d "$TAVX_DIR" ]; then rm -rf "$TAVX_DIR"; fi
-echo -e "\n\033[1;36m>>> Cloning Core ($TAV_VERSION)...\033[0m"
+echo -e "\n\033[1;36m>>> Processing Core ($TAV_VERSION)...\033[0m"
 echo -e "Source: $DL_URL"
 
-if git clone --depth 1 "$DL_URL" "$TAVX_DIR"; then
+INSTALL_SUCCESS=false
+if [ -d "$TAVX_DIR/.git" ]; then
+    echo -e "\033[1;33m检测到现有安装，尝试修复更新 (保留用户数据)...\033[0m"
+    cd "$TAVX_DIR" || exit
+    git remote set-url origin "$DL_URL"
+    if git fetch origin main && git reset --hard origin/main; then
+        INSTALL_SUCCESS=true
+    fi
+else
+    if git clone --depth 1 "$DL_URL" "$TAVX_DIR"; then
+        INSTALL_SUCCESS=true
+    fi
+fi
+
+if [ "$INSTALL_SUCCESS" = true ]; then
     (
         cd "$TAVX_DIR" || exit
         git remote set-url origin "https://github.com/${REPO_PATH}"
     )
+    
     chmod +x "$TAVX_DIR/st.sh" "$TAVX_DIR"/core/*.sh "$TAVX_DIR"/modules/*.sh 2>/dev/null
+    for rc_file in "$HOME/.bashrc" "$HOME/.zshrc"; do
+        if [ -f "$rc_file" ]; then
+            sed -i '/alias st=/d' "$rc_file" 2>/dev/null
+            echo "alias st='bash $TAVX_DIR/st.sh'" >> "$rc_file"
+        fi
+    done
 
-    SHELL_RC="$HOME/.bashrc"
-    [ -f "$HOME/.zshrc" ] && SHELL_RC="$HOME/.zshrc"
-    if ! grep -q "alias st=" "$SHELL_RC"; then
-        echo "" >> "$SHELL_RC"
-        echo "alias st='bash $TAVX_DIR/st.sh'" >> "$SHELL_RC"
-    fi
-
-    echo -e "\n\033[1;32m✔ 安装成功 / Installation Complete!\033[0m"
+    echo -e "\n\033[1;32m✔ 就绪 / Ready!\033[0m"
     echo -e "----------------------------------------"
     echo -e "💡 下次启动请直接输入: \033[1;33mst\033[0m"
-    echo -e "💡 To start next time, type: \033[1;33mst\033[0m"
     echo -e "----------------------------------------"
+    
     echo -ne "\033[1;36m🚀 即将自动启动... (3秒 / 按任意键立即开始)\033[0m"
     read -t 3 -n 1 -s 
     echo "" 
 
+    alias st="bash $TAVX_DIR/st.sh" 2>/dev/null
     exec bash "$TAVX_DIR/core/main.sh"
 else
     echo -e "\n\033[1;31m✘ Installation Failed.\033[0m"
