@@ -200,12 +200,9 @@ start_menu() {
         
         local status_txt=""
         
-        # Check Cloudflared by PID
         if [ -f "$CF_PID_FILE" ] && kill -0 $(cat "$CF_PID_FILE") 2>/dev/null; then
             if grep -q "protocol=quic" "$CF_LOG" 2>/dev/null; then P="QUIC"; else P="HTTP2"; fi
             status_txt="${GREEN}● 穿透运行中 ($P)${NC}"
-        
-        # Check SillyTavern by PID
         elif [ -f "$ST_PID_FILE" ] && kill -0 $(cat "$ST_PID_FILE") 2>/dev/null; then
             status_txt="${GREEN}● 本地运行中${NC}"
         else 
@@ -228,7 +225,6 @@ start_menu() {
                 start_node_server
                 local PORT=$(get_active_port)
                 ui_print success "本地启动: http://127.0.0.1:$PORT"
-                # Open browser support
                 open_browser "http://127.0.0.1:$PORT"
                 ui_pause ;;
                 

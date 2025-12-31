@@ -15,7 +15,6 @@ install_system_python() {
     if [ "$OS_TYPE" == "TERMUX" ]; then
         echo -e "${YELLOW}检测到 Termux 环境:${NC}"
         echo -e "正在准备安装 Python 及编译工具链 (用于构建 uv 等依赖)..."
-        # Termux 下 uv 需要本地编译，所以必须装 rust/binutils/clang/make
         install_cmd="pkg install -y python rust binutils clang make"
     else
         echo -e "${YELLOW}检测到 Linux 环境:${NC}"
@@ -32,7 +31,6 @@ install_system_python() {
     if ui_spinner "正在安装..." "$install_cmd"; then
         ui_print success "Python 环境安装完成！"
         
-        # 自动配置 PIP 镜像源
         if command -v pip &>/dev/null || command -v pip3 &>/dev/null; then
             ui_print info "正在优化 PIP 源 (清华源)..."
             pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple >/dev/null 2>&1
@@ -49,7 +47,7 @@ install_global_uv() {
     if [ "$OS_TYPE" == "TERMUX" ]; then
         echo -e "${RED}⚠️  Termux 兼容性提示${NC}"
         echo -e "Astral 官方未提供 Android/Termux 平台的 UV 预编译包。"
-        echo -e "且本地编译 UV 极其耗时并极易失败 (Rust 环境限制)。"
+        echo -e "且本地编译 UV 极其耗时并极易失败。"
         echo ""
         echo -e "${YELLOW}因此，TAV-X 在 Termux 上仅支持标准 PIP 模式。${NC}"
         echo -e "这足以满足日常使用，且稳定性最高。"
@@ -68,12 +66,9 @@ install_global_uv() {
     echo "----------------------------------------"
     
     if ui_confirm "开始安装 UV?"; then
-        # Linux: 官方脚本安装
         ui_print info "正在下载官方安装脚本..."
         if command -v curl &>/dev/null; then
             curl -LsSf https://astral.sh/uv/install.sh | sh
-            
-            # 尝试将 uv 软链接到系统路径以便全局可用
             if [ -f "$HOME/.cargo/bin/uv" ]; then
                 $SUDO_CMD ln -sf "$HOME/.cargo/bin/uv" /usr/local/bin/uv
             elif [ -f "$HOME/.local/bin/uv" ]; then
@@ -125,8 +120,8 @@ python_mgr_menu() {
         echo "----------------------------------------"
         
         CHOICE=$(ui_menu "请选择操作" \
-            "🛠️ 安装/修复 系统 Python (含编译环境)" \
-            "⚡ 安装/更新 UV (极速装包)" \
+            "🛠️ 安装/修复 系统 Python" \
+            "⚡ 安装/更新 UV" \
             "🔍 环境完整性诊断" \
             "🔙 返回主菜单" \
         )

@@ -5,12 +5,10 @@
 if [ -n "$TERMUX_VERSION" ]; then
     export OS_TYPE="TERMUX"
     export SUDO_CMD=""
-    # Termux specific temp dir or fallback
     export TMP_DIR="/data/data/com.termux/files/usr/tmp"
     [ ! -d "$TMP_DIR" ] && export TMP_DIR="$PREFIX/tmp"
 else
     export OS_TYPE="LINUX"
-    # Detect sudo availability
     if [ "$EUID" -eq 0 ]; then
         export SUDO_CMD=""
     elif command -v sudo &> /dev/null; then
@@ -58,6 +56,7 @@ export GLOBAL_PROXY_PORTS=(
     "9090:http"
     "8080:http"
     "1080:http"
+    "2080:http"
 )
 
 # 2. GitHub 镜像源池

@@ -280,9 +280,8 @@ change_system_source() {
             ui_print error "未找到 termux-change-repo 工具。"
         fi
     else
-        # Linux Logic
         echo -e "${YELLOW}Linux 一键换源 (推荐使用 LinuxMirrors)${NC}"
-        echo -e "此脚本由 LinuxMirrors 开源项目提供，支持 Debian/Ubuntu/CentOS 等主流系统。"
+        echo -e "此脚本由 LinuxMirrors 开源项目 provide，支持 Debian/Ubuntu/CentOS 等主流系统。"
         echo -e "它可以自动检测系统版本并替换为最快的国内源。"
         echo ""
         
@@ -294,6 +293,62 @@ change_system_source() {
             fi
         fi
     fi
+    ui_pause
+}
+
+clean_git_remotes() {
+    ui_header "Git 仓库源清洗"
+    echo -e "${YELLOW}此功能将把所有组件的更新源重置为 GitHub 官方地址。${NC}"
+    echo -e "用途：修复因镜像站失效导致的 'git pull' 报错。"
+    echo -e "影响范围：脚本自身、SillyTavern 本体、所有已安装插件。"
+    echo ""
+    
+    if ! ui_confirm "确认执行清洗吗？"; then return; fi
+    
+    echo ""
+    ui_print info "正在扫描并修复..."
+    
+    local count=0
+    
+    if reset_to_official_remote "$TAVX_DIR" "Future-404/TAV-X.git"; then
+        echo -e "  - TAV-X: ${GREEN}OK${NC}"
+        ((count++))
+    fi
+    
+    if reset_to_official_remote "$INSTALL_DIR" "SillyTavern/SillyTavern.git"; then
+        echo -e "  - SillyTavern: ${GREEN}OK${NC}"
+        ((count++))
+    fi
+    
+    local plugin_dirs=("$INSTALL_DIR/plugins" "$INSTALL_DIR/public/scripts/extensions/third-party")
+    
+    for p_root in "${plugin_dirs[@]}"; do
+        if [ -d "$p_root" ]; then
+            for d in "$p_root"/*;
+ do
+                if [ -d "$d/.git" ]; then
+                    (
+                        cd "$d" || exit
+                        local curr_url=$(git remote get-url origin 2>/dev/null)
+                        if [[ "$curr_url" == *"https://github.com/"* ]] || [[ "$curr_url" == *"http://github.com/"* ]]; then
+                            local clean_path=${curr_url#*github.com/}
+                            local new_url="https://github.com/${clean_path}"
+                            
+                            if [ "$curr_url" != "$new_url" ]; then
+                                git remote set-url origin "$new_url"
+                                echo -e "  - $(basename "$d"): ${GREEN}Fixed${NC}"
+                                ((count++))
+                            fi
+                        fi
+                    )
+                fi
+            done
+        fi
+    done
+    
+    echo ""
+    ui_print success "修复完成！共处理 $count 个仓库。"
+    echo -e "${YELLOW}提示：今后更新时，脚本会自动使用动态镜像加速。${NC}"
     ui_pause
 }
 
@@ -309,16 +364,17 @@ configure_download_network() {
         echo "----------------------------------------"
 
         CHOICE=$(ui_menu "请选择操作" \
-            "🔧 配置自定义代理 (Custom)" \
-            "🔄 重置为自动模式 (Reset)" \
-            "🐍 更换 PIP 源 (Python)" \
-            "📦 更换 NPM 源 (Node.js)" \
-            "🐧 更换系统源 (Apt/Pkg)" \
-            "🔙 返回" \
+            "🔧 配置自定义代理" \
+            "🔄 重置为自动模式" \
+            "♻️  修复 Git 仓库源" \
+            "🐍 更换 PIP 源" \
+            "📦 更换 NPM 源" \
+            "🐧 更换系统源" \
+            "🔙 返回" 
         )
 
         case "$CHOICE" in
-            *"自定义"*)
+            *"自定义"*) 
                 local url=$(ui_input "输入代理 (如 http://127.0.0.1:7890)" "" "false")
                 if [[ "$url" =~ ^(http|https|socks5|socks5h)://.* ]]; then 
                     echo "PROXY|$url" > "$NETWORK_CONFIG"
@@ -326,20 +382,22 @@ configure_download_network() {
                 else 
                     ui_print error "格式错误，请包含协议头 (如 socks5://)"
                 fi
-                ui_pause ;;
-            *"重置"*)
+                ui_pause ;; 
+            *"重置"*) 
                 if [ -f "$NETWORK_CONFIG" ]; then
                     rm -f "$NETWORK_CONFIG"
                     ui_print success "配置文件已清除。"
                 fi
-                # 清除内存中的镜像源缓存
                 unset SELECTED_MIRROR
                 ui_print success "网络策略已重置为自动模式。"
-                ui_pause ;;
-            *"PIP"*) change_pip_source ;;
-            *"NPM"*) change_npm_source ;;
-            *"系统源"*) change_system_source ;;
-            *"返回"*) return ;;
+                ui_pause ;; 
+            
+            *"修复 Git"*) clean_git_remotes ;; 
+            
+            *"PIP"*) change_pip_source ;; 
+            *"NPM"*) change_npm_source ;; 
+            *"系统源"*) change_system_source ;; 
+            *"返回"*) return ;; 
         esac
     done
 }
@@ -401,7 +459,7 @@ configure_api_proxy() {
         CHOICE=$(ui_menu "请选择操作" "🔄 同步系统代理" "✏️ 手动输入" "🚫 关闭代理" "🔙 返回")
         
         case "$CHOICE" in
-            *"同步"*)
+            *"同步"*) 
                 if [ -f "$NETWORK_CONFIG" ]; then
                     c=$(cat "$NETWORK_CONFIG")
                     if [[ "$c" == PROXY* ]]; then 
@@ -422,8 +480,8 @@ configure_api_proxy() {
                         ui_print warn "未检测到本地代理"
                     fi
                 fi 
-                ui_pause ;;
-            *"手动"*)
+                ui_pause ;; 
+            *"手动"*) 
                 i=$(ui_input "代理地址" "" "false")
                 if [[ "$i" =~ ^http.* ]]; then 
                     config_set requestProxy.enabled true 
@@ -432,12 +490,12 @@ configure_api_proxy() {
                 else 
                     ui_print error "格式错误"
                 fi 
-                ui_pause ;;
+                ui_pause ;; 
             *"关闭"*) 
                 config_set requestProxy.enabled false 
                 ui_print success "已关闭代理连接";
-                ui_pause ;;
-            *"返回"*) return ;;
+                ui_pause ;; 
+            *"返回"*) return ;; 
         esac
     done
 }
@@ -461,18 +519,18 @@ configure_cf_token() {
     CHOICE=$(ui_menu "请选择操作" "✏️ 输入/更新 Token" "🗑️ 清除 Token (恢复默认)" "🔙 返回")
 
     case "$CHOICE" in
-        *"输入"*)
+        *"输入"*) 
             local input=$(ui_input "请粘贴 Token" "" "false")
             if [ -n "$input" ]; then
                 echo "$input" > "$token_file"
                 ui_print success "Token 已保存！"
             fi
-            ui_pause ;;
-        *"清除"*)
+            ui_pause ;; 
+        *"清除"*) 
             rm -f "$token_file"
             ui_print success "Token 已清除，已恢复为临时隧道模式。"
-            ui_pause ;;
-        *"返回"*) return ;;
+            ui_pause ;; 
+        *"返回"*) return ;; 
     esac
 }
 
@@ -491,15 +549,15 @@ security_menu() {
             "🔙 返回主菜单"
         )
         case "$CHOICE" in
-            *"核心参数"*) configure_server_settings ;;
+            *"核心参数"*) configure_server_settings ;; 
             *"内存"*) configure_memory ;; 
-            *"下载"*) configure_download_network ;;
-            *"API"*) configure_api_proxy ;;
-            *"Cloudflare"*) configure_cf_token ;;
-            *"密码"*) reset_password ;;
-            *"端口"*) change_port ;;
-            *"卸载"*) uninstall_menu ;;
-            *"返回"*) return ;;
+            *"下载"*) configure_download_network ;; 
+            *"API"*) configure_api_proxy ;; 
+            *"Cloudflare"*) configure_cf_token ;; 
+            *"密码"*) reset_password ;; 
+            *"端口"*) change_port ;; 
+            *"卸载"*) uninstall_menu ;; 
+            *"返回"*) return ;; 
         esac
     done
 }

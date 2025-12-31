@@ -69,24 +69,21 @@ check_auth_dependencies() {
 install_gemini() {
     ui_header "部署 Gemini 代理服务"
     
-    # --- 1. Python 环境前置检查 ---
     if ! command -v python3 &>/dev/null; then
         ui_print error "系统未检测到 Python3。"
         echo -e "${YELLOW}请前往 [高级工具] -> [🐍 Python 环境管理] 进行安装。${NC}"
         ui_pause; return 1
     fi
 
-    # Termux 编译环境检查
     if [ "$OS_TYPE" == "TERMUX" ]; then
         if ! command -v rustc &>/dev/null || ! command -v clang &>/dev/null; then
-            ui_print warn "Gemini 依赖需要本地编译，但缺少 Rust/Clang。"
+            ui_print warn "Gemini 依赖可能需要编译，但缺少 Rust/Clang。"
             echo -e "${YELLOW}建议前往 [高级工具] -> [🐍 Python 环境管理] 补全编译环境。${NC}"
             if ! ui_confirm "强制继续 (可能失败)?"; then return 1; fi
         fi
     fi
 
-    # --- 2. 源码下载 ---
-    safe_rm "$GEMINI_DIR"
+    if [ -d "$GEMINI_DIR" ]; then rm -rf "$GEMINI_DIR"; fi
     prepare_network_strategy "$REPO_URL"
 
     local CLONE_CMD="source \"$TAVX_DIR/core/utils.sh\"; git_clone_smart '' '$REPO_URL' '$GEMINI_DIR'"
@@ -94,19 +91,12 @@ install_gemini() {
 
     cd "$GEMINI_DIR" || return
 
-    # --- 3. 虚拟环境与依赖 ---
     ui_print info "创建 Python 虚拟环境..."
     python3 -m venv venv || { ui_print error "Venv 创建失败"; ui_pause; return 1; }
 
     ui_print info "正在安装依赖..."
-    echo -e "${YELLOW}提示: Gemini 依赖较为复杂，请耐心等待编译...${NC}"
-    
-    # 代理设置
-    local proxy=$(get_proxy_address)
-    local proxy_env=""
-    [ -n "$proxy" ] && proxy_env="env http_proxy='$proxy' https_proxy='$proxy'"
-    
-    # 编译优化参数
+    echo -e "${YELLOW}提示: 使用清华源直连安装，请确保网络通畅...${NC}"
+    unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY
     export CARGO_BUILD_JOBS=1
     export CC=clang
     export CXX=clang++
@@ -114,17 +104,11 @@ install_gemini() {
 
     (
         set -e
-        # 基础升级
-        $proxy_env "$VENV_PIP" install --upgrade pip
-        
-        # 预装 SOCKS 支持 (关键修复)
-        $proxy_env "$VENV_PIP" install "requests[socks]" "PySocks"
-        
-        # 安装主依赖
-        # 尝试使用清华源加速
-        if ! $proxy_env "$VENV_PIP" install -r requirements.txt; then
-            echo ">>> 官方源失败，切换镜像源重试..."
-            "$VENV_PIP" install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+        "$VENV_PIP" install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple
+        "$VENV_PIP" install "requests[socks]" "PySocks" -i https://pypi.tuna.tsinghua.edu.cn/simple
+        if ! "$VENV_PIP" install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple; then
+             echo ">>> 尝试不指定镜像源重试..."
+             "$VENV_PIP" install -r requirements.txt
         fi
     )
     
@@ -135,7 +119,8 @@ install_gemini() {
         ui_print success "Gemini 服务部署成功！"
     else
         ui_print error "依赖安装失败。"
-        echo -e "${YELLOW}可能是 Rust/Clang 环境问题，请检查 [Python 环境管理]。${NC}"
+        echo -e "${YELLOW}如果是 'ProxyError'，请检查您的 VPN 是否关闭了局域网连接。${NC}"
+        echo -e "${YELLOW}如果是 Rust/Clang 错误，请检查 [Python 环境管理]。${NC}"
         ui_pause; return 1
     fi
     
@@ -178,7 +163,7 @@ authenticate_google() {
     
     local proxy=$(get_proxy_address)
     local proxy_env=""
-    [ -n "$proxy" ] && proxy_env="http_proxy=$proxy https_proxy=$proxy"
+    [ -n "$proxy" ] && proxy_env="env http_proxy='$proxy' https_proxy='$proxy'"
 
     cd "$GEMINI_DIR" || return
     
@@ -318,6 +303,7 @@ start_service() {
     pkill -f "$VENV_PYTHON run.py"
     pkill -f "cloudflared tunnel"
     
+    # 释放端口
     if command -v fuser >/dev/null; then
         fuser -k -9 "$port/tcp" >/dev/null 2>&1
     elif command -v lsof >/dev/null; then
@@ -339,7 +325,7 @@ start_service() {
 
     local pass=$(grep "^GEMINI_AUTH_PASSWORD=" "$ENV_FILE" 2>/dev/null | cut -d= -f2); [ -z "$pass" ] && pass="password"
     
-    # --- 写入配置 (端口、密码) ---
+    # 更新配置
     if grep -q "^PORT=" "$ENV_FILE"; then sed -i "s/^PORT=.*/PORT=$port/" "$ENV_FILE"; else echo "PORT=$port" >> "$ENV_FILE"; fi
     if grep -q "^GEMINI_AUTH_PASSWORD=" "$ENV_FILE"; then sed -i "s/^GEMINI_AUTH_PASSWORD=.*/GEMINI_AUTH_PASSWORD=$pass/" "$ENV_FILE"; else echo "GEMINI_AUTH_PASSWORD=$pass" >> "$ENV_FILE"; fi
     
@@ -349,6 +335,7 @@ start_service() {
         echo "'" >> "$ENV_FILE"
     fi
 
+    # 运行时注入代理
     local proxy=$(get_proxy_address); local proxy_env=""
     [ -n "$proxy" ] && proxy_env="env http_proxy='$proxy' https_proxy='$proxy' all_proxy='$proxy'"
     
@@ -381,7 +368,6 @@ stop_service() {
     sleep 1
 }
 
-# --- 修改后的 show_info：显示当前 Project ID ---
 show_info() {
     local port=$(grep "^PORT=" "$ENV_FILE" 2>/dev/null | cut -d= -f2); [ -z "$port" ] && port=8888
     local pass=$(grep "^GEMINI_AUTH_PASSWORD=" "$ENV_FILE" 2>/dev/null | cut -d= -f2); [ -z "$pass" ] && pass="password"
@@ -412,14 +398,12 @@ show_info() {
     echo -e "🔑 API 密钥 (Password):"
     echo -e "   $pass"
     echo ""
-    # 新增：显示当前项目 ID
     echo -e "🆔 Google Cloud 项目ID:"
     echo -e "   $proj"
     
     ui_pause
 }
 
-# --- 修改后的 configure_params：增加 Project ID 修改功能 ---
 configure_params() {
     if [ ! -f "$ENV_FILE" ]; then touch "$ENV_FILE"; fi
     local port=$(grep "^PORT=" "$ENV_FILE" | cut -d= -f2); [ -z "$port" ] && port=8888
@@ -438,8 +422,6 @@ configure_params() {
                 echo -e "${CYAN}提示: 请输入您的 Google Cloud Project ID (如: my-project-123)${NC}"
                 echo -e "${YELLOW}留空则使用自动探测模式。${NC}"
                 new_id=$(ui_input "输入 Project ID" "$proj" "false")
-                
-                # 如果用户输入了且不是"未设置"
                 if [ -n "$new_id" ] && [ "$new_id" != "未设置 (自动)" ]; then
                     if grep -q "^GOOGLE_CLOUD_PROJECT=" "$ENV_FILE"; then
                         sed -i "s/^GOOGLE_CLOUD_PROJECT=.*/GOOGLE_CLOUD_PROJECT=$new_id/" "$ENV_FILE"
@@ -449,7 +431,6 @@ configure_params() {
                     proj=$new_id
                     ui_print success "项目 ID 已保存！"
                 else
-                    # 如果用户留空，则删除该行，恢复自动探测
                     sed -i '/^GOOGLE_CLOUD_PROJECT=/d' "$ENV_FILE"
                     proj="未设置 (自动)"
                     ui_print info "已恢复自动探测模式。"
