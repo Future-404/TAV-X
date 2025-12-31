@@ -13,24 +13,34 @@ is_installed() {
     if [ -d "$INSTALL_DIR/plugins/$d" ] || [ -d "$INSTALL_DIR/public/scripts/extensions/third-party/$d" ]; then return 0; else return 1; fi
 }
 
+extract_repo_path() {
+    local url=$1
+    local short=${url#*github.com/}
+    echo "$short"
+}
+
 install_single_plugin() {
-    local name=$1; local repo=$2; local s=$3; local c=$4; local dir=$5
+    local name=$1; local repo_url=$2; local s=$3; local c=$4; local dir=$5
     ui_header "安装插件: $name"
     
     if is_installed "$dir"; then
         if ! ui_confirm "插件已存在，是否重新安装？"; then return; fi
     fi
 
-    prepare_network_strategy "$repo"
+    local repo_path=$(extract_repo_path "$repo_url")
 
+    prepare_network_strategy
+    
     local TASKS=""
+    
     if [ "$s" != "-" ]; then
         local b_arg=""; [ "$s" != "HEAD" ] && b_arg="-b $s"
-        TASKS+="safe_rm '$INSTALL_DIR/plugins/$dir'; git_clone_smart '$b_arg' '$repo' '$INSTALL_DIR/plugins/$dir' || exit 1;"
+        TASKS+="safe_rm '$INSTALL_DIR/plugins/$dir'; git_clone_smart '$b_arg' '$repo_path' '$INSTALL_DIR/plugins/$dir' || exit 1;"
     fi
+    
     if [ "$c" != "-" ]; then
         local b_arg=""; [ "$c" != "HEAD" ] && b_arg="-b $c"
-        TASKS+="safe_rm '$INSTALL_DIR/public/scripts/extensions/third-party/$dir'; git_clone_smart '$b_arg' '$repo' '$INSTALL_DIR/public/scripts/extensions/third-party/$dir' || exit 1;"
+        TASKS+="safe_rm '$INSTALL_DIR/public/scripts/extensions/third-party/$dir'; git_clone_smart '$b_arg' '$repo_path' '$INSTALL_DIR/public/scripts/extensions/third-party/$dir' || exit 1;"
     fi
     
     local WRAP_CMD="source \"$TAVX_DIR/core/utils.sh\"; $TASKS"
@@ -129,9 +139,9 @@ plugin_menu() {
         ui_header "插件生态中心"
         CHOICE=$(ui_menu "请选择" "📥 安装插件" "➕ 提交插件" "🔙 返回主菜单")
         case "$CHOICE" in
-            *"安装"*) list_install_menu ;;
-            *"提交"*) submit_plugin ;;
-            *"返回"*) return ;;
-        esac
+            *"安装"*) list_install_menu ;; 
+            *"提交"*) submit_plugin ;; 
+            *"返回"*) return ;; 
+        esac 
     done
 }

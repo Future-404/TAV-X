@@ -1,5 +1,5 @@
 #!/bin/bash
-# TAV-X Universal Installer
+# TAV-X Universal Installer & Launcher
 
 DEFAULT_POOL=(
     "https://ghproxy.net/"
@@ -22,248 +22,196 @@ DEFAULT_POOL=(
 )
 
 PROXY_PORTS=(
-    "7890:socks5h"
-    "7891:socks5h"
+    "7890:http"
+    "7891:http"
     "10809:http"
-    "10808:socks5h"
+    "10808:http"
     "20171:http"
-    "20170:socks5h"
+    "20170:http"
     "9090:http"
     "8080:http"
-    "1080:socks5h"
+    "1080:http"
+    "2080:http"
 )
 
 : "${REPO_PATH:=Future-404/TAV-X.git}"
 : "${TAV_VERSION:=Latest}"
 
-if [ -n "$MIRROR_LIST" ]; then
-    IFS=' ' read -r -a MIRRORS <<< "$MIRROR_LIST"
+if [ -n "$TERMUX_VERSION" ]; then
+    export TAVX_DIR="/data/data/com.termux/files/home/.tav_x"
 else
-    MIRRORS=("${DEFAULT_POOL[@]}")
+    export TAVX_DIR="${HOME}/.tav_x"
 fi
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-NC='\033[0m'
-
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-
-if [ -f "$SCRIPT_DIR/core/main.sh" ]; then
-    echo -e "\033[1;35m🔧 [DEV MODE] 开发者模式已激活\033[0m"
-    echo -e "📂 使用此目录作为运行环境: $SCRIPT_DIR"
-
-    export TAVX_DIR="$SCRIPT_DIR"
-
-    chmod +x "$TAVX_DIR"/core/*.sh "$TAVX_DIR"/modules/*.sh 2>/dev/null
-    exec bash "$TAVX_DIR/core/main.sh"
-    exit 0
+if [ -f "$TAVX_DIR/core/main.sh" ]; then
+    exec bash "$TAVX_DIR/core/main.sh" "$@"
 fi
 
-export TAVX_DIR="$HOME/.tav_x"
-CORE_FILE="$TAVX_DIR/core/main.sh"
-
-if [ -f "$CORE_FILE" ]; then
-    chmod +x "$CORE_FILE" "$TAVX_DIR"/core/*.sh "$TAVX_DIR"/modules/*.sh 2>/dev/null
-    exec bash "$CORE_FILE"
-fi
-
-
-clear
-echo -e "${RED}"
-cat << "BANNER"
-██╗░░░██╗██████╗░░██████╗░██████╗░░█████╗░██████╗░███████╗
-██║░░░██║██╔══██╗██╔════╝░██╔══██╗██╔══██╗██╔══██╗██╔════╝
-██║░░░██║██████╔╝██║░░██╗░██████╔╝███████║██║░░██║█████╗░░
-██║░░░██║██╔═══╝░██║░░╚██╗██╔══██╗██╔══██║██║░░██║██╔══╝░░
-╚██████╔╝██║░░░░░╚██████╔╝██║░░██║██║░░██║██████╔╝███████╗
-░╚═════╝░╚═╝░░░░░░╚═════╝░╚═╝░░╚═╝╚═════╝░╚══════╝
-BANNER
-echo -e "${NC}"
-echo -e "${CYAN}TAV-X 智能安装程序${NC} [Ver: ${TAV_VERSION}]"
-echo "------------------------------------------------"
-
-if ! command -v git &> /dev/null; then
-    echo -e "${YELLOW}>>> 正在安装基础依赖 (Git)...${NC}"
+echo -e "\033[1;36m>>> TAV-X Installer initializing...\033[0m"
+if [ -n "$TERMUX_VERSION" ]; then
     pkg update -y >/dev/null 2>&1
-    pkg install git -y
-fi
-
-test_connection() {
-    curl -I -s --max-time 3 "https://github.com" >/dev/null 2>&1
-}
-
-probe_direct_or_env() {
-    echo -e "${YELLOW}>>> [1/3] 探测现有网络环境...${NC}"
-
-    if [ -n "$http_proxy" ] || [ -n "$https_proxy" ]; then
-        echo -e "    检测到环境变量代理: ${CYAN}${https_proxy:-$http_proxy}${NC}"
-        if test_connection; then
-            echo -e "${GREEN}    ✔ 代理有效！${NC}"
-            return 0
-        else
-            echo -e "${RED}    ✘ 环境变量代理不可用${NC}"
-            unset http_proxy https_proxy all_proxy
+    if ! command -v git &> /dev/null; then pkg install git -y; fi
+    if ! command -v gum &> /dev/null; then pkg install gum -y; fi
+else
+    if command -v apt-get &> /dev/null; then
+        if ! command -v git &> /dev/null; then 
+            sudo apt-get update >/dev/null 2>&1
+            sudo apt-get install git -y
         fi
     fi
+fi
 
-    echo -ne "    尝试直连 GitHub... "
-    if test_connection; then
-        echo -e "${GREEN}成功${NC}"
+DL_URL=""
+
+probe_local_ports() {
+    for entry in "${PROXY_PORTS[@]}"; do
+        port=${entry%%:*}
+        if timeout 0.1 bash -c "</dev/tcp/127.0.0.1/$port" 2>/dev/null; then
+            echo -e "\033[1;32m✔ 发现本地代理端口: $port\033[0m"
+            export http_proxy="http://127.0.0.1:$port"
+            export https_proxy="http://127.0.0.1:$port"
+            return 0
+        fi
+    done
+    return 1
+}
+
+check_github_speed() {
+    local THRESHOLD=819200
+    local CLEAN_REPO=${REPO_PATH%.git} 
+    local TEST_URL="https://raw.githubusercontent.com/${CLEAN_REPO}/main/st.sh"
+    
+    echo -e "\033[1;33m正在测试 GitHub 直连速度 (阈值: 800KB/s)...\033[0m"
+    
+    local speed=$(curl -s -L -m 5 -w "%{speed_download}\n" -o /dev/null "$TEST_URL" 2>/dev/null)
+    speed=${speed%.*}
+    if [ -z "$speed" ]; then speed=0; fi
+    local speed_kb=$((speed / 1024))
+    
+    if [ "$speed" -ge "$THRESHOLD" ]; then
+        echo -e "\033[1;32m✔ 网速达标: ${speed_kb}KB/s (使用了直连)\033[0m"
         return 0
     else
-        echo -e "${RED}失败${NC}"
+        if [ "$speed" -eq 0 ]; then
+             echo -e "\033[1;31m✘ 无法连接到 GitHub。\033[0m"
+        else
+             echo -e "\033[1;33m⚠ 网速不足: ${speed_kb}KB/s (低于 800KB/s)，转入镜像选择。\033[0m"
+        fi
         return 1
     fi
 }
 
-probe_local_ports() {
-    echo -e "\n${YELLOW}>>> [2/3] 扫描本地代理端口...${NC}"
-
-    for entry in "${PROXY_PORTS[@]}"; do
-        local port=${entry%%:*}
-        local proto=${entry#*:}
-
-        if timeout 0.2 bash -c "</dev/tcp/127.0.0.1/$port" 2>/dev/null; then
-            echo -e "    🔍 发现端口: ${CYAN}$port ($proto)${NC}"
-
-            if [[ "$proto" == "socks5h" ]]; then
-                proxy_url="socks5h://127.0.0.1:$port"
-            else
-                proxy_url="http://127.0.0.1:$port"
-            fi
-
-            export http_proxy="$proxy_url"
-            export https_proxy="$proxy_url"
-            export all_proxy="$proxy_url"
-
-            echo -ne "    🧪 测试代理... "
-            if test_connection; then
-                echo -e "${GREEN}可用${NC}"
-                return 0
-            else
-                echo -e "${RED}失败${NC}"
-                unset http_proxy https_proxy all_proxy
-            fi
-        fi
-    done
-
-    echo -e "    ⚠️ 未发现可用代理端口"
-    return 1
-}
-
 select_mirror_interactive() {
-    echo -e "\n${YELLOW}>>> [3/3] 启动镜像并发测速 (Smart Race)...${NC}"
-    echo "------------------------------------------------"
-
-    local tmp_race_file="/data/data/com.termux/files/usr/tmp/tav_mirror_race"
-    rm -f "$tmp_race_file"
-    mkdir -p "$(dirname "$tmp_race_file")"
-
-    for mirror in "${MIRRORS[@]}"; do
+    echo -e "\n\033[1;36m>>> 启动备用方案：镜像源测速选择\033[0m"
+    echo -e "\033[1;33m正在并发测速，请稍候...\033[0m"
+    local tmp_file=$(mktemp)
+    
+    for url in "${DEFAULT_POOL[@]}"; do
         (
-            if [[ "$mirror" == *"github.com"* ]]; then
-                 TEST_URL="${mirror}${REPO_PATH}"
-            else
-                 TEST_URL="${mirror}https://github.com/${REPO_PATH}/info/refs?service=git-upload-pack"
+            start=$(date +%s%N)
+            if curl -s -I -m 2 "${url}https://github.com/${REPO_PATH}" >/dev/null 2>&1; then
+                end=$(date +%s%N)
+                dur=$(( (end - start) / 1000000 ))
+                echo "$dur $url" >> "$tmp_file"
             fi
-            
-            TIME_START=$(date +%s%N)
-            if curl -s -I -m 3 "$TEST_URL" >/dev/null 2>&1; then
-                TIME_END=$(date +%s%N)
-                DURATION=$(( (TIME_END - TIME_START) / 1000000 ))
-                echo "$DURATION|$mirror" >> "$tmp_race_file"
-                echo -ne "."
-            fi
-        ) & 
+        ) &
     done
     wait
-    echo ""
-    if [ ! -s "$tmp_race_file" ]; then
-        echo -e "${RED}❌ 所有线路均连接超时，请检查网络或开启/关闭飞行模式。${NC}"
-        exit 1
-    fi
-
-    sort -n "$tmp_race_file" -o "$tmp_race_file"
-
-    echo "------------------------------------------------"
-    echo -e " 延迟(ms) | 镜像源"
-    echo "------------------------------------------------"
-
-    VALID_URLS=()
-    local idx=1
-    while IFS='|' read -r dur url; do
-        if [ $dur -lt 500 ]; then C_CODE=$GREEN;
-        elif [ $dur -lt 1000 ]; then C_CODE=$YELLOW;
-        else C_CODE=$RED; fi
-        if [[ "$url" == *"github.com"* ]]; then
-             DISPLAY_NAME="GitHub 官方"
-             DL_LINK="https://github.com/${REPO_PATH}"
-        else
-             DISPLAY_NAME=$(echo $url | awk -F/ '{print $3}')
-             DL_LINK="${url}https://github.com/${REPO_PATH}"
-        fi
-
-        printf " [%2d] %b%4d%b | %s\n" "$idx" "$C_CODE" "$dur" "$NC" "$DISPLAY_NAME"
-        
-        VALID_URLS+=("$DL_LINK")
-        ((idx++))
-    done < "$tmp_race_file"
-    rm -f "$tmp_race_file"
-
-    echo "------------------------------------------------"
-    echo -e "${CYAN}系统已自动排序，建议选择前几项。${NC}"
-    echo -e "${CYAN}请输入序号选择下载源 (默认 1)：${NC}"
-    read -p ">>> " USER_CHOICE
-    if [[ -z "$USER_CHOICE" ]]; then
-        USER_CHOICE=1
-    fi
-
-    if [[ "$USER_CHOICE" =~ ^[0-9]+$ ]] && [ "$USER_CHOICE" -ge 1 ] && [ "$USER_CHOICE" -le "${#VALID_URLS[@]}" ]; then
-        DL_URL="${VALID_URLS[$((USER_CHOICE-1))]}"
-        echo -e "${GREEN}✔ 已选择: $DL_URL${NC}"
+    
+    local VALID_URLS=()
+    if [ -s "$tmp_file" ]; then
+        sort -n "$tmp_file" -o "$tmp_file"
+        echo -e "\n\033[1;36m可用镜像列表 (按延迟排序):\033[0m"
+        local i=1
+        while read -r dur url; do
+            local mark="\033[1;32m🟢"
+            [ "$dur" -gt 800 ] && mark="\033[1;33m🟡"
+            [ "$dur" -gt 1500 ] && mark="\033[1;31m🔴"
+            local domain=$(echo "$url" | awk -F/ '{print $3}')
+            echo -e "$i. $mark ${dur}ms \033[0m| $domain"
+            VALID_URLS+=("$url")
+            ((i++))
+        done < "$tmp_file"
     else
-        echo -e "${RED}无效输入，自动选择最快线路 (第1项)${NC}"
-        DL_URL="${VALID_URLS[0]}"
+        echo -e "\033[1;31m✘ 所有镜像连接超时。强制使用官方源。\033[0m"
+        DL_URL="https://github.com/${REPO_PATH}"
+        rm -f "$tmp_file"
+        return
+    fi
+    rm -f "$tmp_file"
+    
+    echo -e "$i. 🌐 官方源 (无视速度强制直连)"
+    VALID_URLS+=("https://github.com/")
+    
+    echo ""
+    read -p "请选择镜像编号 [默认 1]: " USER_CHOICE
+    USER_CHOICE=${USER_CHOICE:-1}
+    
+    if [[ "$USER_CHOICE" =~ ^[0-9]+$ ]] && [ "$USER_CHOICE" -ge 1 ] && [ "$USER_CHOICE" -le "${#VALID_URLS[@]}" ]; then
+        local best_url="${VALID_URLS[$((USER_CHOICE-1))]}"
+        if [[ "$best_url" == *"github.com"* ]]; then
+            DL_URL="https://github.com/${REPO_PATH}"
+        else
+            DL_URL="${best_url}https://github.com/${REPO_PATH}"
+        fi
+        echo -e "\033[1;32m✔ 已选定: $best_url\033[0m"
+    else
+        echo -e "\033[1;31m无效选择，默认使用第一项。\033[0m"
+        DL_URL="${VALID_URLS[0]}https://github.com/${REPO_PATH}"
     fi
 }
 
-if probe_direct_or_env; then
+if probe_local_ports; then
     DL_URL="https://github.com/${REPO_PATH}"
-
-elif probe_local_ports; then
+elif check_github_speed; then
     DL_URL="https://github.com/${REPO_PATH}"
-
 else
     select_mirror_interactive
 fi
 
-if [ -d "$TAVX_DIR" ]; then rm -rf "$TAVX_DIR"; fi
+echo -e "\n\033[1;36m>>> Processing Core ($TAV_VERSION)...\033[0m"
+echo -e "Source: $DL_URL"
 
-echo -e "\n${CYAN}>>> 正在拉取核心组件...${NC}"
-echo -e "源地址: $DL_URL"
-
-if git clone --depth 1 "$DL_URL" "$TAVX_DIR"; then
-    chmod +x "$TAVX_DIR/st.sh" "$TAVX_DIR"/core/*.sh "$TAVX_DIR"/modules/*.sh 2>/dev/null
-
-    SHELL_RC="$HOME/.bashrc"
-    [ -f "$HOME/.zshrc" ] && SHELL_RC="$HOME/.zshrc"
-
-    sed -i '/alias st=/d' "$SHELL_RC" 2>/dev/null
-    echo "alias st='bash $TAVX_DIR/st.sh'" >> "$SHELL_RC"
-
-    if ! command -v gum &> /dev/null; then
-        echo -e "${YELLOW}>>> 部署 UI 引擎 (Gum)...${NC}"
-        pkg install gum -y >/dev/null 2>&1
+INSTALL_SUCCESS=false
+if [ -d "$TAVX_DIR/.git" ]; then
+    echo -e "\033[1;33m检测到现有安装，尝试修复更新 (保留用户数据)...\033[0m"
+    cd "$TAVX_DIR" || exit
+    git remote set-url origin "$DL_URL"
+    if git fetch origin main && git reset --hard origin/main; then
+        INSTALL_SUCCESS=true
     fi
-
-    echo ""
-    echo -e "${GREEN}🎉 TAV-X 安装成功！${NC}"
-    echo -e "👉 请输入 ${CYAN}source ~/.bashrc${NC} 生效，然后输入 ${CYAN}st${NC} 启动。"
-
 else
-    echo -e "\n${RED}❌ 下载失败${NC}"
-    echo -e "请重新运行脚本并选择其他线路。"
+    if git clone --depth 1 "$DL_URL" "$TAVX_DIR"; then
+        INSTALL_SUCCESS=true
+    fi
+fi
+
+if [ "$INSTALL_SUCCESS" = true ]; then
+    (
+        cd "$TAVX_DIR" || exit
+        git remote set-url origin "https://github.com/${REPO_PATH}"
+    )
+    
+    chmod +x "$TAVX_DIR/st.sh" "$TAVX_DIR"/core/*.sh "$TAVX_DIR"/modules/*.sh 2>/dev/null
+    for rc_file in "$HOME/.bashrc" "$HOME/.zshrc"; do
+        if [ -f "$rc_file" ]; then
+            sed -i '/alias st=/d' "$rc_file" 2>/dev/null
+            echo "alias st='bash $TAVX_DIR/st.sh'" >> "$rc_file"
+        fi
+    done
+
+    echo -e "\n\033[1;32m✔ 就绪 / Ready!\033[0m"
+    echo -e "----------------------------------------"
+    echo -e "💡 下次启动请直接输入: \033[1;33mst\033[0m"
+    echo -e "----------------------------------------"
+    
+    echo -ne "\033[1;36m🚀 即将自动启动... (3秒 / 按任意键立即开始)\033[0m"
+    read -t 3 -n 1 -s 
+    echo "" 
+
+    alias st="bash $TAVX_DIR/st.sh" 2>/dev/null
+    exec bash "$TAVX_DIR/core/main.sh"
+else
+    echo -e "\n\033[1;31m✘ Installation Failed.\033[0m"
     exit 1
 fi

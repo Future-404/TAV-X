@@ -10,10 +10,14 @@ check_for_updates() {
     [ ! -d "$TAVX_DIR/.git" ] && return
     (
         cd "$TAVX_DIR" || exit
-        if git fetch origin --quiet --timeout=10; then
-            LOCAL=$(git rev-parse HEAD)
-            REMOTE=$(git rev-parse @{u})
-            [ "$LOCAL" != "$REMOTE" ] && echo "true" > "$TAVX_DIR/.update_available" || rm -f "$TAVX_DIR/.update_available"
+        local check_url=$(get_dynamic_repo_url "Future-404/TAV-X.git")
+        local REMOTE_HASH=$(git ls-remote "$check_url" HEAD | awk '{print $1}')
+        local LOCAL_HASH=$(git rev-parse HEAD)
+        
+        if [ -n "$REMOTE_HASH" ] && [ "$LOCAL_HASH" != "$REMOTE_HASH" ]; then
+            echo "true" > "$TAVX_DIR/.update_available"
+        else
+            rm -f "$TAVX_DIR/.update_available"
         fi
     ) >/dev/null 2>&1 &
 }
@@ -34,9 +38,9 @@ update_sillytavern() {
         ui_pause; return
     fi
 
-    prepare_network_strategy "SillyTavern/SillyTavern"
-
-    local UPDATE_CMD="source \"$TAVX_DIR/core/utils.sh\"; fix_git_remote \"$INSTALL_DIR\" \"SillyTavern/SillyTavern\"; cd \"$INSTALL_DIR\"; git pull --autostash"
+    prepare_network_strategy
+    local TEMP_URL=$(get_dynamic_repo_url "SillyTavern/SillyTavern")
+    local UPDATE_CMD="cd \"$INSTALL_DIR\"; git pull --autostash \"$TEMP_URL\""
     
     if ui_spinner "正在同步最新代码..." "$UPDATE_CMD"; then
         ui_print success "代码同步完成。"
@@ -85,11 +89,13 @@ rollback_sillytavern() {
         
         CHOICE=$(ui_menu "请选择操作" "${MENU_ITEMS[@]}")
         
+        prepare_network_strategy
+        local TEMP_URL=$(get_dynamic_repo_url "SillyTavern/SillyTavern")
+        
         case "$CHOICE" in
             *"解除锁定"*)
                 if ui_confirm "确定恢复到最新 Release 版？"; then
-                    prepare_network_strategy "SillyTavern/SillyTavern"
-                    local RESTORE="source \"$TAVX_DIR/core/utils.sh\"; fix_git_remote \"$INSTALL_DIR\" \"SillyTavern/SillyTavern\"; git config remote.origin.fetch \"+refs/heads/*:refs/remotes/origin/*\"; git fetch origin release --depth=1; git reset --hard origin/release; git checkout release"
+                    local RESTORE="git config remote.origin.fetch \"+refs/heads/*:refs/remotes/origin/*\"; git fetch \"$TEMP_URL\" release --depth=1; git reset --hard FETCH_HEAD; git checkout release"
                     if ui_spinner "正在归队..." "$RESTORE"; then
                         echo ""; npm_install_smart "$INSTALL_DIR"
                         ui_print success "已恢复！"
@@ -101,9 +107,8 @@ rollback_sillytavern() {
                 ui_print info "缓存已清除。"
                 sleep 0.5 ;;
             *"回退至历史版本"*)
-                prepare_network_strategy "SillyTavern/SillyTavern"
                 if [ ! -f "$TAG_CACHE" ]; then
-                    local FETCH="source \"$TAVX_DIR/core/utils.sh\"; fix_git_remote \"$INSTALL_DIR\" \"SillyTavern/SillyTavern\"; git fetch --tags"
+                    local FETCH="git fetch \"$TEMP_URL\" --tags"
                     if ! ui_spinner "云端获取中..." "$FETCH"; then
                         ui_print error "获取失败"; ui_pause; continue
                     fi
@@ -116,7 +121,7 @@ rollback_sillytavern() {
                 if [[ "$TAG_CHOICE" != *"取消"* ]]; then
                     echo -e "${RED}警告：即将重置核心文件以解决冲突。${NC}"
                     if ui_confirm "确认回退到 $TAG_CHOICE ？"; then
-                        local ROLLBACK_CMD="source \"$TAVX_DIR/core/utils.sh\"; fix_git_remote \"$INSTALL_DIR\" \"SillyTavern/SillyTavern\"; git fetch origin tag \"$TAG_CHOICE\" --depth=1; git reset --hard; git checkout \"$TAG_CHOICE\""
+                        local ROLLBACK_CMD="git fetch \"$TEMP_URL\" tag \"$TAG_CHOICE\" --depth=1; git reset --hard FETCH_HEAD; git checkout \"$TAG_CHOICE\""
                         if ui_spinner "时光倒流..." "$ROLLBACK_CMD"; then
                             echo ""; npm_install_smart "$INSTALL_DIR"
                             ui_print success "已锁定在 $TAG_CHOICE"
@@ -126,8 +131,7 @@ rollback_sillytavern() {
                 ui_pause ;;
             *"切换通道"*)
                 local TARGET=""; [[ "$CHOICE" == *"Release"* ]] && TARGET="release"; [[ "$CHOICE" == *"Staging"* ]] && TARGET="staging"
-                prepare_network_strategy "SillyTavern/SillyTavern"
-                local SW_CMD="source \"$TAVX_DIR/core/utils.sh\"; fix_git_remote \"$INSTALL_DIR\" \"SillyTavern/SillyTavern\"; git config remote.origin.fetch \"+refs/heads/*:refs/remotes/origin/*\"; git fetch origin $TARGET --depth=1; git reset --hard origin/$TARGET; git checkout $TARGET"
+                local SW_CMD="git config remote.origin.fetch \"+refs/heads/*:refs/remotes/origin/*\"; git fetch \"$TEMP_URL\" $TARGET --depth=1; git reset --hard FETCH_HEAD; git checkout $TARGET"
                 if ui_spinner "切换至 $TARGET..." "$SW_CMD"; then
                     echo ""; npm_install_smart "$INSTALL_DIR"
                     ui_print success "切换成功！"
@@ -139,10 +143,13 @@ rollback_sillytavern() {
 }
 
 perform_self_update() {
-    prepare_network_strategy "Future-404/TAV-X.git"
-    local UPD_CMD="source \"$TAVX_DIR/core/utils.sh\"; fix_git_remote \"$TAVX_DIR\" \"Future-404/TAV-X.git\"; cd \"$TAVX_DIR\"; CURr=\$(git rev-parse --abbrev-ref HEAD); git fetch --all && git reset --hard origin/\$CURr"
+    prepare_network_strategy
+    local TEMP_URL=$(get_dynamic_repo_url "Future-404/TAV-X.git")
+    local UPD_CMD="cd \"$TAVX_DIR\"; git fetch \"$TEMP_URL\" main; git reset --hard FETCH_HEAD"
+    
     if ui_spinner "更新脚本..." "$UPD_CMD"; then
         rm -f "$TAVX_DIR/.update_available"; chmod +x st.sh core/*.sh modules/*.sh scripts/*.js 2>/dev/null
+        reset_to_official_remote "$TAVX_DIR" "Future-404/TAV-X.git"
         ui_print success "完成！重启中..."; sleep 1; exec bash "$TAVX_DIR/st.sh"
     else ui_print error "失败"; ui_pause; fi
 }

@@ -1,6 +1,6 @@
 #!/bin/bash
 # [METADATA]
-# MODULE_NAME: 🛡️  ADB 保活
+# MODULE_NAME: 🛡️  ADB 保活 (Android)
 # MODULE_ENTRY: adb_menu_loop
 # [END_METADATA]
 source "$TAVX_DIR/core/env.sh"
@@ -20,10 +20,21 @@ check_dependency() {
     fi
     ui_header "ADB 组件安装"
     if [ -d "$LEGACY_ADB_DIR" ]; then rm -rf "$LEGACY_ADB_DIR"; sed -i '/adb_tools\/platform-tools/d' "$HOME/.bashrc"; fi
-    ui_print info "正在安装 android-tools..."
-    if ui_spinner "安装中..." "pkg install android-tools -y"; then
-        if command -v adb &> /dev/null; then ui_print success "ADB 安装成功！"; else ui_print error "安装失败。"; fi
-    else ui_print error "安装出错。"; fi
+    
+    ui_print info "正在安装 ADB 工具包..."
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        if ui_spinner "安装中 (pkg)..." "pkg install android-tools -y"; then
+             ui_print success "ADB 安装成功！"
+        else
+             ui_print error "安装失败。"
+        fi
+    else
+        if ui_spinner "安装中 (apt)..." "$SUDO_CMD apt-get install adb -y"; then
+             ui_print success "ADB 安装成功！"
+        else
+             ui_print error "安装失败，请尝试: sudo apt install adb"
+        fi
+    fi
     ui_pause
 }
 
@@ -38,7 +49,11 @@ check_audio_deps() {
     if [ -n "$MISSING" ]; then
         ui_header "安装音频组件"
         ui_print info "安装依赖: $MISSING"
-        pkg install $MISSING -y
+        if [ "$OS_TYPE" == "TERMUX" ]; then
+            pkg install $MISSING -y
+        else
+            $SUDO_CMD apt-get install $MISSING -y
+        fi
     fi
 }
 
@@ -52,6 +67,11 @@ ensure_silence_file() {
 }
 
 start_heartbeat() {
+    if [ "$OS_TYPE" == "LINUX" ]; then
+        ui_print warn "Linux 环境通常无需音频保活，除非您正在调试。"
+        if ! ui_confirm "仍要启动吗？"; then return; fi
+    fi
+    
     check_audio_deps
     ensure_silence_file || { ui_pause; return; }
     if [ -f "$HEARTBEAT_PID" ]; then
@@ -112,6 +132,8 @@ get_device_info() {
 
 apply_universal_fixes() {
     local PKG="com.termux"
+    # This targets the CONNECTED device, so it's valid on Linux too
+    
     local SDK_VER=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
     [ -z "$SDK_VER" ] && SDK_VER=0
     
@@ -128,6 +150,7 @@ apply_universal_fixes() {
     adb shell cmd appops set $PKG START_FOREGROUND allow
     adb shell am set-standby-bucket $PKG active >/dev/null 2>&1
     
+    # Only run local wake-lock if on Termux
     if command -v termux-wake-lock &> /dev/null; then termux-wake-lock; fi
 }
 
@@ -140,23 +163,23 @@ apply_vendor_fixes() {
     ui_print info "检测厂商策略: $MANUFACTURER"
     
     case "$MANUFACTURER" in
-        *huawei*|*honor*)
+        *huawei*|*honor*) 
             ui_print info "正在应用华为策略..."
             adb shell pm disable-user --user 0 com.huawei.powergenie 2>/dev/null
             adb shell pm disable-user --user 0 com.huawei.android.hwaps 2>/dev/null
             adb shell am stopservice hwPfwService 2>/dev/null
             echo -e "${YELLOW}提示: 请手动检查 电池 -> 应用启动管理 -> Termux -> 改为手动管理${NC}"
-            ;;
+            ;; 
             
-        *xiaomi*|*redmi*)
+        *xiaomi*|*redmi*) 
             ui_print info "正在应用小米策略..."
             adb shell pm disable-user --user 0 com.xiaomi.joyose 2>/dev/null
             adb shell pm disable-user --user 0 com.xiaomi.powerchecker 2>/dev/null
             adb shell am start -n com.miui.securitycenter/com.miui.permcenter.autostart.AutoStartManagementActivity >/dev/null 2>&1
             echo -e "${YELLOW}提示: 系统已弹窗，请务必勾选 Termux 的【自启动】权限。${NC}"
-            ;;
+            ;; 
             
-        *oppo*|*realme*|*oneplus*)
+        *oppo*|*realme*|*oneplus*) 
             ui_print info "正在应用 ColorOS 策略..."
             if [ "$SDK_VER" -ge 34 ]; then
                 ui_print warn "Android 14+ 检测: 跳过禁用 Athena (防砖保护)。"
@@ -166,18 +189,18 @@ apply_vendor_fixes() {
             fi
             adb shell am start -n com.coloros.safecenter/.startupapp.StartupAppListActivity >/dev/null 2>&1
             echo -e "${YELLOW}提示: 系统已弹窗，请允许自启动。${NC}"
-            ;;
+            ;; 
             
-        *vivo*|*iqoo*)
+        *vivo*|*iqoo*) 
             ui_print info "正在应用 OriginOS 策略..."
             adb shell pm disable-user --user 0 com.vivo.pem 2>/dev/null
             adb shell pm disable-user --user 0 com.vivo.abe 2>/dev/null
             adb shell am start -a android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS >/dev/null 2>&1
-            ;;
+            ;; 
             
         *)
             ui_print info "无特定厂商策略，仅使用通用优化。"
-            ;;
+            ;; 
     esac
 }
 
@@ -194,11 +217,11 @@ apply_smart_keepalive() {
     CHOICE=$(ui_menu "请选择保活方案" \
         "🛡️ 通用保活 (推荐/安全)" \
         "🔥 激进保活 (激进/可撤销)" \
-        "🔙 返回" \
+        "🔙 返回" 
     )
 
     case "$CHOICE" in
-        *"通用"*)
+        *"通用"*) 
             echo ""
             ui_print info "正在执行通用优化 (AOSP)..."
             ui_spinner "应用系统参数..." "$SELF_SOURCE; apply_universal_fixes"
@@ -206,9 +229,9 @@ apply_smart_keepalive() {
             ui_print success "通用保活执行成功！"
             echo -e "${YELLOW}提示：请重启手机。如果依然杀后台，请尝试[激进保活]。${NC}"
             ui_pause
-            ;;
+            ;; 
             
-        *"激进"*)
+        *"激进"*) 
             echo ""
             echo -e "${RED}⚠️  激进模式副作用警告：${NC}"
             echo -e "此模式将禁用温控/云控组件，可能导致发热或私有快充失效。"
@@ -229,9 +252,9 @@ apply_smart_keepalive() {
             echo -e "1. 建议**重启手机**以彻底应用更改。"
             echo -e "2. 重启后无需再次执行，但需重新开启音频心跳。"
             ui_pause
-            ;;
+            ;; 
             
-        *) return ;;
+        *) return ;; 
     esac
 }
 
@@ -257,7 +280,7 @@ revert_all_changes() {
         adb shell pm enable com.coloros.athena 2>/dev/null
         adb shell pm enable com.vivo.pem 2>/dev/null
         adb shell pm enable com.vivo.abe 2>/dev/null
-        termux-wake-unlock
+        if command -v termux-wake-unlock &> /dev/null; then termux-wake-unlock; fi
     "
     
     ui_print success "已恢复默认设置！"
@@ -265,11 +288,6 @@ revert_all_changes() {
 }
 
 adb_menu_loop() {
-    if [ "$OS_TYPE" == "LINUX" ]; then
-        ui_print warn "Linux 服务器不需要保活模块。"
-        ui_pause; return
-    fi
-
     check_dependency
     while true; do
         ui_header "ADB 智能保活"
@@ -283,6 +301,11 @@ adb_menu_loop() {
         echo -e "ADB状态: $s_adb | 音频心跳: $s_audio"
         echo "----------------------------------------"
         
+        if [ "$OS_TYPE" == "LINUX" ]; then
+             echo -e "${BLUE}ℹ️  Linux 模式: 此工具仅用于管理远程/USB连接的 Android 设备。${NC}"
+             echo "----------------------------------------"
+        fi
+
         CHOICE=$(ui_menu "请选择操作" \
             "🤝 无线配对" \
             "🔗 连接 ADB" \
@@ -294,13 +317,13 @@ adb_menu_loop() {
         )
         
         case "$CHOICE" in
-            *"无线配对"*) pair_device ;;
-            *"连接 ADB"*) connect_adb ;;
-            *"智能保活"*) apply_smart_keepalive ;;
-            *"启动音频"*) start_heartbeat ;;
-            *"停止音频"*) stop_heartbeat ;;
-            *"撤销"*) revert_all_changes ;;
-            *"返回"*) return ;;
+            *"无线配对"*) pair_device ;; 
+            *"连接 ADB"*) connect_adb ;; 
+            *"智能保活"*) apply_smart_keepalive ;; 
+            *"启动音频"*) start_heartbeat ;; 
+            *"停止音频"*) stop_heartbeat ;; 
+            *"撤销"*) revert_all_changes ;; 
+            *"返回"*) return ;; 
         esac
     done
 }

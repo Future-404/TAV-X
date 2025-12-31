@@ -6,45 +6,78 @@
 
 source "$TAVX_DIR/core/utils.sh"
 
-# --- 变量定义 ---
 AUTOGLM_DIR="$TAVX_DIR/autoglm"
 VENV_DIR="$AUTOGLM_DIR/venv"
 CONFIG_FILE="$TAVX_DIR/config/autoglm.env"
 INSTALL_LOG="$TAVX_DIR/autoglm_install.log"
 LAUNCHER_SCRIPT="$TAVX_DIR/core/ai_launcher.sh"
-REPO_URL="Future-404/Open-AutoGLM"
 ADB_KEYBOARD_URL="https://github.com/senzhk/ADBKeyBoard/raw/master/ADBKeyboard.apk"
-TERMUX_API_PKG="com.termux.api"
 
-# --- 辅助函数 ---
-check_uv_installed() {
-    if command -v uv &> /dev/null; then return 0; fi
+monitor_process() {
+    local pid=$1
+    local log_file=$2
+    local spin='-\|/'
+    local i=0
     
-    ui_print info "准备安装 uv (本地编译模式)..."
-    echo "----------------------------------------"
-    echo ">>> [Setup] 正在补全 Rust 编译环境..."
+    echo -e "${YELLOW}⚠️  正在安装依赖，请勿关闭终端或切换到后台！${NC}"
+    echo -e "${YELLOW}☕  此过程可能需要 5-10 分钟，请耐心等待...${NC}"
+    echo ""
     
-    # 1. 必须安装 Rust 和 Binutils 才能编译 uv
-    pkg install rust binutils -y
+    tput civis
+    while kill -0 "$pid" 2>/dev/null; do
+        i=$(( (i+1) %4 ))
+        local last_line=$(tail -n 1 "$log_file" | cut -c 1-80)
+        echo -ne "\r\033[K[${spin:$i:1}] 正在处理: ${last_line}"
+        sleep 0.5
+    done
+    tput cnorm
+    echo -e "\r\033[K"
+}
+
+verify_and_fix_rust() {
+    [ "$OS_TYPE" != "TERMUX" ] && return 0
     
-    # 2. 确保 pip 支持代理
-    echo ">>> [Setup] 检查代理支持..."
-    pip install pysocks
-    
-    # 3. 编译安装 uv
-    echo ">>> [Build] 正在编译安装 uv (耗时较长，请耐心等待)..."
-    # 限制并发防止手机卡死
-    export CARGO_BUILD_JOBS=1
-    if pip install uv; then
-        ui_print success "uv 安装成功 (Native)"
-        return 0
+    ui_print info "正在自检编译环境..."
+    local test_file="$TAVX_DIR/rust_test.rs"
+    echo 'fn main(){}' > "$test_file"
+    if ! rustc "$test_file" -o "$test_file.bin" >/dev/null 2>&1; then
+        echo -e "${RED}✘ 检测到 Rust 环境损坏 (版本不匹配或标准库丢失)${NC}"
+        echo -e "${YELLOW}>>> 启动自动修复程序 (Nuclear Fix)...${NC}"
+        
+        (
+            set -x
+            pkg uninstall rust -y
+            apt autoremove -y
+            rm -rf "$HOME/.cargo" "$HOME/.rustup"
+            sed -i '/cargo\/env/d' "$HOME/.bashrc"
+            pkg clean && pkg update -y
+            pkg install -y rust binutils clang make
+        ) >> "$INSTALL_LOG" 2>&1
+        
+        if rustc "$test_file" -o "$test_file.bin" >/dev/null 2>&1; then
+            ui_print success "环境修复成功！"
+        else
+            ui_print error "自动修复失败，请手动执行 pkg reinstall rust"
+            return 1
+        fi
     else
-        ui_print error "uv 安装失败，请检查上方报错。"
-        return 1
+        ui_print info "编译环境正常 (Rust $(rustc --version | awk '{print $2}'))"
     fi
+    rm -f "$test_file" "$test_file.bin"
 }
 
 check_adb_keyboard() {
+    if ! command -v adb &>/dev/null || ! adb devices | grep -q "device$"; then
+        ui_print warn "检测到 ADB 未连接！"
+        echo -e "${YELLOW}AutoGLM 必须通过 ADB 才能控制手机。${NC}"
+        if ui_confirm "是否跳转到 [📱 ADB 连接助手] 进行修复？"; then
+            source "$TAVX_DIR/modules/adb_keepalive.sh"
+            adb_menu_loop
+            check_adb_keyboard; return
+        else
+            ui_print error "您选择了跳过 ADB 连接。"; return 0
+        fi
+    fi
     if adb shell ime list -s | grep -q "com.android.adbkeyboard/.AdbIME"; then return 0; fi
     ui_print warn "未检测到 ADB Keyboard"
     if ui_confirm "自动下载并安装 ADB Keyboard?"; then
@@ -64,19 +97,15 @@ check_adb_keyboard() {
     return 1
 }
 
-# --- 启动器生成 ---
 create_ai_launcher() {
 cat << EOF > "$LAUNCHER_SCRIPT"
 #!/bin/bash
 export TAVX_DIR="$TAVX_DIR"
 EOF
-
 cat << 'EOF' >> "$LAUNCHER_SCRIPT"
-
 source "$TAVX_DIR/core/env.sh"
 source "$TAVX_DIR/core/ui.sh"
 source "$TAVX_DIR/core/utils.sh"
-
 CONFIG_FILE="$TAVX_DIR/config/autoglm.env"
 AUTOGLM_DIR="$TAVX_DIR/autoglm"
 VENV_DIR="$AUTOGLM_DIR/venv"
@@ -85,10 +114,8 @@ send_feedback() {
     local status="$1"; local msg="$2"
     local clean_msg=$(echo "$msg" | tr '()' '[]' | tr '"' ' ' | tr "'" " ")
     local enable_feedback="${PHONE_AGENT_FEEDBACK:-true}"
-    
     [ "$status" == "success" ] && ui_print success "$msg" || ui_print error "$msg"
     [ "$enable_feedback" != "true" ] && return 0
-
     if [ "$status" == "success" ]; then
         command -v termux-toast &>/dev/null && termux-toast -g bottom "✅ 任务完成"
         adb shell cmd notification post -S bigtext -t "AutoGLM 完成" "AutoGLM" "$clean_msg" >/dev/null 2>&1
@@ -103,9 +130,7 @@ send_feedback() {
 check_dependencies() {
     if ! adb devices | grep -q "device$"; then
         ui_print error "ADB 未连接，跳转修复..."
-        sleep 1
-        source "$TAVX_DIR/modules/adb_keepalive.sh"
-        adb_menu_loop
+        source "$TAVX_DIR/modules/adb_keepalive.sh"; adb_menu_loop
         if ! adb devices | grep -q "device$"; then ui_print error "连接失败"; exit 1; fi
     fi
 }
@@ -115,158 +140,197 @@ main() {
     check_dependencies
     [ -f "$CONFIG_FILE" ] && source "$CONFIG_FILE"
     source "$VENV_DIR/bin/activate"
-
-    local enable_feedback="${PHONE_AGENT_FEEDBACK:-true}"
-    if [ "$enable_feedback" == "true" ] && command -v termux-toast &> /dev/null; then
-        termux-toast -g bottom "🚀 AutoGLM 已启动..."
-    fi
-
     echo ""; ui_print success "🚀 智能体已就绪！"
     echo -e "${CYAN}>>> 3秒倒计时...${NC}"; sleep 3
     cd "$AUTOGLM_DIR" || exit
-    
     if [ $# -eq 0 ]; then python main.py; else python main.py "$*"; fi
-    
     EXIT_CODE=$?
-    echo ""
-    [ $EXIT_CODE -eq 0 ] && send_feedback "success" "任务执行结束。" || send_feedback "error" "程序异常退出 [Code $EXIT_CODE]。"
+    echo ""; [ $EXIT_CODE -eq 0 ] && send_feedback "success" "任务执行结束。" || send_feedback "error" "程序异常退出 [Code $EXIT_CODE]。"
 }
 main "$@"
 EOF
     chmod +x "$LAUNCHER_SCRIPT"
     local ALIAS_CMD="alias ai='bash $LAUNCHER_SCRIPT'"
-    if ! grep -Fq "alias ai=" "$HOME/.bashrc"; then
-        echo "" >> "$HOME/.bashrc"; echo "$ALIAS_CMD" >> "$HOME/.bashrc"
-    fi
+    if ! grep -Fq "alias ai=" "$HOME/.bashrc"; then echo "" >> "$HOME/.bashrc"; echo "$ALIAS_CMD" >> "$HOME/.bashrc"; fi
 }
 
-# --- 核心流程 ---
-install_autoglm() {
-    ui_header "部署 Open-AutoGLM"
-    rm -f "$INSTALL_LOG"; touch "$INSTALL_LOG"
+perform_install_task() {
+    local MODE="$1"
+    local USE_UV="$2"
     
-    ui_print info "启动全自动安装..."
-    echo -e "${YELLOW}请关注下方日志。${NC}"
-    echo "----------------------------------------"
-
-    (
-        set -e
-        echo ">>> [Phase 1] 安装系统基础库..."
-        local SYS_PKGS="termux-api python-numpy python-pillow python-cryptography libjpeg-turbo libpng libxml2 libxslt clang make rust binutils"
-        pkg install root-repo science-repo -y
-        pkg install -y -o Dpkg::Options::="--force-confold" $SYS_PKGS
-    ) >> "$INSTALL_LOG" 2>&1
+    local USE_SYSTEM_SITE=false
+    local WHEEL_ARGS=""
+    local WHEEL_DIR="$AUTOGLM_DIR/wheels"
     
-    check_uv_installed || return
-
-    (
-        set -e
-        echo ">>> [Phase 3] 下载核心代码..."
-        if [ -d "$AUTOGLM_DIR" ]; then rm -rf "$AUTOGLM_DIR"; fi
+    if [ "$OS_TYPE" == "TERMUX" ] && [ "$MODE" == "optimized" ]; then
+        USE_SYSTEM_SITE=true
+        echo ">>> [Phase 0] 检查 Python 系统库..."
+        pkg install -y python-pip >> "$INSTALL_LOG" 2>&1
         
-        auto_load_proxy_env
-        git clone --depth 1 "https://github.com/$REPO_URL" "$AUTOGLM_DIR"
-        cd "$AUTOGLM_DIR" || exit 1
-        
-        echo ">>> [Phase 4] 创建虚拟环境..."
-        python -m venv "$VENV_DIR" --system-site-packages
-        source "$VENV_DIR/bin/activate"
-        
-        echo ">>> [Phase 5] 安装依赖..."
-        
+        echo ">>> [Phase 0.5] 检查加速包..."
         local WHEEL_URL="https://github.com/Future-404/TAV-X/releases/download/assets-v1/autoglm_wheels.tar.gz"
-        local USE_OFFLINE=false
-        
-        if download_file_smart "$WHEEL_URL" "wheels.tar.gz"; then
-            if tar -xzf wheels.tar.gz; then USE_OFFLINE=true; fi
-            rm -f wheels.tar.gz
+        if [ ! -f "$AUTOGLM_DIR/wheels.tar.gz" ] && [ ! -d "$WHEEL_DIR" ]; then
+            if curl -L "$WHEEL_URL" -o "$AUTOGLM_DIR/wheels.tar.gz" --connect-timeout 5; then
+                echo ">>> 下载成功"
+            fi
         fi
+        
+        if [ -f "$AUTOGLM_DIR/wheels.tar.gz" ]; then
+            tar -xzf "$AUTOGLM_DIR/wheels.tar.gz" -C "$AUTOGLM_DIR"
+            [ -d "$WHEEL_DIR" ] && WHEEL_ARGS="--find-links=$WHEEL_DIR"
+            rm -f "$AUTOGLM_DIR/wheels.tar.gz"
+        fi
+    fi
+
+    set -e
+    cd "$AUTOGLM_DIR" || exit 1
+    [ -d "$VENV_DIR" ] && rm -rf "$VENV_DIR"
+    
+    echo ">>> [Phase 1] 创建虚拟环境..."
+    local VENV_ARGS=""; [ "$USE_SYSTEM_SITE" == "true" ] && VENV_ARGS="--system-site-packages"
+    python3 -m venv "$VENV_DIR" $VENV_ARGS
+    source "$VENV_DIR/bin/activate"
+    
+    if [ "$USE_UV" == "true" ]; then
+        echo ">>> [Phase 2] 使用 UV 安装..."
+        uv pip install -U pip
+        uv pip install -r requirements.txt
+        uv pip install "httpx[socks]"
+    elif [ "$USE_SYSTEM_SITE" == "true" ]; then
+        echo ">>> [Phase 2] 混合模式安装..."
+        export CC="clang"; export CXX="clang++"; export CFLAGS="-Wno-implicit-function-declaration"
+        export RUSTFLAGS="-C lto=no"
+        export CARGO_BUILD_JOBS=1 
         
         cp requirements.txt requirements.tmp
         sed -i '/numpy/d' requirements.tmp
         sed -i '/Pillow/d' requirements.tmp
         sed -i '/cryptography/d' requirements.tmp
         
-        export CARGO_BUILD_JOBS=1
+        pip install --upgrade pip
         
-        if [ "$USE_OFFLINE" == "true" ] && [ -d "wheels" ]; then
-            echo ">>> [Mode] 🚀 混合极速安装 (UV Native)..."
-            # 这里的 uv 是本地版，它编译出来的 wheel 必定兼容 Android
-            uv pip install --find-links=./wheels -r requirements.tmp
-            uv pip install --find-links=./wheels "httpx[socks]"
-            uv pip install --find-links=./wheels -e .
-            rm -rf wheels
-        else
-            echo ">>> [Mode] 🐢 在线编译安装 (UV Native)..."
-            if ! uv pip install -r requirements.tmp; then
-                 uv pip install -r requirements.tmp -i https://pypi.tuna.tsinghua.edu.cn/simple
-            fi
-            uv pip install "httpx[socks]"
-            uv pip install -e .
-        fi
-        rm requirements.tmp
+        echo ">>> [Phase 2.1] 安装构建工具..."
+        pip install $WHEEL_ARGS maturin
         
-        echo ">>> ✅ 全部安装步骤完成！"
-    ) >> "$INSTALL_LOG" 2>&1 &
-    
-    safe_log_monitor "$INSTALL_LOG"
-    
-    if adb devices | grep -q "device$"; then check_adb_keyboard; fi
-    if ! adb shell pm list packages | grep -q "com.termux.api"; then
-        ui_print warn "推荐安装 Termux:API 应用"
+        echo ">>> [Phase 2.2] 安装 jiter (尝试次数: 3)..."
+        local success=0
+        for i in {1..3}; do
+            if pip install $WHEEL_ARGS jiter; then success=1; break; fi
+            echo "Retrying jiter ($i/3)..."
+            sleep 3
+        done
+        [ $success -eq 0 ] && exit 1
+        
+        echo ">>> [Phase 2.3] 安装剩余依赖..."
+        pip install $WHEEL_ARGS -r requirements.tmp
+        pip install $WHEEL_ARGS "httpx[socks]"
+        
+        rm -f requirements.tmp
+        rm -rf "$WHEEL_DIR"
+    else
+        echo ">>> [Phase 2] 标准 Pip 安装..."
+        export CC="clang"; export CXX="clang++"; export RUSTFLAGS="-C lto=no"
+        pip install --upgrade pip
+        pip install -r requirements.txt
     fi
+}
+
+setup_autoglm_venv() {
+    ui_header "AutoGLM 环境配置"
+    if [ ! -d "$AUTOGLM_DIR" ]; then ui_print error "请先执行 [⬇️ 安装/更新 核心代码]。"; ui_pause; return; fi
+    if ! command -v python3 &>/dev/null; then ui_print error "系统未检测到 Python3。"; ui_pause; return; fi
+    if [ "$OS_TYPE" == "TERMUX" ]; then verify_and_fix_rust; fi
     
-    create_ai_launcher
-    ui_print success "部署完成！输入 'ai' 启动。"
+    echo -e "${YELLOW}请选择依赖安装策略:${NC}"
+    echo -e "1. ${GREEN}标准模式 (Pip)${NC}"
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        echo -e "2. ${CYAN}混合模式 (System + Pip)${NC} - ${YELLOW}推荐${NC}"
+    else
+        echo -e "2. ${CYAN}极速模式 (UV)${NC}"
+    fi
+    echo "----------------------------------------"
+    local choice=$(ui_input "请输入序号 [1/2]" "2" "false")
+    local MODE="standard"; [ "$choice" == "2" ] && MODE="optimized"
+    local USE_UV=false; if [ "$OS_TYPE" != "TERMUX" ] && [ "$MODE" == "optimized" ] && command -v uv &>/dev/null; then USE_UV=true; fi
+
+    rm -f "$INSTALL_LOG"; touch "$INSTALL_LOG"
+    ( perform_install_task "$MODE" "$USE_UV" ) >> "$INSTALL_LOG" 2>&1 &
+    local PID=$!
+    monitor_process "$PID" "$INSTALL_LOG"
+    
+    wait "$PID"
+    local EXIT_CODE=$?
+    
+    if [ $EXIT_CODE -eq 0 ]; then
+        ui_print success "环境配置成功！"
+        echo -e "输入 ${CYAN}ai${NC} 启动。"
+    else
+        ui_print error "安装失败。"
+        echo -e "${YELLOW}--- 错误日志 (最后20行) ---${NC}"
+        tail -n 20 "$INSTALL_LOG"
+    fi
+    ui_pause
+}
+
+install_autoglm() {
+    ui_header "部署 Open-AutoGLM (Core)"
+    rm -f "$INSTALL_LOG"; touch "$INSTALL_LOG"
+    ui_print info "正在下载核心组件..."
+    (
+        set -e
+        echo ">>> [Phase 1] 安装系统基础库..."
+        if [ "$OS_TYPE" == "TERMUX" ]; then
+            pkg update -y
+            pkg install -y termux-api libjpeg-turbo libpng libxml2 libxslt rust binutils clang
+        else
+            local SYS_PKGS="libjpeg-dev zlib1g-dev libxml2-dev libxslt1-dev"
+            command -v apt-get &>/dev/null && { $SUDO_CMD apt-get update -y; $SUDO_CMD apt-get install -y $SYS_PKGS; }
+        fi
+    ) >> "$INSTALL_LOG" 2>&1
+
+    if [ -d "$AUTOGLM_DIR" ]; then rm -rf "$AUTOGLM_DIR"; fi
+    if git_clone_smart "" "https://github.com/zai-org/Open-AutoGLM" "$AUTOGLM_DIR"; then
+        check_adb_keyboard; create_ai_launcher
+        ui_print success "核心文件已就绪！"
+    else
+        ui_print error "源码下载失败，请检查网络。"
+    fi
     ui_pause
 }
 
 configure_autoglm() {
     ui_header "AutoGLM 配置"
-    local current_key=""
-    local current_base=""
-    local current_model="autoglm-phone"
-    local current_feedback="true"
+    local current_key=""; local current_base=""; local current_model="autoglm-phone"; local current_feedback="true"
     if [ -f "$CONFIG_FILE" ]; then source "$CONFIG_FILE"
         current_key="$PHONE_AGENT_API_KEY"; current_base="$PHONE_AGENT_BASE_URL"; [ -n "$PHONE_AGENT_MODEL" ] && current_model="$PHONE_AGENT_MODEL"; [ -n "$PHONE_AGENT_FEEDBACK" ] && current_feedback="$PHONE_AGENT_FEEDBACK"; fi
-    
     echo -e "${CYAN}配置信息:${NC}"
     local new_key=$(ui_input "API Key" "$current_key" "true")
     local new_base=$(ui_input "Base URL" "${current_base:-https://open.bigmodel.cn/api/paas/v4}" "false")
     local new_model=$(ui_input "Model Name" "${current_model:-glm-4v-flash}" "false")
     echo -e "${YELLOW}是否启用反馈 (通知/震动/气泡)?${NC}"
     local new_feedback=$(ui_input "启用反馈 (true/false)" "$current_feedback" "false")
-    
     echo "export PHONE_AGENT_API_KEY='$new_key'" > "$CONFIG_FILE"
     echo "export PHONE_AGENT_BASE_URL='$new_base'" >> "$CONFIG_FILE"
     echo "export PHONE_AGENT_MODEL='$new_model'" >> "$CONFIG_FILE"
     echo "export PHONE_AGENT_LANG='cn'" >> "$CONFIG_FILE"
     echo "export PHONE_AGENT_FEEDBACK='$new_feedback'" >> "$CONFIG_FILE"
-    
-    create_ai_launcher
-    ui_print success "已保存"; ui_pause
-}
-
-start_autoglm() {
-    if [ ! -f "$LAUNCHER_SCRIPT" ]; then create_ai_launcher; fi
-    bash "$LAUNCHER_SCRIPT"
-    ui_pause
+    create_ai_launcher; ui_print success "已保存"; ui_pause
 }
 
 autoglm_menu() {
     while true; do
         ui_header "AutoGLM 智能体"
-        local status="${RED}未安装${NC}"
-        [ -d "$AUTOGLM_DIR" ] && status="${GREEN}已安装${NC}"
+        local status="${RED}未安装${NC}"; if [ -d "$AUTOGLM_DIR" ] && [ -f "$VENV_DIR/bin/activate" ]; then status="${GREEN}已就绪${NC}"; fi
         echo -e "状态: $status"
-        echo -e "提示: 安装后可使用全局命令 ${CYAN}ai${NC} 快速启动"
         echo "----------------------------------------"
-        CHOICE=$(ui_menu "操作" "🚀 启动" "⚙️  配置/设置" "📥 安装/重装" "🔙 返回")
+        CHOICE=$(ui_menu "请选择操作" "🚀 启动智能体" "⬇️  安装/更新 核心代码" "📦 安装/更新 依赖" "⚙️  编辑配置文件" "🔙 返回上级")
         case "$CHOICE" in
-            *"启动"*) start_autoglm ;;
-            *"配置"*) configure_autoglm ;;
-            *"安装"*) install_autoglm ;;
-            *"返回"*) return ;;
+            *"启动"*) if [ -f "$LAUNCHER_SCRIPT" ]; then bash "$LAUNCHER_SCRIPT"; else ui_print error "请先安装！"; ui_pause; fi ;;
+            *"核心代码"*) install_autoglm ;; 
+            *"依赖"*) setup_autoglm_venv ;; 
+            *"配置"*) configure_autoglm ;; 
+            *"返回"*) return ;; 
         esac
     done
 }
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then autoglm_menu; fi

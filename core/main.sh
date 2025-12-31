@@ -18,25 +18,47 @@ check_dependencies
 check_for_updates
 send_analytics
 
-# --- 动态模块加载器 ---
+stop_all_services_routine() {
+    _stop_by_pid() {
+        local pid_file="$1"; local pattern="$2"
+        if [ -f "$pid_file" ]; then
+            local pid=$(cat "$pid_file")
+            if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+                kill -9 "$pid" >/dev/null 2>&1
+            fi
+            rm -f "$pid_file"
+        fi
+        [ -n "$pattern" ] && pkill -9 -f "$pattern" >/dev/null 2>&1
+    }
+
+    _stop_by_pid "$AUDIO_PID_FILE" "mpv --no-terminal"
+    if command -v adb &>/dev/null; then
+        adb kill-server >/dev/null 2>&1
+    fi
+    pkill -9 -f 'adb'
+    _stop_by_pid "$ST_PID_FILE" "node server.js"
+    _stop_by_pid "$CF_PID_FILE" "cloudflared"
+    _stop_by_pid "$CLEWD_PID_FILE" "node clewd.js"
+    pkill -9 -f 'clewdr'
+    _stop_by_pid "$GEMINI_PID_FILE" "run.py"
+    if command -v termux-wake-unlock &> /dev/null; then
+        termux-wake-unlock >/dev/null 2>&1
+    fi
+    rm -f "$TAVX_DIR/.temp_link"
+}
+export -f stop_all_services_routine
+
 load_advanced_tools_menu() {
     local module_files=()
     local module_names=()
     local module_entries=()
     local menu_options=()
 
-    # 1. 扫描 modules 目录下的所有 .sh 文件
-    # 使用 nullglob 防止目录为空时报错
     shopt -s nullglob
     for file in "$TAVX_DIR/modules/"*.sh; do
-        # 检查文件是否包含元数据标记
         if grep -q "\[METADATA\]" "$file"; then
-            # 提取 MODULE_NAME 和 MODULE_ENTRY
-            # 使用 grep 提取行，cut 分割，sed 去除前后空格
             local m_name=$(grep "MODULE_NAME:" "$file" | cut -d':' -f2- | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
             local m_entry=$(grep "MODULE_ENTRY:" "$file" | cut -d':' -f2- | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-
-            # 只有当名称和入口都存在时才添加到菜单
             if [ -n "$m_name" ] && [ -n "$m_entry" ]; then
                 module_files+=("$file")
                 module_names+=("$m_name")
@@ -47,7 +69,6 @@ load_advanced_tools_menu() {
     done
     shopt -u nullglob
 
-    # 如果没有找到任何模块
     if [ ${#menu_options[@]} -eq 0 ]; then
         ui_print warn "未检测到有效的工具模块。"
         echo -e "${YELLOW}请检查 modules/ 目录下脚本是否包含 [METADATA] 头部信息。${NC}"
@@ -56,27 +77,18 @@ load_advanced_tools_menu() {
     fi
 
     menu_options+=("🔙 返回上级")
-
-    # 2. 显示动态菜单
-    # 循环直到用户选择返回，实现子菜单常驻
     while true; do
         local choice=$(ui_menu "高级工具箱 (插件化)" "${menu_options[@]}")
 
         if [[ "$choice" == *"返回上级"* ]]; then
             return
         fi
-
-        # 3. 匹配并执行
         local matched=false
         for i in "${!module_names[@]}"; do
             if [[ "${module_names[$i]}" == "$choice" ]]; then
                 local target_file="${module_files[$i]}"
                 local target_entry="${module_entries[$i]}"
-                
-                # 加载脚本环境
                 source "$target_file"
-                
-                # 检查入口函数是否存在
                 if command -v "$target_entry" &> /dev/null; then
                     $target_entry
                 else
@@ -88,7 +100,6 @@ load_advanced_tools_menu() {
             fi
         done
         
-        # 理论上不会运行到这里，但做个防守
         if [ "$matched" = false ]; then
             ui_print error "无法加载该模块，请重试。"
             ui_pause
@@ -98,14 +109,12 @@ load_advanced_tools_menu() {
 
 while true; do
     S_ST=0; S_CF=0; S_ADB=0; S_CLEWD=0; S_GEMINI=0; S_AUDIO=0
-    pgrep -f "node server.js" >/dev/null && S_ST=1
-    pgrep -f "cloudflared" >/dev/null && S_CF=1
+    if [ -f "$ST_PID_FILE" ] && kill -0 $(cat "$ST_PID_FILE") 2>/dev/null; then S_ST=1; fi
+    if [ -f "$CF_PID_FILE" ] && kill -0 $(cat "$CF_PID_FILE") 2>/dev/null; then S_CF=1; fi
     command -v adb &>/dev/null && adb devices 2>/dev/null | grep -q "device$" && S_ADB=1
-    pgrep -f "clewd" >/dev/null && S_CLEWD=1
-    pgrep -f "run.py" >/dev/null && S_GEMINI=1
-    if [ -f "$TAVX_DIR/.audio_heartbeat.pid" ] && kill -0 $(cat "$TAVX_DIR/.audio_heartbeat.pid") 2>/dev/null; then
-        S_AUDIO=1
-    fi
+    if [ -f "$CLEWD_PID_FILE" ] && kill -0 $(cat "$CLEWD_PID_FILE") 2>/dev/null; then S_CLEWD=1; fi
+    if [ -f "$GEMINI_PID_FILE" ] && kill -0 $(cat "$GEMINI_PID_FILE") 2>/dev/null; then S_GEMINI=1; fi
+    if [ -f "$AUDIO_PID_FILE" ] && kill -0 $(cat "$AUDIO_PID_FILE") 2>/dev/null; then S_AUDIO=1; fi
 
     NET_DL="自动优选"
     if [ -f "$NETWORK_CONFIG" ]; then
@@ -151,7 +160,6 @@ while true; do
         *"网络设置") configure_download_network ;;
         *"备份与恢复") backup_menu ;;
         
-        # --- 改动：统一调用动态加载器 ---
         *"高级工具") load_advanced_tools_menu ;;
         
         *"帮助与支持"*) show_about_page ;;
@@ -172,23 +180,7 @@ while true; do
                 *"结束所有"*)
                     echo ""
                     if ui_confirm "确定要关闭所有服务（酒馆、穿透、保活等）吗？"; then
-                        ui_spinner "正在停止所有进程..." "
-                            if [ -f '$TAVX_DIR/.audio_heartbeat.pid' ]; then
-                                HB_PID=\$(cat '$TAVX_DIR/.audio_heartbeat.pid')
-                                kill -9 \$HB_PID >/dev/null 2>&1
-                                rm -f '$TAVX_DIR/.audio_heartbeat.pid'
-                            fi
-                            pkill -f 'mpv --no-terminal'
-                            adb kill-server >/dev/null 2>&1
-                            pkill -f 'adb'
-                            pkill -f 'node server.js'
-                            pkill -f 'cloudflared'
-                            pkill -f 'clewd'
-                            pkill -f 'run.py'
-                            
-                            termux-wake-unlock 2>/dev/null
-                            rm -f '$TAVX_DIR/.temp_link'
-                        "
+                        ui_spinner "正在停止所有进程..." "stop_all_services_routine"
                         ui_print success "所有服务已停止，资源已释放。"
                         exit 0
                     else
