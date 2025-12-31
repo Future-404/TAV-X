@@ -83,16 +83,9 @@ check_github_speed() {
     
     echo -e "\033[1;33m正在测试 GitHub 直连速度 (阈值: 800KB/s)...\033[0m"
     
-    # curl 参数说明:
-    # -s: 静默模式
-    # -L: 跟随跳转
-    # -w %{speed_download}: 输出平均下载速度(B/s)
-    # -o /dev/null: 不保存文件
-    # -m 5: 最多测试5秒
     local speed=$(curl -s -L -m 5 -w "%{speed_download}\n" -o /dev/null "$TEST_URL" 2>/dev/null)
     speed=${speed%.*}
     if [ -z "$speed" ]; then speed=0; fi
-    
     local speed_kb=$((speed / 1024))
     
     if [ "$speed" -ge "$THRESHOLD" ]; then
@@ -168,6 +161,7 @@ select_mirror_interactive() {
     fi
 }
 
+# === 主流程逻辑 ===
 if probe_local_ports; then
     DL_URL="https://github.com/${REPO_PATH}"
 elif check_github_speed; then
@@ -194,7 +188,15 @@ if git clone --depth 1 "$DL_URL" "$TAVX_DIR"; then
         echo "alias st='bash $TAVX_DIR/st.sh'" >> "$SHELL_RC"
     fi
 
-    echo -e "\n\033[1;32m✔ Installation Complete!\033[0m"
+    echo -e "\n\033[1;32m✔ 安装成功 / Installation Complete!\033[0m"
+    echo -e "----------------------------------------"
+    echo -e "💡 下次启动请直接输入: \033[1;33mst\033[0m"
+    echo -e "💡 To start next time, type: \033[1;33mst\033[0m"
+    echo -e "----------------------------------------"
+    echo -ne "\033[1;36m🚀 即将自动启动... (3秒 / 按任意键立即开始)\033[0m"
+    read -t 3 -n 1 -s 
+    echo "" 
+
     exec bash "$TAVX_DIR/core/main.sh"
 else
     echo -e "\n\033[1;31m✘ Installation Failed.\033[0m"
