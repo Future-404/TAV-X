@@ -77,17 +77,9 @@ check_install_integrity() {
 stop_services() {
     local PORT=$(get_active_port)
     
-    # Try stopping by PID first
-    for pid_file in "$ST_PID_FILE" "$CF_PID_FILE"; do
-        if [ -f "$pid_file" ]; then
-            local pid=$(cat "$pid_file")
-            [ -n "$pid" ] && kill -9 "$pid" >/dev/null 2>&1
-            rm -f "$pid_file"
-        fi
-    done
+    kill_process_safe "$ST_PID_FILE" "node.*server.js"
+    kill_process_safe "$CF_PID_FILE" "cloudflared"
 
-    pkill -f "node server.js"
-    pkill -f "cloudflared"
     if command -v termux-wake-unlock &>/dev/null; then termux-wake-unlock; fi
     
     local wait_count=0
@@ -109,9 +101,17 @@ start_node_server() {
     cd "$INSTALL_DIR" || return 1
     if command -v termux-wake-lock &>/dev/null; then termux-wake-lock; fi
     rm -f "$SERVER_LOG"
+    local START_CMD="nohup node $MEM_ARGS server.js > '$SERVER_LOG' 2>&1 & echo \$! > '$ST_PID_FILE'"
     
-    # Start and save PID
-    ui_spinner "正在启动酒馆服务..." "setsid nohup node $MEM_ARGS server.js > '$SERVER_LOG' 2>&1 & sleep 2; pgrep -f 'node server.js' | head -n 1 > '$ST_PID_FILE'"
+    if ui_spinner "正在启动酒馆服务..." "eval \"$START_CMD\""; then
+        sleep 1
+        local pid=$(cat "$ST_PID_FILE")
+        if kill -0 "$pid" 2>/dev/null; then
+             disown "$pid" 2>/dev/null 
+             return 0
+        fi
+    fi
+    return 1
 }
 
 detect_protocol_logic() {
@@ -200,10 +200,10 @@ start_menu() {
         
         local status_txt=""
         
-        if [ -f "$CF_PID_FILE" ] && kill -0 $(cat "$CF_PID_FILE") 2>/dev/null; then
+        if check_process_smart "$CF_PID_FILE" "cloudflared.*tunnel"; then
             if grep -q "protocol=quic" "$CF_LOG" 2>/dev/null; then P="QUIC"; else P="HTTP2"; fi
             status_txt="${GREEN}● 穿透运行中 ($P)${NC}"
-        elif [ -f "$ST_PID_FILE" ] && kill -0 $(cat "$ST_PID_FILE") 2>/dev/null; then
+        elif check_process_smart "$ST_PID_FILE" "node.*server.js"; then
             status_txt="${GREEN}● 本地运行中${NC}"
         else 
             status_txt="${RED}● 已停止${NC}"
@@ -224,8 +224,27 @@ start_menu() {
                 stop_services
                 start_node_server
                 local PORT=$(get_active_port)
-                ui_print success "本地启动: http://127.0.0.1:$PORT"
-                open_browser "http://127.0.0.1:$PORT"
+                local TARGET_URL="http://127.0.0.1:$PORT"
+                
+                ui_print success "本地服务已启动！"
+                echo -e "地址: ${CYAN}$TARGET_URL${NC}"
+                
+                local BROWSER_CONF="$TAVX_DIR/config/browser.conf"
+                local browser_mode="ST"
+                
+                if [ -f "$BROWSER_CONF" ]; then
+                    browser_mode=$(cat "$BROWSER_CONF")
+                fi
+                
+                if [ "$browser_mode" == "SCRIPT" ]; then
+                    ui_print info "正在通过脚本唤起浏览器..."
+                    open_browser "$TARGET_URL"
+                elif [ "$browser_mode" == "NONE" ]; then
+                    ui_print info "自动跳转已禁用，请手动复制地址访问。"
+                else
+                    : 
+                fi
+                
                 ui_pause ;;
                 
             *"远程穿透"*) 

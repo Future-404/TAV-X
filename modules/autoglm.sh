@@ -158,6 +158,8 @@ perform_install_task() {
     local MODE="$1"
     local USE_UV="$2"
     
+    auto_load_proxy_env
+
     local USE_SYSTEM_SITE=false
     local WHEEL_ARGS=""
     local WHEEL_DIR="$AUTOGLM_DIR/wheels"
@@ -169,9 +171,12 @@ perform_install_task() {
         
         echo ">>> [Phase 0.5] 检查加速包..."
         local WHEEL_URL="https://github.com/Future-404/TAV-X/releases/download/assets-v1/autoglm_wheels.tar.gz"
+        
         if [ ! -f "$AUTOGLM_DIR/wheels.tar.gz" ] && [ ! -d "$WHEEL_DIR" ]; then
-            if curl -L "$WHEEL_URL" -o "$AUTOGLM_DIR/wheels.tar.gz" --connect-timeout 5; then
+            if download_file_smart "$WHEEL_URL" "$AUTOGLM_DIR/wheels.tar.gz"; then
                 echo ">>> 下载成功"
+            else
+                echo ">>> 下载失败 (非致命，将尝试在线编译)"
             fi
         fi
         
@@ -309,11 +314,11 @@ configure_autoglm() {
     local new_model=$(ui_input "Model Name" "${current_model:-glm-4v-flash}" "false")
     echo -e "${YELLOW}是否启用反馈 (通知/震动/气泡)?${NC}"
     local new_feedback=$(ui_input "启用反馈 (true/false)" "$current_feedback" "false")
-    echo "export PHONE_AGENT_API_KEY='$new_key'" > "$CONFIG_FILE"
-    echo "export PHONE_AGENT_BASE_URL='$new_base'" >> "$CONFIG_FILE"
-    echo "export PHONE_AGENT_MODEL='$new_model'" >> "$CONFIG_FILE"
-    echo "export PHONE_AGENT_LANG='cn'" >> "$CONFIG_FILE"
-    echo "export PHONE_AGENT_FEEDBACK='$new_feedback'" >> "$CONFIG_FILE"
+    write_env_safe "$CONFIG_FILE" "PHONE_AGENT_API_KEY" "$new_key"
+    write_env_safe "$CONFIG_FILE" "PHONE_AGENT_BASE_URL" "$new_base"
+    write_env_safe "$CONFIG_FILE" "PHONE_AGENT_MODEL" "$new_model"
+    write_env_safe "$CONFIG_FILE" "PHONE_AGENT_LANG" "cn"
+    write_env_safe "$CONFIG_FILE" "PHONE_AGENT_FEEDBACK" "$new_feedback"
     create_ai_launcher; ui_print success "已保存"; ui_pause
 }
 

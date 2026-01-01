@@ -3,14 +3,14 @@
 
 AUTHOR_QQ="317032529"
 GROUP_QQ="616353694"
-CONTACT_EMAIL="29006900lz@gmail.com"
+CONTACT_EMAIL="future_404@outlook.com"
 PROJECT_URL="https://github.com/Future-404/TAV-X"
 SLOGAN="别让虚拟的温柔，偷走了你在现实里本该拥有的温暖。"
-UPDATE_SUMMARY="v2.6.0 LTS 重大更新：
-  1. Linux 完美适配: 全面支持 Debian/Ubuntu，自动识别系统环境。
-  2. 进程管理重构: 引入 PID 精准控制，彻底解决误杀进程问题，完美兼容 Docker。
-  3. 网络系统升级: 新增系统/PIP/NPM 一键换源；优化代理探测 (HTTP优先)。
-  4. 依赖安装优化: Linux 下 AutoGLM 极速安装；Clewd 自动切换源码模式。"
+UPDATE_SUMMARY="v2.6.1 LTS 核心更新：
+  1. [重构] 核心进程管理 (防误杀/PID自愈)
+  2. [修复] UI 交互死锁与下载卡顿问题
+  3. [安全] 注入漏洞防御与敏感参数校验
+  4. [优化] 跨平台兼容性 (Termux/Linux) 与性能提升"
 
 show_about_page() {
     ui_header "帮助与支持"

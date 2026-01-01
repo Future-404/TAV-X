@@ -1,5 +1,7 @@
 #!/bin/bash
 # TAV-X Core: UI Adapter
+[ -n "$_TAVX_UI_LOADED" ] && return
+_TAVX_UI_LOADED=true
 
 HAS_GUM=false
 if command -v gum &> /dev/null; then HAS_GUM=true; fi

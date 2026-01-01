@@ -134,13 +134,45 @@ submit_plugin() {
     ui_pause
 }
 
+reset_all_plugins() {
+    local PLUGIN_ROOT="$INSTALL_DIR/public/scripts/extensions/third-party"
+    
+    if [ -z "$(ls -A "$PLUGIN_ROOT" 2>/dev/null)" ]; then
+        ui_print info "插件目录已经是空的了。"
+        ui_pause
+        return
+    fi
+
+    ui_header "💥 插件工厂重置"
+    echo -e "${RED}⚠️  警告：此操作将彻底删除所有第三方插件！${NC}"
+    echo -e "如果您的酒馆因为插件冲突打不开，这通常能解决问题。"
+    echo -e "系统自带的核心插件(Core)将保留。"
+    echo ""
+
+    if ui_confirm "确认清空吗？"; then
+        if ui_spinner "正在粉碎文件..." "source \"$TAVX_DIR/core/utils.sh\"; safe_rm '$PLUGIN_ROOT'; mkdir -p '$PLUGIN_ROOT'"; then
+            ui_print success "所有第三方插件已清除。"
+            echo -e "${YELLOW}请稍后重启酒馆以生效。${NC}"
+        else
+            ui_print error "操作失败，请检查文件权限。"
+        fi
+    fi
+    ui_pause
+}
+
 plugin_menu() {
     while true; do
         ui_header "插件生态中心"
-        CHOICE=$(ui_menu "请选择" "📥 安装插件" "➕ 提交插件" "🔙 返回主菜单")
+        CHOICE=$(ui_menu "请选择" \
+            "📥 安装插件" \
+            "➕ 提交插件" \
+            "💥 清空所有第三方插件" \
+            "🔙 返回主菜单"
+        )
         case "$CHOICE" in
             *"安装"*) list_install_menu ;; 
             *"提交"*) submit_plugin ;; 
+            *"重置"*) reset_all_plugins ;; 
             *"返回"*) return ;; 
         esac 
     done

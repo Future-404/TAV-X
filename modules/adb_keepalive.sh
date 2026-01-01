@@ -82,21 +82,20 @@ start_heartbeat() {
     echo -e "${YELLOW}策略：模拟前台媒体播放，强制提升进程优先级。${NC}"
     echo ""
     setsid nohup bash -c "while true; do mpv --no-terminal --volume=0 --loop=inf \"$SILENCE_FILE\"; sleep 1; done" > /dev/null 2>&1 &
-    echo $! > "$HEARTBEAT_PID"
+    local pid=$!
+    echo $pid > "$HEARTBEAT_PID"
+    disown $pid
+    
     if command -v termux-wake-lock &> /dev/null; then termux-wake-lock; fi
-    ui_print success "心跳已启动！(PID: $(cat "$HEARTBEAT_PID"))"
+    ui_print success "心跳已启动！(PID: $pid)"
     ui_pause
 }
 
 stop_heartbeat() {
-    if [ -f "$HEARTBEAT_PID" ]; then
-        local pid=$(cat "$HEARTBEAT_PID")
-        kill -9 "$pid" 2>/dev/null
-        rm -f "$HEARTBEAT_PID"
-        pkill -f "mpv --no-terminal"
-        if command -v termux-wake-unlock &> /dev/null; then termux-wake-unlock; fi
-        ui_print success "音频心跳已停止。"
-    else ui_print warn "心跳未运行。"; fi
+    kill_process_safe "$HEARTBEAT_PID" "mpv --no-terminal"
+    
+    if command -v termux-wake-unlock &> /dev/null; then termux-wake-unlock; fi
+    ui_print success "音频心跳已停止。"
     ui_pause
 }
 
@@ -132,8 +131,6 @@ get_device_info() {
 
 apply_universal_fixes() {
     local PKG="com.termux"
-    # This targets the CONNECTED device, so it's valid on Linux too
-    
     local SDK_VER=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
     [ -z "$SDK_VER" ] && SDK_VER=0
     
@@ -149,8 +146,6 @@ apply_universal_fixes() {
     adb shell cmd appops set $PKG WAKE_LOCK allow
     adb shell cmd appops set $PKG START_FOREGROUND allow
     adb shell am set-standby-bucket $PKG active >/dev/null 2>&1
-    
-    # Only run local wake-lock if on Termux
     if command -v termux-wake-lock &> /dev/null; then termux-wake-lock; fi
 }
 

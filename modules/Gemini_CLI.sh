@@ -27,16 +27,14 @@ check_google_connectivity() {
     local proxy=$(get_proxy_address)
     
     ui_print info "正在检测 Google 连通性..."
-    
-    local cmd="curl -I -s --max-time $timeout_sec"
+    local cmd=("curl" "-I" "-s" "--max-time" "$timeout_sec")
     local proxy_msg="直连"
     
     if [ -n "$proxy" ]; then
-        cmd="$cmd --proxy '$proxy'"
+        cmd+=("--proxy" "$proxy")
         proxy_msg="代理 ($proxy)"
     fi
-    
-    if eval "$cmd '$target_url'" >/dev/null 2>&1; then
+    if "${cmd[@]}" "$target_url" >/dev/null 2>&1; then
         return 0
     else
         ui_print error "Google 连接失败！当前模式: $proxy_msg"
@@ -95,36 +93,21 @@ install_gemini() {
     python3 -m venv venv || { ui_print error "Venv 创建失败"; ui_pause; return 1; }
 
     ui_print info "正在安装依赖..."
-    echo -e "${YELLOW}提示: 使用清华源直连安装，请确保网络通畅...${NC}"
-    unset http_proxy https_proxy all_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY
-    export CARGO_BUILD_JOBS=1
-    export CC=clang
-    export CXX=clang++
-    export CFLAGS="-Wno-implicit-function-declaration"
-
-    (
-        set -e
-        "$VENV_PIP" install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple
-        "$VENV_PIP" install "requests[socks]" "PySocks" -i https://pypi.tuna.tsinghua.edu.cn/simple
-        if ! "$VENV_PIP" install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple; then
-             echo ">>> 尝试不指定镜像源重试..."
-             "$VENV_PIP" install -r requirements.txt
-        fi
-    )
     
-    if [ $? -eq 0 ]; then
+    if pip_install_smart "$VENV_PIP" "--upgrade pip" && \
+       pip_install_smart "$VENV_PIP" "requests[socks] PySocks" && \
+       pip_install_smart "$VENV_PIP" "-r requirements.txt"; then
         echo "HOST=0.0.0.0" > "$ENV_FILE"
         echo "PORT=8888" >> "$ENV_FILE"
         echo "GEMINI_AUTH_PASSWORD=password" >> "$ENV_FILE"
         ui_print success "Gemini 服务部署成功！"
     else
         ui_print error "依赖安装失败。"
-        echo -e "${YELLOW}如果是 'ProxyError'，请检查您的 VPN 是否关闭了局域网连接。${NC}"
-        echo -e "${YELLOW}如果是 Rust/Clang 错误，请检查 [Python 环境管理]。${NC}"
+        echo -e "${YELLOW}请检查网络设置或手动切换 Pip 源。${NC}"
+        echo -e "${YELLOW}高级工具 -> Python 环境管理 -> 修复系统 Python${NC}"
         ui_pause; return 1
     fi
     
-    unset CARGO_BUILD_JOBS CC CXX CFLAGS
     ui_pause
 }
 
@@ -222,7 +205,7 @@ authenticate_google() {
 start_tunnel() {
     ensure_installed || return
     
-    if ! pgrep -f "$VENV_PYTHON run.py" >/dev/null; then
+    if ! check_process_smart "$GEMINI_PID_FILE" "python.*run.py"; then
         ui_print error "Gemini 服务未启动！"
         echo -e "请先点击 [🚀 启动/重启服务]。"
         ui_pause; return
@@ -234,6 +217,7 @@ start_tunnel() {
     
     ui_header "Cloudflare 远程穿透"
     
+    kill_process_safe "$TUNNEL_PID_FILE" "cloudflared tunnel"
     pkill -f "cloudflared tunnel"
     rm -f "$TUNNEL_LOG"
 
@@ -289,6 +273,7 @@ start_tunnel() {
 }
 
 stop_tunnel() {
+    kill_process_safe "$TUNNEL_PID_FILE" "cloudflared tunnel"
     pkill -f "cloudflared tunnel"
     ui_print success "远程隧道已关闭。"
     sleep 1
@@ -300,10 +285,10 @@ start_service() {
     
     local port=$(grep "^PORT=" "$ENV_FILE" 2>/dev/null | cut -d= -f2); [ -z "$port" ] && port=8888
 
+    kill_process_safe "$GEMINI_PID_FILE" "run.py"
     pkill -f "$VENV_PYTHON run.py"
     pkill -f "cloudflared tunnel"
     
-    # 释放端口
     if command -v fuser >/dev/null; then
         fuser -k -9 "$port/tcp" >/dev/null 2>&1
     elif command -v lsof >/dev/null; then
@@ -324,10 +309,8 @@ start_service() {
     fi
 
     local pass=$(grep "^GEMINI_AUTH_PASSWORD=" "$ENV_FILE" 2>/dev/null | cut -d= -f2); [ -z "$pass" ] && pass="password"
-    
-    # 更新配置
-    if grep -q "^PORT=" "$ENV_FILE"; then sed -i "s/^PORT=.*/PORT=$port/" "$ENV_FILE"; else echo "PORT=$port" >> "$ENV_FILE"; fi
-    if grep -q "^GEMINI_AUTH_PASSWORD=" "$ENV_FILE"; then sed -i "s/^GEMINI_AUTH_PASSWORD=.*/GEMINI_AUTH_PASSWORD=$pass/" "$ENV_FILE"; else echo "GEMINI_AUTH_PASSWORD=$pass" >> "$ENV_FILE"; fi
+    write_env_safe "$ENV_FILE" "PORT" "$port"
+    write_env_safe "$ENV_FILE" "GEMINI_AUTH_PASSWORD" "$pass"
     
     if ! grep -q "^GEMINI_CREDENTIALS=" "$ENV_FILE"; then
         echo -n "GEMINI_CREDENTIALS='" >> "$ENV_FILE"
@@ -335,7 +318,6 @@ start_service() {
         echo "'" >> "$ENV_FILE"
     fi
 
-    # 运行时注入代理
     local proxy=$(get_proxy_address); local proxy_env=""
     [ -n "$proxy" ] && proxy_env="env http_proxy='$proxy' https_proxy='$proxy' all_proxy='$proxy'"
     
@@ -343,8 +325,11 @@ start_service() {
     cd "$GEMINI_DIR" || return
     local START_CMD="$proxy_env GEMINI_AUTH_PASSWORD='$pass' setsid nohup $VENV_PYTHON run.py > '$LOG_FILE' 2>&1 & echo \\$! > '$GEMINI_PID_FILE'"
     
-    if ui_spinner "正在启动服务..." "eval \"$START_CMD\" sleep 3"; then
-        if [ -f "$GEMINI_PID_FILE" ] && kill -0 $(cat "$GEMINI_PID_FILE") 2>/dev/null; then
+    if ui_spinner "正在启动服务..." "eval \"$START_CMD\""; then
+        sleep 1
+        if check_process_smart "$GEMINI_PID_FILE" "python.*run.py"; then
+            local pid=$(cat "$GEMINI_PID_FILE")
+            disown "$pid" 2>/dev/null
             ui_print success "服务已启动！端口: $port"
         else
             ui_print error "启动失败，进程立刻退出了。"
@@ -352,16 +337,14 @@ start_service() {
             tail -n 5 "$LOG_FILE"
             echo -e "${YELLOW}---------------${NC}"
         fi
-    else ui_print error "启动超时。"; fi
+    else 
+        ui_print error "启动指令执行失败。"
+    fi
     ui_pause
 }
 
 stop_service() {
-    if [ -f "$GEMINI_PID_FILE" ]; then
-        local pid=$(cat "$GEMINI_PID_FILE")
-        [ -n "$pid" ] && kill -9 "$pid" >/dev/null 2>&1
-        rm -f "$GEMINI_PID_FILE"
-    fi
+    kill_process_safe "$GEMINI_PID_FILE" "run.py"
     pkill -f "$VENV_PYTHON run.py"
     pkill -f "cloudflared tunnel"
     ui_print success "服务与隧道已停止。"
@@ -422,12 +405,15 @@ configure_params() {
                 echo -e "${CYAN}提示: 请输入您的 Google Cloud Project ID (如: my-project-123)${NC}"
                 echo -e "${YELLOW}留空则使用自动探测模式。${NC}"
                 new_id=$(ui_input "输入 Project ID" "$proj" "false")
+                
+                if [[ "$new_id" =~ [^a-zA-Z0-9-] ]]; then
+                    ui_print error "格式错误！Project ID 只能包含字母、数字和横杠。"
+                    ui_pause
+                    continue
+                fi
+
                 if [ -n "$new_id" ] && [ "$new_id" != "未设置 (自动)" ]; then
-                    if grep -q "^GOOGLE_CLOUD_PROJECT=" "$ENV_FILE"; then
-                        sed -i "s/^GOOGLE_CLOUD_PROJECT=.*/GOOGLE_CLOUD_PROJECT=$new_id/" "$ENV_FILE"
-                    else
-                        echo "GOOGLE_CLOUD_PROJECT=$new_id" >> "$ENV_FILE"
-                    fi
+                    write_env_safe "$ENV_FILE" "GOOGLE_CLOUD_PROJECT" "$new_id"
                     proj=$new_id
                     ui_print success "项目 ID 已保存！"
                 else
@@ -440,13 +426,13 @@ configure_params() {
             *"端口"*) 
                 p=$(ui_input "输入新端口" "$port" "false")
                 if [[ "$p" =~ ^[0-9]+$ ]]; then 
-                    if grep -q "^PORT=" "$ENV_FILE"; then sed -i "s/^PORT=.*/PORT=$p/" "$ENV_FILE"; else echo "PORT=$p" >> "$ENV_FILE"; fi
+                    write_env_safe "$ENV_FILE" "PORT" "$p"
                     port=$p; ui_print success "已保存 (重启生效)"
                 fi ;;
             *"密码"*) 
                 p=$(ui_input "输入新密码" "$pass" "false")
                 if [ -n "$p" ]; then 
-                    if grep -q "^GEMINI_AUTH_PASSWORD=" "$ENV_FILE"; then sed -i "s/^GEMINI_AUTH_PASSWORD=.*/GEMINI_AUTH_PASSWORD=$p/" "$ENV_FILE"; else echo "GEMINI_AUTH_PASSWORD=$p" >> "$ENV_FILE"; fi
+                    write_env_safe "$ENV_FILE" "GEMINI_AUTH_PASSWORD" "$p"
                     pass=$p; ui_print success "已保存 (重启生效)"
                 fi ;;
             *"返回"*) return ;; 
@@ -456,9 +442,9 @@ configure_params() {
 
 gemini_menu() {
     while true; do
-        ui_header "Gemini 2.0 智能代理"
+        ui_header "Gemini 3.0 智能代理"
         local s="${RED}● 已停止${NC}"
-        if [ -f "$GEMINI_PID_FILE" ] && kill -0 $(cat "$GEMINI_PID_FILE") 2>/dev/null; then 
+        if check_process_smart "$GEMINI_PID_FILE" "python.*run.py"; then
             s="${GREEN}● 运行中${NC}"
         fi
         

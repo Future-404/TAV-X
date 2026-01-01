@@ -1,5 +1,7 @@
 #!/bin/bash
 # TAV-X Core: Utilities
+[ -n "$_TAVX_UTILS_LOADED" ] && return
+_TAVX_UTILS_LOADED=true
 
 if [ -n "$TAVX_DIR" ]; then
     [ -f "$TAVX_DIR/core/env.sh" ] && source "$TAVX_DIR/core/env.sh"
@@ -42,7 +44,8 @@ open_browser() {
 send_analytics() {
     (
         local STAT_URL="https://tav-api.future404.qzz.io"
-        if command -v curl &> /dev/null; then
+        if command -v curl &> /dev/null;
+        then
             curl -s -m 5 "${STAT_URL}?ver=${CURRENT_VERSION}&type=runtime&os=${OS_TYPE}" > /dev/null 2>&1
         fi
     ) &
@@ -64,27 +67,57 @@ is_port_open() {
     if timeout 0.2 bash -c "</dev/tcp/$1/$2" 2>/dev/null; then return 0; else return 1; fi
 }
 
+reset_proxy_cache() {
+    unset _PROXY_CACHE_RESULT
+}
+
 get_active_proxy() {
+    if [ -n "$_PROXY_CACHE_RESULT" ]; then
+        if [ "$_PROXY_CACHE_RESULT" == "NONE" ]; then
+            return 1
+        else
+            echo "$_PROXY_CACHE_RESULT"
+            return 0
+        fi
+    fi
+
     local network_conf="$TAVX_DIR/config/network.conf"
     if [ -f "$network_conf" ]; then
         local c=$(cat "$network_conf")
         if [[ "$c" == PROXY* ]]; then
             local val=${c#*|}; val=$(echo "$val"|tr -d '\n\r')
+            _PROXY_CACHE_RESULT="$val"
             echo "$val"; return 0
         fi
     fi
 
-    if [ -n "$http_proxy" ]; then echo "$http_proxy"; return 0; fi
-    if [ -n "$https_proxy" ]; then echo "$https_proxy"; return 0; fi
+    if [ -n "$http_proxy" ]; then 
+        _PROXY_CACHE_RESULT="$http_proxy"
+        echo "$http_proxy"; return 0
+    fi
+    if [ -n "$https_proxy" ]; then 
+        _PROXY_CACHE_RESULT="$https_proxy"
+        echo "$https_proxy"; return 0
+    fi
 
     for entry in "${GLOBAL_PROXY_PORTS[@]}"; do
         local port=${entry%%:*}
         local proto=${entry#*:} 
-        if timeout 0.1 bash -c "</dev/tcp/127.0.0.1/$port" 2>/dev/null; then
-            if [[ "$proto" == "socks5h" ]]; then echo "socks5h://127.0.0.1:$port"; else echo "http://127.0.0.1:$port"; fi
-            return 0
+        if timeout 0.1 bash -c "</dev/tcp/127.0.0.1/$port" 2>/dev/null;
+        then
+            local result=""
+            if [[ "$proto" == "socks5h" ]]; then 
+                result="socks5h://127.0.0.1:$port"
+            else 
+                result="http://127.0.0.1:$port"
+            fi
+            
+            _PROXY_CACHE_RESULT="$result"
+            echo "$result"; return 0
         fi
     done
+    
+    _PROXY_CACHE_RESULT="NONE"
     return 1
 }
 
@@ -126,7 +159,8 @@ prepare_network_strategy() {
     local proxy_active=$?
     if [ $proxy_active -ne 0 ]; then
         if [ -z "$SELECTED_MIRROR" ]; then
-            if check_github_speed; then
+            if check_github_speed;
+            then
                 return 0
             else
                 select_mirror_interactive
@@ -136,6 +170,7 @@ prepare_network_strategy() {
 }
 
 select_mirror_interactive() {
+    reset_proxy_cache
     if [ -n "$SELECTED_MIRROR" ]; then return 0; fi
 
     ui_header "镜像源测速与选择"
@@ -163,7 +198,8 @@ select_mirror_interactive() {
         (
             local start=$(date +%s%N)
             local test_url="${mirror}https://github.com/Future-404/TAV-X/info/refs?service=git-upload-pack"
-            if curl -s -I -m 2 "$test_url" >/dev/null 2>&1; then
+            if curl -s -I -m 2 "$test_url" >/dev/null 2>&1;
+            then
                 local end=$(date +%s%N)
                 local dur=$(( (end - start) / 1000000 ))
                 echo "$dur|$mirror" >> "$tmp_race_file"
@@ -177,7 +213,8 @@ select_mirror_interactive() {
     if [ -s "$tmp_race_file" ]; then
         sort -n "$tmp_race_file" -o "$tmp_race_file"
         
-        while IFS='|' read -r dur url; do
+        while IFS='|' read -r dur url;
+        do
             local mark="🟢"
             [ "$dur" -gt 800 ] && mark="🟡"
             [ "$dur" -gt 1500 ] && mark="🔴"
@@ -215,6 +252,7 @@ select_mirror_interactive() {
 }
 
 _auto_heal_network_config() {
+    reset_proxy_cache
     local network_conf="$TAVX_DIR/config/network.conf"
     local need_scan=false
     if [ -f "$network_conf" ]; then
@@ -243,36 +281,47 @@ git_clone_smart() {
     local official_url="https://github.com/${clean_path}"
     local clone_url="$official_url"
     
+    local tmp_base="${TMPDIR:-/tmp}"
+    [ ! -w "$tmp_base" ] && tmp_base="/data/data/com.termux/files/usr/tmp"
+    local err_log="${tmp_base}/tavx_git_error.log"
+    : > "$err_log"
+    
     prepare_network_strategy
     auto_load_proxy_env
     local proxy_active=$?
+    
+    local GIT_CMD="git -c http.proxy=$http_proxy -c https.proxy=$https_proxy clone --depth 1 $branch_arg"
 
     if [ $proxy_active -ne 0 ] && [ -n "$SELECTED_MIRROR" ]; then
         if [[ "$SELECTED_MIRROR" != *"github.com"* ]]; then
             clone_url="${SELECTED_MIRROR}${official_url}"
+            GIT_CMD="git -c http.proxy= -c https.proxy= clone --depth 1 $branch_arg"
         fi
     fi
     
-    if git clone --depth 1 $branch_arg "$clone_url" "$target_dir"; then
+    if $GIT_CMD "$clone_url" "$target_dir" >> "$err_log" 2>&1; then
         (
             cd "$target_dir" || exit
             git remote set-url origin "$official_url"
         )
         return 0
     else
-        ui_print warn "下载失败，尝试重选镜像..."
-        unset SELECTED_MIRROR
-        select_mirror_interactive
-        clone_url="$official_url"
-        if [ -n "$SELECTED_MIRROR" ] && [[ "$SELECTED_MIRROR" != *"github.com"* ]]; then
-             clone_url="${SELECTED_MIRROR}${official_url}"
-        fi
+        echo -e "\n\n>>> 镜像/首选策略下载失败，尝试回落至官方源... \n" >> "$err_log"
         
-        if git clone --depth 1 $branch_arg "$clone_url" "$target_dir"; then
+        clone_url="$official_url"
+        rm -rf "$target_dir"
+        
+        auto_load_proxy_env
+        GIT_CMD="git -c http.proxy=$http_proxy -c https.proxy=$https_proxy clone --depth 1 $branch_arg"
+        
+        if $GIT_CMD "$clone_url" "$target_dir" >> "$err_log" 2>&1; then
              (cd "$target_dir" || exit; git remote set-url origin "$official_url")
              return 0
         else
-             ui_print error "下载再次失败。"
+             echo -e "${YELLOW}=== 下载失败日志 (Last 10 lines) ===${NC}"
+             tail -n 20 "$err_log"
+             echo -e "${YELLOW}====================================${NC}"
+             sleep 3
              return 1
         fi
     fi
@@ -314,22 +363,36 @@ reset_to_official_remote() {
 download_file_smart() {
     local url=$1; local filename=$2
     local try_mirror=${3:-true}
+    local tmp_base="${TMPDIR:-/tmp}"
+    [ ! -w "$tmp_base" ] && tmp_base="/data/data/com.termux/files/usr/tmp"
+    local err_log="${tmp_base}/tavx_curl_error.log"
+    : > "$err_log"
+
     auto_load_proxy_env
     local proxy_active=$?
 
     if [ $proxy_active -eq 0 ]; then
-        if curl -L -o "$filename" --proxy "$http_proxy" --retry 2 --max-time 60 "$url"; then return 0; fi
+        if curl -f -L -o "$filename" --proxy "$http_proxy" --retry 2 --max-time 60 "$url" 2>>"$err_log"; then return 0; fi
+        echo ">>> 代理下载失败，尝试镜像..." >> "$err_log"
     fi
     
     if [ "$try_mirror" == "true" ] && [[ "$url" == *"github.com"* ]]; then
-        if [ -n "$SELECTED_MIRROR" ]; then
+        if [ -n "$SELECTED_MIRROR" ] && [[ "$SELECTED_MIRROR" != *"github.com"* ]]; then
              local final_url="${SELECTED_MIRROR}${url}"
-             if [[ "$SELECTED_MIRROR" == *"github.com"* ]]; then final_url="$url"; fi
-             if curl -L -o "$filename" --max-time 60 "$final_url"; then return 0; fi
+             if curl -f -L -o "$filename" --noproxy "*" --max-time 60 "$final_url" 2>>"$err_log"; then return 0; fi
+             echo ">>> 镜像下载失败，尝试官方直连..." >> "$err_log"
         fi
     fi
     
-    if curl -L -o "$filename" "$url"; then return 0; else return 1; fi
+    if curl -f -L -o "$filename" --noproxy "*" --retry 2 --max-time 60 "$url" 2>>"$err_log"; then 
+        return 0
+    else
+        ui_print error "文件下载失败: $(basename "$filename")"
+        echo -e "${YELLOW}=== CURL 错误日志 ===${NC}"
+        tail -n 5 "$err_log"
+        sleep 3
+        return 1
+    fi
 }
 
 npm_install_smart() {
@@ -353,9 +416,34 @@ npm_install_smart() {
 }
 
 JS_TOOL="$TAVX_DIR/scripts/config_mgr.js"
-
 config_get() {
     local key=$1
+    local file="${INSTALL_DIR}/config.yaml"
+    
+    if [ -f "$file" ]; then
+        if [[ "$key" == *"."* ]]; then
+            local parent=${key%%.*}
+            local child=${key#*.}
+            
+            local val=$(sed -n "/^[[:space:]]*$parent:/,/^[a-zA-Z0-9]/p" "$file" |
+                        grep "^[[:space:]]*$child:" |
+                        grep -v "^[[:space:]]*#" |
+                        head -n 1 |
+                        awk -F': ' '{print $2}' |
+                        tr -d '\r"' | sed "s/^'//;s/'$//")
+            
+            if [ -n "$val" ]; then echo "$val"; return 0; fi
+        else
+            local val=$(grep "^$key:" "$file" |
+                        grep -v "^[[:space:]]*#" |
+                        head -n 1 |
+                        awk -F': ' '{print $2}' |
+                        tr -d '\r"' | sed "s/^'//;s/'$//")
+            
+            if [ -n "$val" ]; then echo "$val"; return 0; fi
+        fi
+    fi
+
     if [ ! -f "$JS_TOOL" ]; then return 1; fi
     node "$JS_TOOL" get "$key" 2>/dev/null
 }
@@ -374,4 +462,96 @@ config_set_batch() {
     local output; output=$(node "$JS_TOOL" set-batch "$json_str" 2>&1)
     local status=$?
     if [ $status -eq 0 ]; then return 0; else ui_print error "批量配置失败: $output"; sleep 1; return 1; fi
+}
+
+pip_install_smart() {
+    local pip_exe="$1"
+    shift
+    local pip_args="$*"
+    
+    auto_load_proxy_env
+    
+    if ui_spinner "Pip 安装中..." "$pip_exe install $pip_args"; then
+        return 0
+    else
+        ui_print error "Pip 安装失败。"
+        return 1
+    fi
+}
+
+check_process_smart() {
+    local pid_file="$1"
+    local pattern="$2"
+
+    if [ -f "$pid_file" ]; then
+        local pid=$(cat "$pid_file")
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null;
+        then
+            return 0
+        fi
+        rm -f "$pid_file"
+    fi
+
+    if [ -z "$pattern" ]; then return 1; fi
+
+    local real_pid=$(pgrep -f "$pattern" | grep -v "pgrep" | head -n 1)
+    
+    if [ -n "$real_pid" ]; then
+        echo "$real_pid" > "$pid_file"
+        return 0
+    fi
+
+    return 1
+}
+
+escape_for_sed() {
+    local raw="$1"
+    local safe="${raw//\\/\\\\}"
+    safe="${safe//\//\\/}"
+    safe="${safe//&/\\&}"
+    echo "$safe"
+}
+
+write_env_safe() {
+    local file="$1"
+    local key="$2"
+    local val="$3"
+    
+    if [ ! -f "$file" ]; then touch "$file"; fi
+    
+    local safe_val=$(escape_for_sed "$val")
+    if grep -q "^$key=" "$file"; then
+        sed -i "s/^$key=.*/$key=$safe_val/" "$file"
+    else
+        echo "$key=$val" >> "$file"
+    fi
+}
+
+get_process_cmdline() {
+    local pid=$1
+    if [ -f "/proc/$pid/cmdline" ]; then
+        tr "\0" " " < "/proc/$pid/cmdline"
+    else
+        echo ""
+    fi
+}
+
+kill_process_safe() {
+    local pid_file="$1"
+    local pattern="$2"
+    
+    if [ -f "$pid_file" ]; then
+        local pid=$(cat "$pid_file")
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            local cmdline=$(get_process_cmdline "$pid")
+            if [[ "$cmdline" =~ $pattern ]]; then
+                kill -9 "$pid" >/dev/null 2>&1
+            fi
+        fi
+        rm -f "$pid_file"
+    fi
+    
+    if [ -n "$pattern" ]; then
+        pkill -9 -f "$pattern" >/dev/null 2>&1
+    fi
 }

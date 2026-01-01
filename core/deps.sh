@@ -17,7 +17,6 @@ install_gum_linux() {
     local VER="0.13.0"
     local URL="https://github.com/charmbracelet/gum/releases/download/v${VER}/gum_${VER}_Linux_${G_ARCH}.tar.gz"
     
-    # Simple mirror support
     if [ -n "$SELECTED_MIRROR" ] && [[ "$SELECTED_MIRROR" != *"github.com"* ]]; then
          URL="${SELECTED_MIRROR}${URL}"
     fi
@@ -35,7 +34,6 @@ install_gum_linux() {
         $SUDO_CMD chmod +x "$BIN_DIR/gum"
         rm gum.tar.gz LICENSE README.md 2>/dev/null
         
-        # Update path for current session if local
         [[ "$BIN_DIR" == *".local"* ]] && export PATH="$BIN_DIR:$PATH"
         
         if command -v gum &>/dev/null; then 
@@ -77,8 +75,6 @@ install_cloudflared_linux() {
     return 1
 }
 
-# --- Python Environment Management ---
-
 check_python_installed() {
     if command -v python3 &>/dev/null && command -v pip3 &>/dev/null;
  then
@@ -117,7 +113,6 @@ install_python_system() {
     if ui_spinner "正在安装 Python..." "$install_cmd"; then
         if check_python_installed; then
             ui_print success "Python 安装成功！"
-            # 配置 pip 默认源
             pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple >/dev/null 2>&1
             return 0
         fi
@@ -133,7 +128,6 @@ check_dependencies() {
 
     local MISSING_PKGS=""
     
-    # Pre-check logic
     local HAS_NODE=false; command -v node &> /dev/null && HAS_NODE=true
     local HAS_GIT=false; command -v git &> /dev/null && HAS_GIT=true
     local HAS_CF=false; command -v cloudflared &> /dev/null && HAS_CF=true
@@ -149,7 +143,6 @@ check_dependencies() {
     ui_header "环境初始化"
     echo -e "${BLUE}[INFO]${NC} 正在检查全套组件 ($OS_TYPE)..."
 
-    # Identify missing system packages
     if ! $HAS_NODE; then 
         echo -e "${YELLOW}[WARN]${NC} 未找到 Node.js"
         if [ "$OS_TYPE" == "TERMUX" ]; then MISSING_PKGS="$MISSING_PKGS nodejs-lts"; else MISSING_PKGS="$MISSING_PKGS nodejs npm"; fi
@@ -162,13 +155,11 @@ check_dependencies() {
     
     if ! $HAS_TAR; then MISSING_PKGS="$MISSING_PKGS tar"; fi
 
-    # Termux gets everything via pkg
     if [ "$OS_TYPE" == "TERMUX" ]; then
         if ! $HAS_GUM; then MISSING_PKGS="$MISSING_PKGS gum"; fi
         if ! $HAS_CF; then MISSING_PKGS="$MISSING_PKGS cloudflared"; fi
     fi
 
-    # Install System Packages
     if [ -n "$MISSING_PKGS" ]; then
         echo -e "${BLUE}[INFO]${NC} 正在安装系统依赖: $MISSING_PKGS"
         if [ "$OS_TYPE" == "TERMUX" ]; then
@@ -179,13 +170,11 @@ check_dependencies() {
         fi
     fi
     
-    # Linux Binary Manual Installs
     if [ "$OS_TYPE" == "LINUX" ]; then
         if ! command -v gum &>/dev/null; then install_gum_linux; fi
         if ! command -v cloudflared &>/dev/null; then install_cloudflared_linux; fi
     fi
     
-    # Final Verification
     if command -v node &> /dev/null && \
        command -v git &> /dev/null && \
        command -v cloudflared &> /dev/null && \
@@ -198,7 +187,6 @@ check_dependencies() {
     else
         echo -e "${RED}[ERROR]${NC} 环境修复不完整！"
         echo -e "${YELLOW}请尝试手动运行安装命令或检查网络。${NC}"
-        # We allow proceeding, as some features might work partialy
         read -n 1 -s -r -p "按任意键继续..."
     fi
 }

@@ -500,6 +500,63 @@ configure_api_proxy() {
     done
 }
 
+configure_browser_launch() {
+    local BROWSER_CONF="$TAVX_DIR/config/browser.conf"
+    
+    while true; do
+        ui_header "浏览器启动方式管理"
+        
+        local current_mode="ST"
+        if [ -f "$BROWSER_CONF" ]; then
+            current_mode=$(cat "$BROWSER_CONF")
+        fi
+        
+        local yaml_stat=$(config_get "browserLaunch.enabled")
+        [ -z "$yaml_stat" ] && yaml_stat="未知"
+
+        echo -e "当前策略状态:"
+        case "$current_mode" in
+            "SCRIPT") echo -e "  🎮 脚本接管: ${GREEN}开启${NC} | 酒馆原生: ${RED}关闭${NC}" ;;
+            "ST")     echo -e "  🎮 脚本接管: ${RED}关闭${NC} | 酒馆原生: ${GREEN}开启${NC} (默认)" ;;
+            "NONE")   echo -e "  🎮 脚本接管: ${RED}关闭${NC} | 酒馆原生: ${RED}关闭${NC}" ;;
+        esac
+        echo -e "  (Config.yaml 实际值: $yaml_stat)"
+        echo "----------------------------------------"
+
+        CHOICE=$(ui_menu "请选择启动方式" \
+            "🚀 脚本接管 (推荐: 兼容性更好)" \
+            "🍷 SillyTavern 原生 (默认)" \
+            "🚫 禁止自动跳转 (手动打开)" \
+            "🔙 返回" 
+        )
+
+        case "$CHOICE" in
+            *"脚本接管"*) 
+                if config_set "browserLaunch.enabled" "false"; then
+                    echo "SCRIPT" > "$BROWSER_CONF"
+                    ui_print success "已切换为：脚本接管模式"
+                fi
+                ui_pause ;;
+                
+            *"原生"*) 
+                if config_set "browserLaunch.enabled" "true"; then
+                    echo "ST" > "$BROWSER_CONF"
+                    ui_print success "已切换为：SillyTavern 原生模式"
+                fi
+                ui_pause ;;
+                
+            *"禁止"*) 
+                if config_set "browserLaunch.enabled" "false"; then
+                    echo "NONE" > "$BROWSER_CONF"
+                    ui_print success "已关闭所有自动跳转"
+                fi
+                ui_pause ;;
+                
+            *"返回"*) return ;; 
+        esac
+    done
+}
+
 configure_cf_token() {
     ui_header "Cloudflare Tunnel Token"
     local token_file="$TAVX_DIR/config/cf_token"
@@ -540,8 +597,9 @@ security_menu() {
         CHOICE=$(ui_menu "请选择功能" \
             "⚙️  核心参数配置" \
             "🧠 配置运行内存" \
+            "🌐 浏览器启动方式" \
             "📥 下载网络配置" \
-            "🌐 配置API代理" \
+            "🔗 配置API代理" \
             "☁️  配置Cloudflare Token" \
             "🔐 重置登录密码" \
             "🔌 修改服务端口" \
@@ -551,6 +609,7 @@ security_menu() {
         case "$CHOICE" in
             *"核心参数"*) configure_server_settings ;; 
             *"内存"*) configure_memory ;; 
+            *"浏览器"*) configure_browser_launch ;;
             *"下载"*) configure_download_network ;; 
             *"API"*) configure_api_proxy ;; 
             *"Cloudflare"*) configure_cf_token ;; 

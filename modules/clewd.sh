@@ -12,7 +12,6 @@ BIN_FILE="$CLEWD_DIR/clewdr"
 LOG_FILE="$CLEWD_DIR/clewdr.log"
 SECRETS_FILE="$CLEWD_DIR/secrets.env"
 
-# 源码模式配置
 SRC_REPO="https://github.com/teralomaniac/clewd"
 SRC_ENTRY="clewd.js"
 
@@ -31,7 +30,6 @@ install_clewdr() {
     mkdir -p "$CLEWD_DIR"
     cd "$CLEWD_DIR" || return
 
-    # --- Termux: 使用预编译的高效二进制 ---
     if [ "$OS_TYPE" == "TERMUX" ]; then
         local URL="https://github.com/Xerxes-2/clewdr/releases/latest/download/clewdr-android-aarch64.zip"
         prepare_network_strategy "$URL"
@@ -55,9 +53,8 @@ install_clewdr() {
         fi
         
     else
-        # --- Linux: 使用官方源码部署 (兼容性最好) ---
         ui_print info "Linux 环境检测: 切换为源码部署模式..."
-        safe_rm "$CLEWD_DIR" # 清理旧目录以免冲突
+        safe_rm "$CLEWD_DIR"
         
         prepare_network_strategy "$SRC_REPO"
         
@@ -79,36 +76,34 @@ install_clewdr() {
 start_clewdr() {
     ui_header "启动 Clewd"
     
-    # 检测运行模式
     local RUN_CMD=""
     if [ -f "$CLEWD_DIR/$SRC_ENTRY" ]; then
-        # 源码模式
         RUN_CMD="node $SRC_ENTRY"
         cd "$CLEWD_DIR"
     elif [ -f "$BIN_FILE" ]; then
-        # 二进制模式
         RUN_CMD="./clewdr"
         cd "$CLEWD_DIR"
     else
         if ui_confirm "未检测到程序，是否立即安装？"; then
             install_clewdr
-            # 递归重试
             start_clewdr
             return
         else return; fi
     fi
 
+    kill_process_safe "$CLEWD_PID_FILE" "clewd"
     pkill -f "clewdr"
     pkill -f "node clewd.js"
     
-    if ui_spinner "正在启动后台服务..." "setsid nohup $RUN_CMD > '$LOG_FILE' 2>&1 & sleep 3; pgrep -f '$RUN_CMD' | head -n 1 > '$CLEWD_PID_FILE'"; then
-        # 检查进程是否存在
-        if [ -f "$CLEWD_PID_FILE" ] && kill -0 $(cat "$CLEWD_PID_FILE") 2>/dev/null; then
-            # 提取密码逻辑 (兼容两种日志格式)
+    local START_CMD="setsid nohup $RUN_CMD > '$LOG_FILE' 2>&1 & echo \$! > '$CLEWD_PID_FILE'"
+    
+    if ui_spinner "正在启动后台服务..." "eval \"$START_CMD\""; then
+        sleep 1
+        if check_process_smart "$CLEWD_PID_FILE" "clewdr|node.*clewd\.js"; then
+            local pid=$(cat "$CLEWD_PID_FILE")
+            disown "$pid" 2>/dev/null
+
             local API_PASS=$(grep -E "API Password:|Pass:" "$LOG_FILE" | head -n 1 | awk '{print $NF}')
-            # Clewd 原版通常没有 Web Admin，或者格式不同，这里做个兼容尝试
-            local WEB_PASS="无需/未知"
-            
             echo "API_PASS=$API_PASS" > "$SECRETS_FILE"
 
             ui_print success "服务已启动！"
@@ -120,25 +115,19 @@ start_clewdr() {
             echo ""
             echo -e "${GRAY}注: 默认端口为 8444 (原版) 或 8484 (修改版)，请以日志为准。${NC}"
         else
-            ui_print error "启动失败，请检查日志。"
+            ui_print error "启动失败，进程未驻留。"
             echo -e "${YELLOW}--- 日志预览 ---${NC}"
             tail -n 5 "$LOG_FILE"
         fi
     else
-        ui_print error "启动超时。"
+        ui_print error "启动命令执行失败。"
     fi
     ui_pause
 }
 
 stop_clewdr() {
-    if [ -f "$CLEWD_PID_FILE" ]; then
-        local pid=$(cat "$CLEWD_PID_FILE")
-        [ -n "$pid" ] && kill -9 "$pid" >/dev/null 2>&1
-        rm -f "$CLEWD_PID_FILE"
-        ui_print success "服务已停止。"
-        return
-    fi
-
+    kill_process_safe "$CLEWD_PID_FILE" "clewd"
+    
     if pgrep -f "clewdr" >/dev/null || pgrep -f "node clewd.js" >/dev/null; then
         pkill -f "clewdr"
         pkill -f "node clewd.js"
@@ -165,7 +154,7 @@ clewd_menu() {
     while true; do
         ui_header "Clewd AI 反代管理"
 
-        if [ -f "$CLEWD_PID_FILE" ] && kill -0 $(cat "$CLEWD_PID_FILE") 2>/dev/null; then
+        if check_process_smart "$CLEWD_PID_FILE" "clewdr|node.*clewd\.js"; then
             STATUS="${GREEN}● 运行中${NC}"
         else
             STATUS="${RED}● 已停止${NC}"

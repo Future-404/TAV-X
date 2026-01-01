@@ -19,28 +19,21 @@ check_for_updates
 send_analytics
 
 stop_all_services_routine() {
-    _stop_by_pid() {
-        local pid_file="$1"; local pattern="$2"
-        if [ -f "$pid_file" ]; then
-            local pid=$(cat "$pid_file")
-            if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-                kill -9 "$pid" >/dev/null 2>&1
-            fi
-            rm -f "$pid_file"
-        fi
-        [ -n "$pattern" ] && pkill -9 -f "$pattern" >/dev/null 2>&1
-    }
+    source "$TAVX_DIR/core/utils.sh"
 
-    _stop_by_pid "$AUDIO_PID_FILE" "mpv --no-terminal"
+    kill_process_safe "$AUDIO_PID_FILE" "mpv --no-terminal"
+    
     if command -v adb &>/dev/null; then
         adb kill-server >/dev/null 2>&1
     fi
     pkill -9 -f 'adb'
-    _stop_by_pid "$ST_PID_FILE" "node server.js"
-    _stop_by_pid "$CF_PID_FILE" "cloudflared"
-    _stop_by_pid "$CLEWD_PID_FILE" "node clewd.js"
-    pkill -9 -f 'clewdr'
-    _stop_by_pid "$GEMINI_PID_FILE" "run.py"
+    
+    kill_process_safe "$ST_PID_FILE" "node.*server.js"
+    kill_process_safe "$CF_PID_FILE" "cloudflared"
+    
+    kill_process_safe "$CLEWD_PID_FILE" "clewd"
+    kill_process_safe "$GEMINI_PID_FILE" "run.py"
+    
     if command -v termux-wake-unlock &> /dev/null; then
         termux-wake-unlock >/dev/null 2>&1
     fi
@@ -109,12 +102,16 @@ load_advanced_tools_menu() {
 
 while true; do
     S_ST=0; S_CF=0; S_ADB=0; S_CLEWD=0; S_GEMINI=0; S_AUDIO=0
-    if [ -f "$ST_PID_FILE" ] && kill -0 $(cat "$ST_PID_FILE") 2>/dev/null; then S_ST=1; fi
-    if [ -f "$CF_PID_FILE" ] && kill -0 $(cat "$CF_PID_FILE") 2>/dev/null; then S_CF=1; fi
-    command -v adb &>/dev/null && adb devices 2>/dev/null | grep -q "device$" && S_ADB=1
-    if [ -f "$CLEWD_PID_FILE" ] && kill -0 $(cat "$CLEWD_PID_FILE") 2>/dev/null; then S_CLEWD=1; fi
-    if [ -f "$GEMINI_PID_FILE" ] && kill -0 $(cat "$GEMINI_PID_FILE") 2>/dev/null; then S_GEMINI=1; fi
-    if [ -f "$AUDIO_PID_FILE" ] && kill -0 $(cat "$AUDIO_PID_FILE") 2>/dev/null; then S_AUDIO=1; fi
+
+    check_process_smart "$ST_PID_FILE" "node.*server.js" && S_ST=1
+    check_process_smart "$CF_PID_FILE" "cloudflared.*tunnel" && S_CF=1
+    check_process_smart "$CLEWD_PID_FILE" "clewdr|node.*clewd\.js" && S_CLEWD=1
+    check_process_smart "$GEMINI_PID_FILE" "python.*run.py" && S_GEMINI=1
+    check_process_smart "$AUDIO_PID_FILE" "mpv.*--no-terminal" && S_AUDIO=1
+    
+    if command -v adb &>/dev/null && adb devices 2>/dev/null | grep -q "device$"; then
+        S_ADB=1
+    fi
 
     NET_DL="自动优选"
     if [ -f "$NETWORK_CONFIG" ]; then
@@ -126,10 +123,11 @@ while true; do
 
     NET_API="直连 (System)"
     if [ -f "$CONFIG_FILE" ]; then
-        if grep -A 4 "requestProxy:" "$CONFIG_FILE" | grep -q "enabled: true"; then
-            URL=$(grep -A 4 "requestProxy:" "$CONFIG_FILE" | grep "url:" | awk '{print $2}' | tr -d '"')
-            [ -z "$URL" ] && URL="已开启"
-            NET_API="代理 ($URL)"
+        proxy_enabled=$(config_get "requestProxy.enabled")
+        if [ "$proxy_enabled" == "true" ]; then
+            proxy_url=$(config_get "requestProxy.url")
+            [ -z "$proxy_url" ] && proxy_url="已开启"
+            NET_API="代理 ($proxy_url)"
         fi
     fi
 

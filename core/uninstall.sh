@@ -44,7 +44,7 @@ uninstall_clewd() {
     local CLEWD_DIR="$TAVX_DIR/clewdr"
     if ! verify_kill_switch; then return; fi
     
-    pkill -f "clewdr"
+    kill_process_safe "$CLEWD_PID_FILE" "clewd"
     
     if ui_spinner "正在清除 ClewdR..." "source \"$TAVX_DIR/core/utils.sh\"; safe_rm '$CLEWD_DIR'"; then
         ui_print success "ClewdR 模块已卸载。"
@@ -65,7 +65,7 @@ uninstall_gemini() {
 
     if ! verify_kill_switch; then return; fi
     
-    pkill -f "run.py"
+    kill_process_safe "$GEMINI_PID_FILE" "run.py"
     
     if ui_spinner "正在清除 Gemini 模块..." "source \"$TAVX_DIR/core/utils.sh\"; safe_rm '$GEMINI_DIR'"; then
         ui_print success "Gemini 代理及凭据已卸载。"
@@ -85,9 +85,6 @@ uninstall_autoglm() {
     fi
 
     if ! verify_kill_switch; then return; fi
-    
-    # Kill any potential running python process for autoglm (if any running background)
-    # Usually it's run foreground, but just in case
     
     if ui_spinner "正在清除 AutoGLM 模块..." "source \"$TAVX_DIR/core/utils.sh\"; safe_rm '$AUTOGLM_DIR'"; then
         sed -i '/alias ai=/d' "$HOME/.bashrc"
@@ -185,10 +182,10 @@ full_wipe() {
     
     if ! verify_kill_switch; then return; fi
     
-    pkill -f "node server.js"
-    pkill -f "cloudflared"
-    pkill -f "clewdr"
-    pkill -f "run.py"
+    kill_process_safe "$ST_PID_FILE" "node.*server.js"
+    kill_process_safe "$CF_PID_FILE" "cloudflared"
+    kill_process_safe "$CLEWD_PID_FILE" "clewd"
+    kill_process_safe "$GEMINI_PID_FILE" "run.py"
     
     ui_spinner "正在执行清理..." "
         source \"$TAVX_DIR/core/utils.sh\"

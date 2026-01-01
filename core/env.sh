@@ -1,7 +1,8 @@
 #!/bin/bash
 # TAV-X Core: Environment Context & Global Config
+[ -n "$_TAVX_ENV_LOADED" ] && return
+_TAVX_ENV_LOADED=true
 
-# --- OS Detection ---
 if [ -n "$TERMUX_VERSION" ]; then
     export OS_TYPE="TERMUX"
     export SUDO_CMD=""
@@ -18,26 +19,22 @@ else
     fi
     export TMP_DIR="${TMPDIR:-/tmp}"
 fi
-mkdir -p "$TMP_DIR"
 
+mkdir -p "$TMP_DIR"
 export TAVX_DIR="${TAVX_DIR:-$HOME/.tav_x}"
 export TAVX_ROOT="$TAVX_DIR"
-
 export INSTALL_DIR="$HOME/SillyTavern"
 export CONFIG_FILE="$INSTALL_DIR/config.yaml"
 export CONFIG_DIR="$TAVX_DIR/config"
 mkdir -p "$CONFIG_DIR"
-
 export NETWORK_CONFIG="$CONFIG_DIR/network.conf"
-
-# --- PID Files for Process Management ---
 export ST_PID_FILE="$TAVX_DIR/.st.pid"
 export CF_PID_FILE="$TAVX_DIR/.cf.pid"
 export CLEWD_PID_FILE="$TAVX_DIR/.clewd.pid"
 export GEMINI_PID_FILE="$TAVX_DIR/.gemini.pid"
 export AUDIO_PID_FILE="$TAVX_DIR/.audio_heartbeat.pid"
 
-export CURRENT_VERSION="v2.6.0"
+export CURRENT_VERSION="v2.6.1"
 export RED='\033[0;31m'
 export GREEN='\033[0;32m'
 export YELLOW='\033[1;33m'
