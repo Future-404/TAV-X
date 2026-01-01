@@ -6,7 +6,7 @@ GROUP_QQ="616353694"
 CONTACT_EMAIL="future_404@outlook.com"
 PROJECT_URL="https://github.com/Future-404/TAV-X"
 SLOGAN="别让虚拟的温柔，偷走了你在现实里本该拥有的温暖。"
-UPDATE_SUMMARY="v2.6.1 LTS 核心更新：
+UPDATE_SUMMARY="v2.6.2 LTS 核心更新：
   1. [重构] 核心进程管理 (防误杀/PID自愈)
   2. [修复] UI 交互死锁与下载卡顿问题
   3. [安全] 注入漏洞防御与敏感参数校验
