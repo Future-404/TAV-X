@@ -38,6 +38,13 @@ get_smart_proxy_url() {
     fi
 }
 
+print_login_tips() {
+    echo ""
+    echo -e "${YELLOW}💡 提示: 若状态未刷新或无法登录，请检查:${NC}"
+    echo -e "${YELLOW}   1. [系统设置] -> [核心参数配置]${NC}"
+    echo -e "${YELLOW}   2. 并尝试在设置中为 default-user 设置一个密码${NC}"
+}
+
 apply_recommended_settings() {
     ui_print info "正在应用推荐配置..."
     
@@ -152,6 +159,7 @@ start_fixed_tunnel() {
     echo ""
     echo -e "${GREEN}请访问您在 Cloudflare 后台绑定的域名。${NC}"
     echo -e "${GRAY}(固定隧道无需获取临时链接)${NC}"
+    print_login_tips
 }
 
 start_temp_tunnel() {
@@ -183,6 +191,7 @@ start_temp_tunnel() {
         echo -e "${YELLOW}👉 $LINK${NC}"
         echo ""
         echo -e "${CYAN}(长按复制)${NC}"
+        print_login_tips
     else 
         ui_print error "链接获取超时。"
         ui_print warn "提示: 若一直超时，请尝试开启/关闭 VPN 后重试。"
@@ -228,6 +237,8 @@ start_menu() {
                 
                 ui_print success "本地服务已启动！"
                 echo -e "地址: ${CYAN}$TARGET_URL${NC}"
+                
+                print_login_tips
                 
                 local BROWSER_CONF="$TAVX_DIR/config/browser.conf"
                 local browser_mode="ST"
