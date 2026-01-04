@@ -193,6 +193,12 @@ if [ "$INSTALL_SUCCESS" = true ]; then
     )
     
     chmod +x "$TAVX_DIR/st.sh" "$TAVX_DIR"/core/*.sh "$TAVX_DIR"/modules/*.sh 2>/dev/null
+    
+    # Create .bashrc if it doesn't exist (common in fresh Termux installs)
+    if [ ! -f "$HOME/.bashrc" ]; then
+        touch "$HOME/.bashrc"
+    fi
+
     for rc_file in "$HOME/.bashrc" "$HOME/.zshrc"; do
         if [ -f "$rc_file" ]; then
             sed -i '/alias st=/d' "$rc_file" 2>/dev/null
