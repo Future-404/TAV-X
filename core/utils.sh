@@ -10,13 +10,49 @@ fi
 
 safe_rm() {
     local target="$1"
-    if [[ -z "$target" ]]; then ui_print error "安全拦截: 空路径！"; return 1; fi
-    if [[ "$target" == "/" ]] || [[ "$target" == "$HOME" ]] || [[ "$target" == "/usr" ]] || [[ "$target" == "/bin" ]]; then
-        ui_print error "安全拦截: 高危目录 ($target)！"; return 1; fi
-    if [[ "$target" == "." ]] || [[ "$target" == ".." ]]; then
-        ui_print error "安全拦截: 相对路径无效！"; return 1; fi
-    rm -rf "$target"
+    
+    if [ -z "$target" ]; then
+        echo "❌ [安全拦截] 目标路径为空" >&2
+        return 1
+    fi
+
+    if command -v realpath &> /dev/null; then
+        abs_target=$(realpath -m "$target")
+    else
+        abs_target="$target"
+        [[ "$abs_target" != /* ]] && abs_target="$PWD/$target"
+    fi
+    local BLACKLIST=(
+        "/" 
+        "$HOME" 
+        "/usr" "/usr/*" 
+        "/bin" "/bin/*" 
+        "/sbin" "/sbin/*" 
+        "/etc" "/etc/*" 
+        "/var" 
+        "/sys" "/proc" "/dev" "/run" "/boot"
+        "/data/data/com.termux/files"
+        "/data/data/com.termux/files/home"
+        "/data/data/com.termux/files/usr"
+    )
+
+    for bad_path in "${BLACKLIST[@]}"; do
+        if [[ "$abs_target" == $bad_path ]]; then
+            echo "❌ [安全拦截] 禁止删除关键系统目录: $abs_target" >&2
+            return 1
+        fi
+    done
+
+    if [[ "$target" == "." ]] || [[ "$target" == ".." ]] || [[ "$target" == "./" ]] || [[ "$target" == "../" ]]; then
+        echo "❌ [安全拦截] 禁止删除当前/上级目录引用！" >&2
+        return 1
+    fi
+
+    if [ -e "$target" ]; then
+        rm -rf "$target"
+    fi
 }
+export -f safe_rm
 
 pause() { echo ""; read -n 1 -s -r -p "按任意键继续..."; echo ""; }
 
@@ -53,14 +89,16 @@ send_analytics() {
 
 safe_log_monitor() {
     local file=$1
-    if [ ! -f "$file" ]; then echo "暂无日志文件: $(basename "$file")"; sleep 1; return; fi
+    if [ ! -f "$file" ]; then touch "$file"; fi
     clear
     echo -e "${CYAN}=== 正在实时监控日志 ===${NC}"
     echo -e "${YELLOW}提示: 按 Ctrl+C 即可停止监控并返回菜单${NC}"
     echo "----------------------------------------"
-    trap 'echo -e "\n${GREEN}>>> 已停止监控，正在返回...${NC}"; return' SIGINT
+    
+    trap 'echo -e "\n${GREEN}>>> 已停止监控，正在返回...${NC}"' SIGINT
     tail -n 30 -f "$file"
     trap - SIGINT
+    sleep 0.5
 }
 
 is_port_open() {
@@ -102,7 +140,7 @@ get_active_proxy() {
 
     for entry in "${GLOBAL_PROXY_PORTS[@]}"; do
         local port=${entry%%:*}
-        local proto=${entry#*:} 
+        local proto=${entry#*:}
         if timeout 0.1 bash -c "</dev/tcp/127.0.0.1/$port" 2>/dev/null;
         then
             local result=""
@@ -139,7 +177,7 @@ check_github_speed() {
     local TEST_URL="https://raw.githubusercontent.com/Future-404/TAV-X/main/core/env.sh"
     echo -e "${CYAN}正在测试 GitHub 直连速度 (阈值: 800KB/s)...${NC}"
     
-    local speed=$(curl -s -L -m 5 -w "%{speed_download}\n" -o /dev/null "$TEST_URL" 2>/dev/null)
+    local speed=$(curl -s -L -m 5 -w "% {speed_download}\n" -o /dev/null "$TEST_URL" 2>/dev/null)
     speed=${speed%.*}
     [ -z "$speed" ] && speed=0
     
@@ -318,7 +356,13 @@ git_clone_smart() {
              (cd "$target_dir" || exit; git remote set-url origin "$official_url")
              return 0
         else
-             echo -e "${YELLOW}=== 下载失败日志 (Last 10 lines) ===${NC}"
+             if [ -n "$TAVX_LOG_FILE" ]; then
+                 echo "--- GIT ERROR DETAILS ---" >> "$TAVX_LOG_FILE"
+                 cat "$err_log" >> "$TAVX_LOG_FILE"
+                 echo "-------------------------" >> "$TAVX_LOG_FILE"
+             fi
+             
+             echo -e "${YELLOW}=== 下载失败日志 (Last 20 lines) ===${NC}"
              tail -n 20 "$err_log"
              echo -e "${YELLOW}====================================${NC}"
              sleep 3
@@ -387,9 +431,15 @@ download_file_smart() {
     if curl -f -L -o "$filename" --noproxy "*" --retry 2 --max-time 60 "$url" 2>>"$err_log"; then 
         return 0
     else
+        if [ -n "$TAVX_LOG_FILE" ]; then
+             echo "--- CURL ERROR DETAILS ---" >> "$TAVX_LOG_FILE"
+             cat "$err_log" >> "$TAVX_LOG_FILE"
+             echo "--------------------------" >> "$TAVX_LOG_FILE"
+        fi
+        
         ui_print error "文件下载失败: $(basename "$filename")"
-        echo -e "${YELLOW}=== CURL 错误日志 ===${NC}"
-        tail -n 5 "$err_log"
+        echo -e "${YELLOW}=== CURL 错误日志 ===${NC}" >&2
+        tail -n 5 "$err_log" >&2
         sleep 3
         return 1
     fi
@@ -508,7 +558,7 @@ escape_for_sed() {
     local raw="$1"
     local safe="${raw//\\/\\\\}"
     safe="${safe//\//\\/}"
-    safe="${safe//&/\\&}"
+    safe="${safe//&/\&}"
     echo "$safe"
 }
 
@@ -553,5 +603,31 @@ kill_process_safe() {
     
     if [ -n "$pattern" ]; then
         pkill -9 -f "$pattern" >/dev/null 2>&1
+    fi
+}
+
+# === [新增] 安全验证函数 (从 uninstall.sh 迁移) ===
+verify_kill_switch() {
+    local TARGET_PHRASE="我已知此操作风险并且已做好备份"
+    
+    ui_header "⚠️ 高危操作安全确认"
+    echo -e "${RED}警告：此操作不可逆！数据将永久丢失！${NC}"
+    echo -e "为了确认是您本人操作，请准确输入以下文字："
+    echo ""
+    if [ "$HAS_GUM" = true ]; then
+        gum style --border double --border-foreground 196 --padding "0 1" --foreground 220 "$TARGET_PHRASE"
+    else
+        echo ">>> $TARGET_PHRASE"
+    fi
+    echo ""
+    
+    local input=$(ui_input "在此输入确认语" "" "false")
+    
+    if [ "$input" == "$TARGET_PHRASE" ]; then
+        return 0
+    else
+        ui_print error "验证失败！文字不匹配，操作已取消。"
+        ui_pause
+        return 1
     fi
 }

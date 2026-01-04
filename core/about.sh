@@ -6,11 +6,11 @@ GROUP_QQ="616353694"
 CONTACT_EMAIL="future_404@outlook.com"
 PROJECT_URL="https://github.com/Future-404/TAV-X"
 SLOGAN="别让虚拟的温柔，偷走了你在现实里本该拥有的温暖。"
-UPDATE_SUMMARY="v2.6.2 LTS 核心更新：
-  1. [重构] 核心进程管理 (防误杀/PID自愈)
-  2. [修复] UI 交互死锁与下载卡顿问题
-  3. [安全] 注入漏洞防御与敏感参数校验
-  4. [优化] 跨平台兼容性 (Termux/Linux) 与性能提升"
+UPDATE_SUMMARY="v2.6.5 核心修复与优化：
+  1. [重构] ClewdR/Mihomo 启动逻辑，解决 Syntax Error 导致的秒退问题
+  2. [修复] AIStudio 插件安装脚本缺失函数及流程错误
+  3. [修复] Mihomo 配置文件格式兼容性 (Header 解析错误)
+  4. [优化] 全局日志系统增强，支持全量调试信息记录 (set -x)"
 
 show_about_page() {
     ui_header "帮助与支持"

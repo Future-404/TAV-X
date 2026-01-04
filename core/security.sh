@@ -13,29 +13,29 @@ configure_server_settings() {
 
     local CONFIG_MAP=(
         "SEPARATOR|--- 基础连接设置 ---"
-        "listen|允许外部网络连接 (0.0.0.0)"
-        "whitelistMode|白名单模式 (限制IP访问)"
-        "basicAuthMode|强制密码登录 (BasicAuth)"
+        "listen|允许外部网络连接"
+        "whitelistMode|白名单模式"
+        "basicAuthMode|强制密码登录"
         "enableUserAccounts|多用户账号系统"
-        "enableDiscreetLogin|谨慎登录模式 (隐藏用户名)"
+        "enableDiscreetLogin|谨慎登录模式"
         
         "SEPARATOR|--- 网络与安全进阶 ---"
-        "disableCsrfProtection|禁用 CSRF 保护 (解决跨域报错)"
-        "enableCorsProxy|启用 CORS 代理 (允许外部前端)"
+        "disableCsrfProtection|禁用 CSRF 保护"
+        "enableCorsProxy|启用 CORS 代理"
         "protocol.ipv6|启用 IPv6 协议支持"
         "ssl.enabled|启用 SSL/HTTPS"
         "hostWhitelist.enabled|Host 头白名单检查"
 
         "SEPARATOR|--- 性能与更新优化 ---"
-        "performance.lazyLoadCharacters|懒加载角色卡 (极大提升启动速度)"
-        "performance.useDiskCache|启用硬盘缓存 (DiskCache)"
+        "performance.lazyLoadCharacters|懒加载角色卡 (启用极大提升启动速度)"
+        "performance.useDiskCache|启用硬盘缓存 (termux建议关闭)"
         "extensions.enabled|加载扩展插件"
         "extensions.autoUpdate|自动更新扩展 (建议关闭)"
         "enableServerPlugins|加载服务端插件"
         "enableServerPluginsAutoUpdate|自动更新服务端插件"
 
         "SEPARATOR|--- 危险区域 ---"
-        "RESET_CONFIG|⚠️ 恢复默认配置 (删除当前文件)"
+        "RESET_CONFIG|⚠️ 恢复默认配置"
     )
 
     while true; do
@@ -524,9 +524,9 @@ configure_browser_launch() {
         echo "----------------------------------------"
 
         CHOICE=$(ui_menu "请选择启动方式" \
-            "🚀 脚本接管 (推荐: 兼容性更好)" \
+            "🚀 脚本接管" \
             "🍷 SillyTavern 原生 (默认)" \
-            "🚫 禁止自动跳转 (手动打开)" \
+            "🚫 禁止自动跳转" \
             "🔙 返回" 
         )
 
@@ -573,7 +573,7 @@ configure_cf_token() {
     echo -e "请在 Cloudflare Zero Trust 后台获取 Tunnel Token。"
     echo ""
 
-    CHOICE=$(ui_menu "请选择操作" "✏️ 输入/更新 Token" "🗑️ 清除 Token (恢复默认)" "🔙 返回")
+    CHOICE=$(ui_menu "请选择操作" "✏️ 输入/更新 Token" "🗑️ 清除 Token" "🔙 返回")
 
     case "$CHOICE" in
         *"输入"*) 
@@ -591,6 +591,63 @@ configure_cf_token() {
     esac
 }
 
+perform_cleanup() {
+    local tmp_script="$TMP_DIR/cleanup_task.sh"
+    echo "#!/bin/bash" > "$tmp_script"
+    for file in "$@"; do
+        echo "rm -f \"$file\"" >> "$tmp_script"
+    done
+    echo "rm -f \"$TMP_DIR\"/tavx_*.log" >> "$tmp_script"
+    
+    chmod +x "$tmp_script"
+    bash "$tmp_script"
+    local ret=$?
+    rm -f "$tmp_script"
+    return $ret
+}
+export -f perform_cleanup
+
+clean_system_garbage() {
+    ui_header "系统垃圾清理"
+    
+    local count=0
+    local file_list=()
+    
+    for file in "${TAVX_TRACKED_LOGS[@]}"; do
+        if [ -f "$file" ]; then
+            ((count++))
+            file_list+=("$file")
+        fi
+    done
+    
+    echo -e "${YELLOW}检测到追踪列表内有 $count 个日志/缓存文件。${NC}"
+    echo -e "包括：TAV-X 运行日志、酒馆后台日志、各模块日志及临时缓存。"
+    echo ""
+    echo -e "${CYAN}注意：这不会删除您的聊天记录、卡片或配置数据。${NC}"
+    echo ""
+    
+    if ! ui_confirm "确认立即清理吗？"; then return; fi
+    local clean_script="$TMP_DIR/cleanup_${BASHPID}.sh"
+    echo "#!/bin/bash" > "$clean_script"
+    for f in "${file_list[@]}"; do
+        echo "rm -f '$f'" >> "$clean_script"
+    done
+    echo "rm -f '$TMP_DIR'/tavx_*.log" >> "$clean_script"
+    chmod +x "$clean_script"
+    
+    if ui_spinner "正在粉碎垃圾文件..." "bash '$clean_script'"; then
+        rm -f "$clean_script"
+        touch "$TAVX_LOG_FILE"
+        echo "--- Log Cleaned by User at $(date) ---" >> "$TAVX_LOG_FILE"
+        
+        ui_print success "清理完成！系统已恢复清爽。"
+    else
+        rm -f "$clean_script"
+        ui_print error "清理过程中遇到权限问题。"
+    fi
+    ui_pause
+}
+
 security_menu() {
     while true; do
         ui_header "系统设置"
@@ -603,6 +660,7 @@ security_menu() {
             "☁️  配置Cloudflare Token" \
             "🔐 重置登录密码" \
             "🔌 修改服务端口" \
+            "🧹 清理系统垃圾" \
             "🧨 卸载与重置" \
             "🔙 返回主菜单"
         )
@@ -615,6 +673,7 @@ security_menu() {
             *"Cloudflare"*) configure_cf_token ;; 
             *"密码"*) reset_password ;; 
             *"端口"*) change_port ;; 
+            *"清理"*) clean_system_garbage ;;
             *"卸载"*) uninstall_menu ;; 
             *"返回"*) return ;; 
         esac

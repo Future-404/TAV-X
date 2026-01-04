@@ -150,7 +150,7 @@ reset_all_plugins() {
     echo ""
 
     if ui_confirm "确认清空吗？"; then
-        if ui_spinner "正在粉碎文件..." "source \"$TAVX_DIR/core/utils.sh\"; safe_rm '$PLUGIN_ROOT'; mkdir -p '$PLUGIN_ROOT'"; then
+        if ui_spinner "正在粉碎文件..." "safe_rm '$PLUGIN_ROOT'; mkdir -p '$PLUGIN_ROOT'"; then
             ui_print success "所有第三方插件已清除。"
             echo -e "${YELLOW}请稍后重启酒馆以生效。${NC}"
         else

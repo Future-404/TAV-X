@@ -6,6 +6,7 @@
 source "$TAVX_DIR/core/env.sh"
 source "$TAVX_DIR/core/ui.sh"
 source "$TAVX_DIR/core/utils.sh"
+source "$TAVX_DIR/modules/python_mgr.sh"
 
 GEMINI_DIR="$TAVX_DIR/gemini_proxy"
 VENV_DIR="$GEMINI_DIR/venv"
@@ -66,6 +67,7 @@ check_auth_dependencies() {
 
 install_gemini() {
     ui_header "部署 Gemini 代理服务"
+    cd "$TAVX_DIR" || exit 1
     
     if ! command -v python3 &>/dev/null; then
         ui_print error "系统未检测到 Python3。"
@@ -73,15 +75,10 @@ install_gemini() {
         ui_pause; return 1
     fi
 
-    if [ "$OS_TYPE" == "TERMUX" ]; then
-        if ! command -v rustc &>/dev/null || ! command -v clang &>/dev/null; then
-            ui_print warn "Gemini 依赖可能需要编译，但缺少 Rust/Clang。"
-            echo -e "${YELLOW}建议前往 [高级工具] -> [🐍 Python 环境管理] 补全编译环境。${NC}"
-            if ! ui_confirm "强制继续 (可能失败)?"; then return 1; fi
-        fi
-    fi
+    ensure_python_build_deps
+    select_pypi_mirror
 
-    if [ -d "$GEMINI_DIR" ]; then rm -rf "$GEMINI_DIR"; fi
+    if [ -d "$GEMINI_DIR" ]; then safe_rm "$GEMINI_DIR"; fi
     prepare_network_strategy "$REPO_URL"
 
     local CLONE_CMD="source \"$TAVX_DIR/core/utils.sh\"; git_clone_smart '' '$REPO_URL' '$GEMINI_DIR'"
@@ -89,22 +86,48 @@ install_gemini() {
 
     cd "$GEMINI_DIR" || return
 
+    local use_system_site="false"
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        ui_print info "Termux 优化: 预安装系统级 grpcio..."
+        pkg install -y python-grpcio >/dev/null 2>&1
+        use_system_site="true"
+    fi
+
     ui_print info "创建 Python 虚拟环境..."
-    python3 -m venv venv || { ui_print error "Venv 创建失败"; ui_pause; return 1; }
+    if ! create_venv_smart "$VENV_DIR" "$use_system_site"; then
+        ui_print error "Venv 创建失败"
+        return 1
+    fi
 
     ui_print info "正在安装依赖..."
     
-    if pip_install_smart "$VENV_PIP" "--upgrade pip" && \
-       pip_install_smart "$VENV_PIP" "requests[socks] PySocks" && \
-       pip_install_smart "$VENV_PIP" "-r requirements.txt"; then
+    cp requirements.txt requirements_full.tmp
+    
+    echo "" >> requirements_full.tmp
+    
+    if [ "$use_system_site" == "true" ]; then
+        sed -i '/grpcio/d' requirements_full.tmp
+    fi
+    
+    echo "requests[socks]" >> requirements_full.tmp
+    echo "PySocks" >> requirements_full.tmp
+    
+    local install_mode="standard"
+    [ "$use_system_site" == "true" ] && install_mode="optimized"
+    
+    install_requirements_smart "$VENV_DIR" "requirements_full.tmp" "$install_mode" "$LOG_FILE"
+    local ret=$?
+    
+    rm -f requirements_full.tmp
+    
+    if [ $ret -eq 0 ]; then
         echo "HOST=0.0.0.0" > "$ENV_FILE"
         echo "PORT=8888" >> "$ENV_FILE"
         echo "GEMINI_AUTH_PASSWORD=password" >> "$ENV_FILE"
         ui_print success "Gemini 服务部署成功！"
     else
         ui_print error "依赖安装失败。"
-        echo -e "${YELLOW}请检查网络设置或手动切换 Pip 源。${NC}"
-        echo -e "${YELLOW}高级工具 -> Python 环境管理 -> 修复系统 Python${NC}"
+        echo -e "${YELLOW}请检查日志: $LOG_FILE${NC}"
         ui_pause; return 1
     fi
     
@@ -178,7 +201,7 @@ authenticate_google() {
 
     if [ $CRASHED -eq 1 ]; then
         ui_print error "认证程序意外崩溃！"
-        echo -e "${YELLOW}--- 错误日志 (最后10行) ---${NC}"
+        echo -e "${YELLOW}--- 错误日志 ---${NC}"
         tail -n 10 "$LOG_FILE"
         echo -e "${YELLOW}----------------------------${NC}"
         ui_pause; return
@@ -378,7 +401,7 @@ show_info() {
     echo -e "🏠 本地局域网地址:"
     echo -e "   http://127.0.0.1:$port/v1"
     echo ""
-    echo -e "🔑 API 密钥 (Password):"
+    echo -e "🔑 API 密钥:"
     echo -e "   $pass"
     echo ""
     echo -e "🆔 Google Cloud 项目ID:"
@@ -440,6 +463,27 @@ configure_params() {
     done
 }
 
+uninstall_gemini() {
+    ui_header "卸载 Gemini 代理"
+    
+    if [ ! -d "$GEMINI_DIR" ]; then
+        ui_print warn "未检测到 Gemini 模块。"
+        ui_pause; return
+    fi
+
+    if ! verify_kill_switch; then return; fi
+    
+    kill_process_safe "$GEMINI_PID_FILE" "run.py"
+    
+    if ui_spinner "正在清除 Gemini 模块..." "safe_rm '$GEMINI_DIR'"; then
+        ui_print success "Gemini 代理及凭据已卸载。"
+        return 2
+    else
+        ui_print error "删除失败。"
+        ui_pause
+    fi
+}
+
 gemini_menu() {
     while true; do
         ui_header "Gemini 3.0 智能代理"
@@ -463,6 +507,7 @@ gemini_menu() {
             "⚙️  配置参数" \
             "📜 查看运行日志" \
             "🛑 停止所有服务" \
+            "🗑️  卸载 Gemini 模块" \
             "🔙 返回上级"
         )
         case "$CHOICE" in
@@ -475,6 +520,7 @@ gemini_menu() {
             *"配置"*) configure_params ;; 
             *"日志"*) safe_log_monitor "$LOG_FILE" ;; 
             *"停止"*) stop_service ;; 
+            *"卸载"*) uninstall_gemini; [ $? -eq 2 ] && return ;;
             *"返回"*) return ;; 
         esac
     done

@@ -33,22 +33,41 @@ install_clewdr() {
     if [ "$OS_TYPE" == "TERMUX" ]; then
         local URL="https://github.com/Xerxes-2/clewdr/releases/latest/download/clewdr-android-aarch64.zip"
         prepare_network_strategy "$URL"
+        
+        # 显式导出镜像配置
+        export SELECTED_MIRROR
+        export CLEWD_DL_URL="$URL"
+        export TAVX_DIR
 
-        local CMD="
-            source \"$TAVX_DIR/core/utils.sh\"
-            if download_file_smart '$URL' 'clewd.zip'; then
-                unzip -o clewd.zip >/dev/null 2>&1
-                chmod +x clewdr
-                rm clewd.zip
-                exit 0
-            else
-                exit 1
-            fi
-        "
+        # 创建临时脚本以避免 eval 语法错误
+        local TMP_SCRIPT="$CLEWD_DIR/install_tmp.sh"
+        cat << 'EOF' > "$TMP_SCRIPT"
+#!/bin/bash
+set -x
+source "$TAVX_DIR/core/utils.sh"
+echo ">>> [DEBUG] Starting download logic..."
+echo ">>> [DEBUG] Mirror: $SELECTED_MIRROR"
+echo ">>> [DEBUG] URL: $CLEWD_DL_URL"
 
-        if ui_spinner "正在下载 ClewdR (Android)..." "$CMD"; then
+if download_file_smart "$CLEWD_DL_URL" "clewd.zip"; then
+    echo ">>> [DEBUG] Download success."
+    unzip -o clewd.zip >/dev/null 2>&1
+    chmod +x clewdr
+    rm clewd.zip
+    exit 0
+else
+    echo ">>> [DEBUG] Download failed."
+    exit 1
+fi
+EOF
+        chmod +x "$TMP_SCRIPT"
+        
+        # 执行临时脚本
+        if ui_spinner "正在下载 ClewdR (Android)..." "bash '$TMP_SCRIPT'"; then
+            rm -f "$TMP_SCRIPT"
             ui_print success "安装完成！"
         else
+            rm -f "$TMP_SCRIPT"
             ui_print error "下载失败，请检查网络。"
         fi
         
@@ -150,6 +169,21 @@ show_secrets() {
     ui_pause
 }
 
+uninstall_clewd() {
+    ui_header "卸载 Clewd"
+    if ! verify_kill_switch; then return; fi
+
+    kill_process_safe "$CLEWD_PID_FILE" "clewd"
+
+    if ui_spinner "正在清除 ClewdR..." "safe_rm '$CLEWD_DIR'"; then
+        ui_print success "ClewdR 模块已卸载。"
+        return 2 
+    else
+        ui_print error "删除失败。"
+        ui_pause
+    fi
+}
+
 clewd_menu() {
     while true; do
         ui_header "Clewd AI 反代管理"
@@ -168,6 +202,7 @@ clewd_menu() {
             "📜 查看实时日志" \
             "🛑 停止后台服务" \
             "📥 强制更新重装" \
+            "🗑️ 卸载 Clewd 模块" \
             "🔙 返回主菜单"
         )
 
@@ -177,6 +212,7 @@ clewd_menu() {
             *"日志"*) safe_log_monitor "$LOG_FILE" ;; 
             *"停止"*) stop_clewdr ;; 
             *"更新"*) install_clewdr ;; 
+            *"卸载"*) uninstall_clewd; [ $? -eq 2 ] && return ;;
             *"返回"*) return ;; 
         esac
     done

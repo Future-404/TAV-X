@@ -14,7 +14,7 @@ install_gum_linux() {
         *) ui_print error "暂不支持此架构自动安装 Gum: $ARCH"; return 1 ;; 
     esac
     
-    local VER="0.13.0"
+    local VER="0.17.0"
     local URL="https://github.com/charmbracelet/gum/releases/download/v${VER}/gum_${VER}_Linux_${G_ARCH}.tar.gz"
     
     if [ -n "$SELECTED_MIRROR" ] && [[ "$SELECTED_MIRROR" != *"github.com"* ]]; then
@@ -123,12 +123,38 @@ install_python_system() {
     return 1
 }
 
+check_node_version() {
+    if ! command -v node &> /dev/null; then return 1; fi
+    
+    local ver=$(node -v | tr -d 'v' | cut -d '.' -f 1)
+    
+    if [ -z "$ver" ] || [ "$ver" -lt 20 ]; then
+        return 1
+    fi
+    return 0
+}
+
+setup_nodesource() {
+    ui_print info "正在配置 NodeSource 源..."
+    $SUDO_CMD apt-get update
+    $SUDO_CMD apt-get install -y curl gnupg ca-certificates
+    
+    if curl -fsSL https://deb.nodesource.com/setup_20.x | $SUDO_CMD bash -; then
+        ui_print success "源配置完成，正在安装 Node.js..."
+        $SUDO_CMD apt-get install -y nodejs
+        return $?
+    else
+        ui_print error "源配置失败，请检查网络。"
+        return 1
+    fi
+}
+
 check_dependencies() {
     if [ "$DEPS_CHECKED" == "true" ]; then return 0; fi
 
     local MISSING_PKGS=""
     
-    local HAS_NODE=false; command -v node &> /dev/null && HAS_NODE=true
+    local HAS_NODE=false; check_node_version && HAS_NODE=true
     local HAS_GIT=false; command -v git &> /dev/null && HAS_GIT=true
     local HAS_CF=false; command -v cloudflared &> /dev/null && HAS_CF=true
     local HAS_GUM=false; command -v gum &> /dev/null && HAS_GUM=true
@@ -144,8 +170,19 @@ check_dependencies() {
     echo -e "${BLUE}[INFO]${NC} 正在检查全套组件 ($OS_TYPE)..."
 
     if ! $HAS_NODE; then 
-        echo -e "${YELLOW}[WARN]${NC} 未找到 Node.js"
-        if [ "$OS_TYPE" == "TERMUX" ]; then MISSING_PKGS="$MISSING_PKGS nodejs-lts"; else MISSING_PKGS="$MISSING_PKGS nodejs npm"; fi
+        echo -e "${YELLOW}[WARN]${NC} Node.js 未找到或版本过低 (<v20)"
+        if [ "$OS_TYPE" == "TERMUX" ]; then 
+            MISSING_PKGS="$MISSING_PKGS nodejs"
+        else 
+            echo -e "${YELLOW}检测到 Linux 环境，是否自动配置 NodeSource 源以安装最新 Node.js?${NC}"
+            if ui_confirm "这需要 root 权限 (sudo) 且会修改系统源列表。"; then
+                setup_nodesource
+                if check_node_version; then HAS_NODE=true; else MISSING_PKGS="$MISSING_PKGS nodejs"; fi
+            else
+                 echo -e "${RED}[ERROR]${NC} 跳过 Node.js 配置。SillyTavern 可能无法启动。"
+                 MISSING_PKGS="$MISSING_PKGS nodejs npm"
+            fi
+        fi
     fi
 
     if ! $HAS_GIT; then 

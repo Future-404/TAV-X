@@ -98,6 +98,18 @@ ui_dashboard() {
     fi
 }
 
+write_log() {
+    local level="$1"
+    local msg="$2"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    
+    local clean_msg=$(echo "$msg" | sed 's/\x1b\[[0-9;]*m//g')
+    
+    if [ -n "$TAVX_LOG_FILE" ]; then
+        echo "[$timestamp] [$level] $clean_msg" >> "$TAVX_LOG_FILE"
+    fi
+}
+
 ui_menu() {
     local header="$1"; shift; local options=("$@")
     if [ "$HAS_GUM" = true ]; then
@@ -133,15 +145,55 @@ ui_confirm() {
 
 ui_spinner() {
     local title="$1"; shift; local cmd="$@"
-    if [ "$HAS_GUM" = true ]; then
-        gum spin --spinner dot --title "$title" --title.foreground $C_PURPLE --show-output -- bash -c "$cmd"
+    local tmp_log=""
+    if command -v mktemp &> /dev/null; then
+        tmp_log=$(mktemp "$TMP_DIR/task_XXXXXX.log")
     else
-        echo ">>> $title"; eval "$cmd"
+        tmp_log="$TMP_DIR/task_${BASHPID}_$(date +%s%N).log"
+    fi
+
+    write_log "TASK_START" "$title (Log: $tmp_log)"
+    
+    local wrapped_cmd="{ $cmd ; } > \"$tmp_log\" 2>&1"
+
+    local result=0
+    if [ "$HAS_GUM" = true ]; then
+        gum spin --spinner dot --title "$title" --title.foreground $C_PURPLE -- bash -c "$wrapped_cmd"
+        result=$?
+    else
+        echo ">>> $title"
+        eval "$wrapped_cmd"
+        result=$?
+    fi
+    
+    # === [增强日志记录] ===
+    # 将临时日志的完整内容追加到主日志，确保不遗漏任何细节
+    if [ -n "$TAVX_LOG_FILE" ] && [ -f "$tmp_log" ]; then
+        echo "--- [Task Log Dump: $title] ---" >> "$TAVX_LOG_FILE"
+        cat "$tmp_log" >> "$TAVX_LOG_FILE"
+        echo "-------------------------------" >> "$TAVX_LOG_FILE"
+    fi
+    
+    if [ $result -eq 0 ]; then
+        write_log "TASK_END" "Success: $title"
+        # 成功后删除临时文件，因为内容已归档到主日志
+        rm -f "$tmp_log"
+        return 0
+    else
+        write_log "TASK_END" "FAILED (Code $result): $title"
+        # 失败时不在控制台重复打印 Last 20 lines，因为主日志里已经有了全量。
+        # 但为了终端用户体验，如果不是在排查模式，还是可以显示一点。
+        # 鉴于当前是排查阶段，我们让用户直接去看主日志。
+        return 1
     fi
 }
 
 ui_print() {
     local type="$1"; local msg="$2"
+    
+    local log_level=$(echo "$type" | tr '[:lower:]' '[:upper:]')
+    write_log "$log_level" "$msg"
+
     if [ "$HAS_GUM" = true ]; then
         case $type in
             success) gum style --foreground $C_GREEN "✔ $msg" ;;
@@ -149,7 +201,14 @@ ui_print() {
             warn)    gum style --foreground $C_YELLOW "⚠ $msg" ;;
             *)       gum style --foreground $C_PURPLE "ℹ $msg" ;;
         esac
-    else echo "[$type] $msg"; fi
+    else 
+        case $type in
+            success) echo -e "\033[1;32m[DONE]\033[0m $msg" ;;
+            error)   echo -e "\033[1;31m[ERROR]\033[0m $msg" ;;
+            warn)    echo -e "\033[1;33m[WARN]\033[0m $msg" ;;
+            *)       echo -e "\033[1;34m[INFO]\033[0m $msg" ;;
+        esac
+    fi
 }
 
 ui_pause() {

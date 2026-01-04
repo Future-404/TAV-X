@@ -7,6 +7,158 @@
 source "$TAVX_DIR/core/utils.sh"
 source "$TAVX_DIR/core/deps.sh"
 
+PY_CONFIG="$TAVX_DIR/config/python.conf"
+
+select_pypi_mirror() {
+    local current_mirror=""
+    if [ -f "$PY_CONFIG" ]; then
+        current_mirror=$(grep "^PYPI_INDEX_URL=" "$PY_CONFIG" | cut -d'=' -f2)
+    fi
+
+    if [ "$1" == "quiet" ] && [ -n "$current_mirror" ]; then
+        echo "$current_mirror"
+        return
+    fi
+
+    ui_header "PyPI 镜像源设置"
+    echo -e "当前源: ${CYAN}${current_mirror:-官方源}${NC}"
+    echo "选择靠近您的镜像源可以显著加速依赖安装。"
+    echo "----------------------------------------"
+
+    local CHOICE=$(ui_menu "请选择镜像源" \
+        "🇨🇳 清华大学 (Tuna) - 推荐" \
+        "🇨🇳 阿里云 (Aliyun)" \
+        "🇨🇳 腾讯云 (Tencent)" \
+        "🌐 官方源 (PyPI)" \
+        "✏️  自定义输入" \
+    )
+    
+    local new_url=""
+    case "$CHOICE" in
+        *"清华"*) new_url="https://pypi.tuna.tsinghua.edu.cn/simple" ;;
+        *"阿里"*) new_url="https://mirrors.aliyun.com/pypi/simple/" ;;
+        *"腾讯"*) new_url="https://mirrors.cloud.tencent.com/pypi/simple" ;;
+        *"官方"*) new_url="https://pypi.org/simple" ;;
+        *"自定义"*) new_url=$(ui_input "请输入完整 Index URL" "" "false") ;;
+    esac
+
+    if [ -n "$new_url" ]; then
+        write_env_safe "$PY_CONFIG" "PYPI_INDEX_URL" "$new_url"
+        ui_print success "已保存首选源。"
+        if command -v pip &>/dev/null; then
+            pip config set global.index-url "$new_url" >/dev/null 2>&1
+        fi
+        echo "$new_url"
+    else
+        echo "${current_mirror:-https://pypi.org/simple}"
+    fi
+}
+
+ensure_python_build_deps() {
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        ui_print info "正在检查编译环境 (Rust/Clang)..."
+        local missing=false
+        for cmd in rustc cargo clang make; do
+            if ! command -v $cmd &>/dev/null; then missing=true; break; fi
+        done
+        if [ "$missing" == "false" ]; then
+            local test_file="$TMP_DIR/rust_test_$$"
+            echo 'fn main(){}' > "$test_file.rs"
+            if ! rustc "$test_file.rs" -o "$test_file.bin" >/dev/null 2>&1; then
+                missing=true
+            fi
+            rm -f "$test_file.rs" "$test_file.bin"
+        fi
+
+        if [ "$missing" == "true" ]; then
+            ui_print warn "编译环境缺失或损坏，正在尝试自动修复..."
+            (
+                pkg uninstall rust -y
+                pkg clean && pkg update -y
+                pkg install -y rust binutils clang make python
+            ) > "$TMP_DIR/rust_fix.log" 2>&1
+            
+            if [ $? -eq 0 ]; then
+                ui_print success "编译环境修复成功。"
+            else
+                ui_print error "环境修复失败，请查看日志: $TMP_DIR/rust_fix.log"
+                return 1
+            fi
+        fi
+    else
+        if ! command -v make &>/dev/null; then
+             ui_print warn "未检测到 make/gcc，编译可能会失败。"
+             if ui_confirm "尝试安装 build-essential?"; then
+                 $SUDO_CMD apt-get update && $SUDO_CMD apt-get install -y build-essential python3-dev
+             fi
+        fi
+    fi
+    return 0
+}
+
+create_venv_smart() {
+    local venv_path="$1"
+    local use_system_site="${2:-false}" # true/false
+    
+    if [ -d "$venv_path" ]; then
+        echo ">>> 清理旧环境..."
+        safe_rm "$venv_path"
+    fi
+    
+    local args=""
+    [ "$use_system_site" == "true" ] && args="--system-site-packages"
+    
+    echo ">>> 创建虚拟环境..."
+    python3 -m venv "$venv_path" $args
+    
+    if [ ! -f "$venv_path/bin/activate" ]; then
+        echo ">>> 虚拟环境创建失败！"
+        return 1
+    fi
+    return 0
+}
+
+install_requirements_smart() {
+    local venv_path="$1"
+    local req_file="$2"
+    local mode="${3:-standard}"
+    local log_file="${4:-/dev/null}"
+    local pypi_url=$(grep "^PYPI_INDEX_URL=" "$PY_CONFIG" 2>/dev/null | cut -d'=' -f2)
+    if [ -z "$pypi_url" ]; then
+        pypi_url="https://pypi.org/simple"
+    fi
+    
+    source "$venv_path/bin/activate"
+    export PIP_INDEX_URL="$pypi_url"
+    export PIP_DISABLE_PIP_VERSION_CHECK=1
+    
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        export CC="clang"
+        export CXX="clang++"
+        export CFLAGS="-Wno-implicit-function-declaration"
+        export RUSTFLAGS="-C lto=no"
+        export CARGO_BUILD_JOBS=2
+    fi
+
+    echo ">>> 正在安装依赖 (Mode: $mode, Mirror: $pypi_url)..." >> "$log_file"
+
+    if [ "$OS_TYPE" != "TERMUX" ] && command -v uv &>/dev/null && [ "$mode" == "optimized" ]; then
+        echo ">>> 使用 UV 加速安装..." >> "$log_file"
+        uv pip install -U pip >> "$log_file" 2>&1
+        uv pip install -r "$req_file" >> "$log_file" 2>&1
+        return $?
+    fi
+    
+    pip install -U pip >> "$log_file" 2>&1
+    if [ "$OS_TYPE" == "TERMUX" ] && [ "$mode" == "optimized" ]; then
+        echo ">>> Termux 混合模式优化..." >> "$log_file"
+        pip install maturin >> "$log_file" 2>&1
+    fi
+    
+    pip install -r "$req_file" >> "$log_file" 2>&1
+    return $?
+}
+
 install_system_python() {
     ui_header "安装系统级 Python"
     

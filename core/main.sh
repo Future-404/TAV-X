@@ -34,6 +34,10 @@ stop_all_services_routine() {
     kill_process_safe "$CLEWD_PID_FILE" "clewd"
     kill_process_safe "$GEMINI_PID_FILE" "run.py"
     
+    # 清理 Mihomo 进程
+    kill_process_safe "$TAVX_DIR/mihomo/mihomo.pid" "mihomo"
+    pkill -f "$TAVX_DIR/mihomo/mihomo"
+    
     if command -v termux-wake-unlock &> /dev/null; then
         termux-wake-unlock >/dev/null 2>&1
     fi
@@ -145,6 +149,7 @@ while true; do
         "🌐 网络设置" \
         "💾 备份与恢复" \
         "🛠️  高级工具" \
+        "📜 TAV-X日志" \
         "💡 帮助与支持" \
         "🚪 退出程序"
     )
@@ -160,6 +165,8 @@ while true; do
         
         *"高级工具") load_advanced_tools_menu ;;
         
+        *"TAV-X日志"*) safe_log_monitor "$TAVX_LOG_FILE" ;;
+        
         *"帮助与支持"*) show_about_page ;;
             
         *"退出程序"*) 
@@ -171,6 +178,7 @@ while true; do
             
             case "$EXIT_OPT" in
                 *"保持后台"*)
+                    write_log "EXIT" "User exited (Keeping services in background)"
                     ui_print info "程序已最小化，服务继续在后台运行。"
                     ui_print info "下次输入 'st' 即可唤回菜单。"
                     exit 0 
@@ -178,6 +186,7 @@ while true; do
                 *"结束所有"*)
                     echo ""
                     if ui_confirm "确定要关闭所有服务（酒馆、穿透、保活等）吗？"; then
+                        write_log "EXIT" "User requested to stop all services and exit"
                         ui_spinner "正在停止所有进程..." "stop_all_services_routine"
                         ui_print success "所有服务已停止，资源已释放。"
                         exit 0

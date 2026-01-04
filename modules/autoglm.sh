@@ -5,6 +5,7 @@
 # [END_METADATA]
 
 source "$TAVX_DIR/core/utils.sh"
+source "$TAVX_DIR/modules/python_mgr.sh"
 
 AUTOGLM_DIR="$TAVX_DIR/autoglm"
 VENV_DIR="$AUTOGLM_DIR/venv"
@@ -34,38 +35,6 @@ monitor_process() {
     echo -e "\r\033[K"
 }
 
-verify_and_fix_rust() {
-    [ "$OS_TYPE" != "TERMUX" ] && return 0
-    
-    ui_print info "正在自检编译环境..."
-    local test_file="$TAVX_DIR/rust_test.rs"
-    echo 'fn main(){}' > "$test_file"
-    if ! rustc "$test_file" -o "$test_file.bin" >/dev/null 2>&1; then
-        echo -e "${RED}✘ 检测到 Rust 环境损坏 (版本不匹配或标准库丢失)${NC}"
-        echo -e "${YELLOW}>>> 启动自动修复程序 (Nuclear Fix)...${NC}"
-        
-        (
-            set -x
-            pkg uninstall rust -y
-            apt autoremove -y
-            rm -rf "$HOME/.cargo" "$HOME/.rustup"
-            sed -i '/cargo\/env/d' "$HOME/.bashrc"
-            pkg clean && pkg update -y
-            pkg install -y rust binutils clang make
-        ) >> "$INSTALL_LOG" 2>&1
-        
-        if rustc "$test_file" -o "$test_file.bin" >/dev/null 2>&1; then
-            ui_print success "环境修复成功！"
-        else
-            ui_print error "自动修复失败，请手动执行 pkg reinstall rust"
-            return 1
-        fi
-    else
-        ui_print info "编译环境正常 (Rust $(rustc --version | awk '{print $2}'))"
-    fi
-    rm -f "$test_file" "$test_file.bin"
-}
-
 check_adb_keyboard() {
     if ! command -v adb &>/dev/null || ! adb devices | grep -q "device$"; then
         ui_print warn "检测到 ADB 未连接！"
@@ -75,7 +44,7 @@ check_adb_keyboard() {
             adb_menu_loop
             check_adb_keyboard; return
         else
-            ui_print error "您选择了跳过 ADB 连接。"; return 0
+            ui_print error "您选择了跳过 ADB 连接。${NC}"; return 0
         fi
     fi
     if adb shell ime list -s | grep -q "com.android.adbkeyboard/.AdbIME"; then return 0; fi
@@ -156,18 +125,17 @@ EOF
 
 perform_install_task() {
     local MODE="$1"
-    local USE_UV="$2"
     
     auto_load_proxy_env
 
-    local USE_SYSTEM_SITE=false
+    local USE_SYSTEM_SITE="false"
     local WHEEL_ARGS=""
     local WHEEL_DIR="$AUTOGLM_DIR/wheels"
     
     if [ "$OS_TYPE" == "TERMUX" ] && [ "$MODE" == "optimized" ]; then
-        USE_SYSTEM_SITE=true
-        echo ">>> [Phase 0] 检查 Python 系统库..."
-        pkg install -y python-pip >> "$INSTALL_LOG" 2>&1
+        USE_SYSTEM_SITE="true"
+        echo ">>> [Phase 0] 安装系统级加速库..."
+        pkg install -y python-pip python-numpy python-pillow python-cryptography >> "$INSTALL_LOG" 2>&1
         
         echo ">>> [Phase 0.5] 检查加速包..."
         local WHEEL_URL="https://github.com/Future-404/TAV-X/releases/download/assets-v1/autoglm_wheels.tar.gz"
@@ -176,7 +144,7 @@ perform_install_task() {
             if download_file_smart "$WHEEL_URL" "$AUTOGLM_DIR/wheels.tar.gz"; then
                 echo ">>> 下载成功"
             else
-                echo ">>> 下载失败 (非致命，将尝试在线编译)"
+                echo ">>> 下载失败 (将尝试在线编译)"
             fi
         fi
         
@@ -189,62 +157,49 @@ perform_install_task() {
 
     set -e
     cd "$AUTOGLM_DIR" || exit 1
-    [ -d "$VENV_DIR" ] && rm -rf "$VENV_DIR"
     
-    echo ">>> [Phase 1] 创建虚拟环境..."
-    local VENV_ARGS=""; [ "$USE_SYSTEM_SITE" == "true" ] && VENV_ARGS="--system-site-packages"
-    python3 -m venv "$VENV_DIR" $VENV_ARGS
-    source "$VENV_DIR/bin/activate"
+    if ! create_venv_smart "$VENV_DIR" "$USE_SYSTEM_SITE"; then
+        echo "创建虚拟环境失败"
+        exit 1
+    fi
     
-    if [ "$USE_UV" == "true" ]; then
-        echo ">>> [Phase 2] 使用 UV 安装..."
-        uv pip install -U pip
-        uv pip install -r requirements.txt
-        uv pip install "httpx[socks]"
-    elif [ "$USE_SYSTEM_SITE" == "true" ]; then
-        echo ">>> [Phase 2] 混合模式安装..."
-        export CC="clang"; export CXX="clang++"; export CFLAGS="-Wno-implicit-function-declaration"
-        export RUSTFLAGS="-C lto=no"
-        export CARGO_BUILD_JOBS=1 
-        
+    local target_req="requirements.txt"
+    
+    if [ "$USE_SYSTEM_SITE" == "true" ]; then
         cp requirements.txt requirements.tmp
         sed -i '/numpy/d' requirements.tmp
         sed -i '/Pillow/d' requirements.tmp
         sed -i '/cryptography/d' requirements.tmp
+        target_req="requirements.tmp"
         
-        pip install --upgrade pip
-        
-        echo ">>> [Phase 2.1] 安装构建工具..."
-        pip install $WHEEL_ARGS maturin
-        
-        echo ">>> [Phase 2.2] 安装 jiter (尝试次数: 3)..."
+        echo ">>> [Phase 2] 预安装特殊依赖 (jiter)..."
+        source "$VENV_DIR/bin/activate"
         local success=0
         for i in {1..3}; do
-            if pip install $WHEEL_ARGS jiter; then success=1; break; fi
+            if pip install $WHEEL_ARGS jiter >> "$INSTALL_LOG" 2>&1; then success=1; break; fi
             echo "Retrying jiter ($i/3)..."
             sleep 3
         done
-        [ $success -eq 0 ] && exit 1
-        
-        echo ">>> [Phase 2.3] 安装剩余依赖..."
-        pip install $WHEEL_ARGS -r requirements.tmp
-        pip install $WHEEL_ARGS "httpx[socks]"
-        
-        rm -f requirements.tmp
-        rm -rf "$WHEEL_DIR"
-    else
-        echo ">>> [Phase 2] 标准 Pip 安装..."
-        export CC="clang"; export CXX="clang++"; export RUSTFLAGS="-C lto=no"
-        pip install --upgrade pip
-        pip install -r requirements.txt
+        if [ -n "$WHEEL_ARGS" ]; then
+            export PIP_FIND_LINKS="$WHEEL_DIR"
+        fi
     fi
+
+    install_requirements_smart "$VENV_DIR" "$target_req" "$MODE" "$INSTALL_LOG"
+    local ret=$?
+    
+    rm -f requirements.tmp
+    safe_rm "$WHEEL_DIR"
+    
+    exit $ret
 }
 
 setup_autoglm_venv() {
     ui_header "AutoGLM 环境配置"
     if [ ! -d "$AUTOGLM_DIR" ]; then ui_print error "请先执行 [⬇️ 安装/更新 核心代码]。"; ui_pause; return; fi
     if ! command -v python3 &>/dev/null; then ui_print error "系统未检测到 Python3。"; ui_pause; return; fi
-    if [ "$OS_TYPE" == "TERMUX" ]; then verify_and_fix_rust; fi
+    if ! ensure_python_build_deps; then return; fi
+    select_pypi_mirror
     
     echo -e "${YELLOW}请选择依赖安装策略:${NC}"
     echo -e "1. ${GREEN}标准模式 (Pip)${NC}"
@@ -256,10 +211,9 @@ setup_autoglm_venv() {
     echo "----------------------------------------"
     local choice=$(ui_input "请输入序号 [1/2]" "2" "false")
     local MODE="standard"; [ "$choice" == "2" ] && MODE="optimized"
-    local USE_UV=false; if [ "$OS_TYPE" != "TERMUX" ] && [ "$MODE" == "optimized" ] && command -v uv &>/dev/null; then USE_UV=true; fi
 
     rm -f "$INSTALL_LOG"; touch "$INSTALL_LOG"
-    ( perform_install_task "$MODE" "$USE_UV" ) >> "$INSTALL_LOG" 2>&1 &
+    ( perform_install_task "$MODE" ) >> "$INSTALL_LOG" 2>&1 &
     local PID=$!
     monitor_process "$PID" "$INSTALL_LOG"
     
@@ -293,7 +247,7 @@ install_autoglm() {
         fi
     ) >> "$INSTALL_LOG" 2>&1
 
-    if [ -d "$AUTOGLM_DIR" ]; then rm -rf "$AUTOGLM_DIR"; fi
+    if [ -d "$AUTOGLM_DIR" ]; then safe_rm "$AUTOGLM_DIR"; fi
     if git_clone_smart "" "https://github.com/zai-org/Open-AutoGLM" "$AUTOGLM_DIR"; then
         check_adb_keyboard; create_ai_launcher
         ui_print success "核心文件已就绪！"
@@ -322,18 +276,46 @@ configure_autoglm() {
     create_ai_launcher; ui_print success "已保存"; ui_pause
 }
 
+uninstall_autoglm() {
+    ui_header "卸载 AutoGLM 智能体"
+    
+    if [ ! -d "$AUTOGLM_DIR" ]; then
+        ui_print warn "未检测到 AutoGLM 模块。"
+        ui_pause; return
+    fi
+
+    if ! verify_kill_switch; then return; fi
+    
+    if ui_spinner "正在清除 AutoGLM 模块..." "safe_rm '$AUTOGLM_DIR'"; then
+        sed -i '/alias ai=/d' "$HOME/.bashrc"
+        ui_print success "AutoGLM 已卸载，ai 命令已移除。"
+        return 2
+    else
+        ui_print error "删除失败。"
+        ui_pause
+    fi
+}
+
 autoglm_menu() {
     while true; do
         ui_header "AutoGLM 智能体"
         local status="${RED}未安装${NC}"; if [ -d "$AUTOGLM_DIR" ] && [ -f "$VENV_DIR/bin/activate" ]; then status="${GREEN}已就绪${NC}"; fi
         echo -e "状态: $status"
         echo "----------------------------------------"
-        CHOICE=$(ui_menu "请选择操作" "🚀 启动智能体" "⬇️  安装/更新 核心代码" "📦 安装/更新 依赖" "⚙️  编辑配置文件" "🔙 返回上级")
+        CHOICE=$(ui_menu "请选择操作" \
+            "🚀 启动智能体" \
+            "⬇️  安装/更新 核心代码" \
+            "📦 安装/更新 依赖" \
+            "⚙️  编辑配置文件" \
+            "🗑️  卸载 AutoGLM 模块" \
+            "🔙 返回上级"
+        )
         case "$CHOICE" in
             *"启动"*) if [ -f "$LAUNCHER_SCRIPT" ]; then bash "$LAUNCHER_SCRIPT"; else ui_print error "请先安装！"; ui_pause; fi ;;
             *"核心代码"*) install_autoglm ;; 
             *"依赖"*) setup_autoglm_venv ;; 
             *"配置"*) configure_autoglm ;; 
+            *"卸载"*) uninstall_autoglm; [ $? -eq 2 ] && return ;;
             *"返回"*) return ;; 
         esac
     done

@@ -13,13 +13,34 @@ LEGACY_ADB_DIR="$TAVX_DIR/adb_tools"
 HEARTBEAT_PID="$TAVX_DIR/.audio_heartbeat.pid"
 SILENCE_FILE="$TAVX_DIR/config/silence.wav"
 
+revert_optimization_core() {
+    local PKG="com.termux"
+    adb shell device_config set_sync_disabled_for_tests none
+    adb shell device_config delete activity_manager max_phantom_processes
+    adb shell device_config delete activity_manager settings_enable_monitor_phantom_procs
+    adb shell dumpsys deviceidle whitelist -$PKG
+    adb shell cmd appops set $PKG RUN_IN_BACKGROUND default
+    adb shell cmd appops set $PKG RUN_ANY_IN_BACKGROUND default
+    adb shell cmd appops set $PKG WAKE_LOCK default
+    adb shell pm enable com.huawei.powergenie 2>/dev/null
+    adb shell pm enable com.huawei.android.hwaps 2>/dev/null
+    adb shell pm enable com.xiaomi.joyose 2>/dev/null
+    adb shell pm enable com.xiaomi.powerchecker 2>/dev/null
+    adb shell pm enable com.coloros.athena 2>/dev/null
+    adb shell pm enable com.vivo.pem 2>/dev/null
+    adb shell pm enable com.vivo.abe 2>/dev/null
+    
+    if command -v termux-wake-unlock &> /dev/null; then termux-wake-unlock; fi
+}
+export -f revert_optimization_core
+
 check_dependency() {
     if command -v adb &> /dev/null; then
         if adb --version &> /dev/null; then return 0; fi
         ui_print warn "ADB 架构错误，尝试自动修复..."
     fi
     ui_header "ADB 组件安装"
-    if [ -d "$LEGACY_ADB_DIR" ]; then rm -rf "$LEGACY_ADB_DIR"; sed -i '/adb_tools\/platform-tools/d' "$HOME/.bashrc"; fi
+    if [ -d "$LEGACY_ADB_DIR" ]; then safe_rm "$LEGACY_ADB_DIR"; sed -i '/adb_tools\/platform-tools/d' "$HOME/.bashrc"; fi
     
     ui_print info "正在安装 ADB 工具包..."
     if [ "$OS_TYPE" == "TERMUX" ]; then
@@ -210,8 +231,8 @@ apply_smart_keepalive() {
     local SELF_SOURCE="source \"${BASH_SOURCE[0]}\""
 
     CHOICE=$(ui_menu "请选择保活方案" \
-        "🛡️ 通用保活 (推荐/安全)" \
-        "🔥 激进保活 (激进/可撤销)" \
+        "🛡️ 通用保活 (推荐)" \
+        "🔥 激进保活" \
         "🔙 返回" 
     )
 
@@ -259,27 +280,72 @@ revert_all_changes() {
     
     if ! ui_confirm "确定要恢复出厂默认配置吗？"; then return; fi
     
-    ui_spinner "正在全量回滚..." "
-        adb shell device_config set_sync_disabled_for_tests none
-        adb shell device_config delete activity_manager max_phantom_processes
-        adb shell device_config delete activity_manager settings_enable_monitor_phantom_procs
-        adb shell dumpsys deviceidle whitelist -$PKG
-        adb shell cmd appops set $PKG RUN_IN_BACKGROUND default
-        adb shell cmd appops set $PKG RUN_ANY_IN_BACKGROUND default
-        adb shell cmd appops set $PKG WAKE_LOCK default
-        
-        adb shell pm enable com.huawei.powergenie 2>/dev/null
-        adb shell pm enable com.huawei.android.hwaps 2>/dev/null
-        adb shell pm enable com.xiaomi.joyose 2>/dev/null
-        adb shell pm enable com.xiaomi.powerchecker 2>/dev/null
-        adb shell pm enable com.coloros.athena 2>/dev/null
-        adb shell pm enable com.vivo.pem 2>/dev/null
-        adb shell pm enable com.vivo.abe 2>/dev/null
-        if command -v termux-wake-unlock &> /dev/null; then termux-wake-unlock; fi
-    "
+    ui_spinner "正在全量回滚..." "revert_optimization_core"
     
     ui_print success "已恢复默认设置！"
     ui_pause
+}
+
+uninstall_adb() {
+    ui_header "卸载 ADB 保活模块"
+    
+    if ! verify_kill_switch; then return; fi
+
+    if [ -f "$HEARTBEAT_PID" ] && kill -0 $(cat "$HEARTBEAT_PID") 2>/dev/null; then
+        ui_print info "正在停止后台音频心跳..."
+        stop_heartbeat
+    fi
+
+    echo ""
+    echo -e "${YELLOW}🔍 正在检查残留配置...${NC}"
+
+    echo -e "您之前可能应用了系统级保活策略 (禁用幽灵进程监测/电池优化)。"
+    if ui_confirm "是否将系统参数恢复为默认状态 (推荐)?"; then
+        ui_spinner "正在回滚系统设置..." "revert_optimization_core"
+        ui_print success "系统设置已恢复。"
+    else
+        ui_print info "保留系统优化设置。"
+    fi
+
+    if command -v mpv &> /dev/null; then
+        echo ""
+        echo -e "${YELLOW}检测到已安装 mpv 播放器。${NC}"
+        echo -e "如果是专为保活安装的，建议卸载。"
+        if ui_confirm "是否卸载 mpv ?"; then
+            if [ "$OS_TYPE" == "TERMUX" ]; then
+                ui_spinner "卸载 mpv..." "pkg uninstall mpv -y"
+            else
+                ui_spinner "卸载 mpv..." "$SUDO_CMD apt-get remove -y mpv"
+            fi
+            ui_print success "依赖已清理。"
+        fi
+    fi
+
+    echo ""
+    if [ -d "$LEGACY_ADB_DIR" ] || [ -f "$LOG_FILE" ]; then
+        ui_spinner "清理模块文件..." "
+            safe_rm '$LEGACY_ADB_DIR'
+            safe_rm '$LOG_FILE'
+            safe_rm '$HEARTBEAT_PID'
+            sed -i '/adb_tools\/platform-tools/d' '$HOME/.bashrc'
+        "
+        ui_print success "模块文件已清理。"
+    fi
+
+    if command -v adb &> /dev/null; then
+        echo ""
+        if ui_confirm "是否连同系统 ADB (android-tools) 一起卸载？"; then
+            if [ "$OS_TYPE" == "TERMUX" ]; then
+                pkg uninstall android-tools -y
+            else
+                $SUDO_CMD apt-get remove -y adb android-tools-adb
+            fi
+            ui_print success "ADB 已卸载。"
+        fi
+    fi
+
+    ui_print success "卸载完成。"
+    return 2 
 }
 
 adb_menu_loop() {
@@ -297,7 +363,7 @@ adb_menu_loop() {
         echo "----------------------------------------"
         
         if [ "$OS_TYPE" == "LINUX" ]; then
-             echo -e "${BLUE}ℹ️  Linux 模式: 此工具仅用于管理远程/USB连接的 Android 设备。${NC}"
+             echo -e "${BLUE}ℹ️  Linux 模式: 此工具仅用于管理远程/USB连接 of Android 设备。${NC}"
              echo "----------------------------------------"
         fi
 
@@ -308,6 +374,7 @@ adb_menu_loop() {
             "🎵 启动音频心跳" \
             "🔇 停止音频心跳" \
             "♻️  撤销所有优化" \
+            "🗑️  卸载 ADB 组件" \
             "🔙 返回上级"
         )
         
@@ -318,6 +385,7 @@ adb_menu_loop() {
             *"启动音频"*) start_heartbeat ;; 
             *"停止音频"*) stop_heartbeat ;; 
             *"撤销"*) revert_all_changes ;; 
+            *"卸载"*) uninstall_adb; [ $? -eq 2 ] && return ;;
             *"返回"*) return ;; 
         esac
     done

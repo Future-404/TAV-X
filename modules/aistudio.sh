@@ -27,7 +27,7 @@ check_st_installed() {
 enable_server_plugins_conf() {
     ui_print info "正在检查配置..."
     if config_set "enableServerPlugins" "true"; then
-        ui_print success "已开启服务端插件支持 (enableServerPlugins)"
+        ui_print success "已开启服务端插件支持"
     else
         ui_print warn "配置修改失败，请稍后手动检查 config.yaml"
     fi
@@ -36,11 +36,8 @@ enable_server_plugins_conf() {
 install_aistudio() {
     check_st_installed || { ui_pause; return; }
     ui_header "部署 AIStudioBuildProxy"
-
     enable_server_plugins_conf
-
     prepare_network_strategy "$REPO_URL"
-
     ui_print info "正在处理服务端组件..."
     safe_rm "$PATH_SERVER"
     local CMD_SERVER="source \"$TAVX_DIR/core/utils.sh\"; git_clone_smart '-b $SERVER_BRANCH' '$REPO_URL' '$PATH_SERVER'"
@@ -83,38 +80,32 @@ install_aistudio() {
 }
 
 uninstall_aistudio() {
-    ui_header "卸载 AIStudioBuildProxy"
+    ui_header "卸载 AIStudio 插件"
     
     if [ ! -d "$PATH_SERVER" ] && [ ! -d "$PATH_CLIENT" ]; then
-        ui_print warn "未检测到已安装的组件。"
+        ui_print warn "未检测到 AIStudio 插件。"
         ui_pause; return
     fi
-
-    if ! ui_confirm "确定要删除此插件吗？"; then return; fi
-
+    
+    if ! verify_kill_switch; then return; fi
+    
     ui_spinner "正在清理文件..." "
-        rm -rf '$PATH_SERVER'
-        rm -rf '$PATH_CLIENT'
+        source \"$TAVX_DIR/core/utils.sh\"
+        safe_rm '$PATH_SERVER'
+        safe_rm '$PATH_CLIENT'
     "
     ui_print success "已卸载。重启酒馆后生效。"
-    ui_pause
+    return 2
 }
 
 check_status() {
-    local s_ver="未安装"
-    local c_ver="未安装"
+    local s_status="${RED}未安装${NC}"
+    local c_status="${RED}未安装${NC}"
     
-    if [ -d "$PATH_SERVER" ]; then s_ver="${GREEN}已安装${NC}"; fi
-    if [ -d "$PATH_CLIENT" ]; then c_ver="${GREEN}已安装${NC}"; fi
+    if [ -d "$PATH_SERVER" ]; then s_status="${GREEN}已安装${NC}"; fi
+    if [ -d "$PATH_CLIENT" ]; then c_status="${GREEN}已安装${NC}"; fi
     
-    local port_stat="${RED}未运行${NC}"
-    if timeout 0.1 bash -c "</dev/tcp/127.0.0.1/8889" 2>/dev/null; then
-        port_stat="${GREEN}运行中 (Port 8889)${NC}"
-    fi
-
-    echo -e "服务端状态: $s_ver"
-    echo -e "客户端状态: $c_ver"
-    echo -e "运行状态:   $port_stat"
+    echo -e "服务端: $s_status | 客户端: $c_status"
     echo "----------------------------------------"
 }
 
@@ -124,14 +115,14 @@ aistudio_menu() {
         check_status
 
         CHOICE=$(ui_menu "请选择操作" \
-            "📥 安装/更新插件 (推荐)" \
+            "📥 安装/更新插件" \
             "🗑️  卸载插件" \
             "🔙 返回上级"
         )
 
         case "$CHOICE" in
             *"安装"*) install_aistudio ;;
-            *"卸载"*) uninstall_aistudio ;;
+            *"卸载"*) uninstall_aistudio; [ $? -eq 2 ] && return ;;
             *"返回"*) return ;;
         esac
     done

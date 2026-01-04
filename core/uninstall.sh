@@ -4,168 +4,13 @@ source "$TAVX_DIR/core/env.sh"
 source "$TAVX_DIR/core/ui.sh"
 source "$TAVX_DIR/core/utils.sh"
 
-verify_kill_switch() {
-    local TARGET_PHRASE="我已知此操作风险并且已做好备份"
-    
-    ui_header "⚠️ 高危操作安全确认"
-    echo -e "${RED}警告：此操作不可逆！数据将永久丢失！${NC}"
-    echo -e "为了确认是您本人操作，请准确输入以下文字："
-    echo ""
-    if [ "$HAS_GUM" = true ]; then
-        gum style --border double --border-foreground 196 --padding "0 1" --foreground 220 "$TARGET_PHRASE"
-    else
-        echo ">>> $TARGET_PHRASE"
-    fi
-    echo ""
-    
-    local input=$(ui_input "在此输入确认语" "" "false")
-    
-    if [ "$input" == "$TARGET_PHRASE" ]; then
-        return 0
-    else
-        ui_print error "验证失败！文字不匹配，操作已取消。"
-        ui_pause
-        return 1
-    fi
-}
-
 uninstall_st() {
     if ! verify_kill_switch; then return; fi
     
-    if ui_spinner "正在删除酒馆数据..." "source \"$TAVX_DIR/core/utils.sh\"; safe_rm '$INSTALL_DIR'"; then
+    if ui_spinner "正在删除酒馆数据..." "safe_rm '$INSTALL_DIR'"; then
         ui_print success "SillyTavern 已卸载。"
     else
         ui_print error "删除失败，请检查权限。"
-    fi
-    ui_pause
-}
-
-uninstall_clewd() {
-    local CLEWD_DIR="$TAVX_DIR/clewdr"
-    if ! verify_kill_switch; then return; fi
-    
-    kill_process_safe "$CLEWD_PID_FILE" "clewd"
-    
-    if ui_spinner "正在清除 ClewdR..." "source \"$TAVX_DIR/core/utils.sh\"; safe_rm '$CLEWD_DIR'"; then
-        ui_print success "ClewdR 模块已卸载。"
-    else
-        ui_print error "删除失败。"
-    fi
-    ui_pause
-}
-
-uninstall_gemini() {
-    local GEMINI_DIR="$TAVX_DIR/gemini_proxy"
-    ui_header "卸载 Gemini 代理"
-    
-    if [ ! -d "$GEMINI_DIR" ]; then
-        ui_print warn "未检测到 Gemini 模块。"
-        ui_pause; return
-    fi
-
-    if ! verify_kill_switch; then return; fi
-    
-    kill_process_safe "$GEMINI_PID_FILE" "run.py"
-    
-    if ui_spinner "正在清除 Gemini 模块..." "source \"$TAVX_DIR/core/utils.sh\"; safe_rm '$GEMINI_DIR'"; then
-        ui_print success "Gemini 代理及凭据已卸载。"
-    else
-        ui_print error "删除失败。"
-    fi
-    ui_pause
-}
-
-uninstall_autoglm() {
-    local AUTOGLM_DIR="$TAVX_DIR/autoglm"
-    ui_header "卸载 AutoGLM 智能体"
-    
-    if [ ! -d "$AUTOGLM_DIR" ]; then
-        ui_print warn "未检测到 AutoGLM 模块。"
-        ui_pause; return
-    fi
-
-    if ! verify_kill_switch; then return; fi
-    
-    if ui_spinner "正在清除 AutoGLM 模块..." "source \"$TAVX_DIR/core/utils.sh\"; safe_rm '$AUTOGLM_DIR'"; then
-        sed -i '/alias ai=/d' "$HOME/.bashrc"
-        ui_print success "AutoGLM 已卸载，ai 命令已移除。"
-    else
-        ui_print error "删除失败。"
-    fi
-    ui_pause
-}
-
-uninstall_adb() {
-    local ADB_DIR="$TAVX_DIR/adb_tools"
-    ui_header "卸载 ADB 组件"
-    
-    if [ ! -d "$ADB_DIR" ] && ! command -v adb &> /dev/null; then
-        ui_print warn "未检测到 ADB 组件。"
-        ui_pause; return
-    fi
-
-    echo -e "此操作将清理 TAV-X 管理的 ADB 文件及配置。"
-    if ! ui_confirm "确认继续吗？"; then return; fi
-
-    if [ -d "$ADB_DIR" ]; then
-        ui_spinner "正在删除本地文件..." "source \"$TAVX_DIR/core/utils.sh\"; safe_rm '$ADB_DIR'"
-        sed -i '/adb_tools\/platform-tools/d' "$HOME/.bashrc"
-        ui_print success "本地组件及环境变量已清理。"
-    fi
-
-    if command -v adb &> /dev/null; then
-        echo ""
-        echo -e "${YELLOW}检测到系统已安装 android-tools (pkg)。${NC}"
-        if ui_confirm "是否连同Google  ADB 一起卸载？"; then
-            if ui_spinner "卸载系统包..." "pkg uninstall android-tools -y"; then
-                ui_print success "Google ADB 已卸载。"
-            else
-                ui_print error "卸载失败。"
-            fi
-        else
-            ui_print info "已保留系统 ADB。"
-        fi
-    fi
-    
-    ui_pause
-}
-
-uninstall_aistudio() {
-    ui_header "卸载 AIStudio 插件"
-    local PATH_SERVER="$INSTALL_DIR/plugins/AIStudioBuildProxy"
-    local PATH_CLIENT="$INSTALL_DIR/public/scripts/extensions/third-party/AIStudioBuildProxy"
-    
-    if [ ! -d "$PATH_SERVER" ] && [ ! -d "$PATH_CLIENT" ]; then
-        ui_print warn "未检测到 AIStudio 插件。"
-        ui_pause; return
-    fi
-    
-    if ! verify_kill_switch; then return; fi
-    
-    ui_spinner "正在清理文件..." "
-        source \"$TAVX_DIR/core/utils.sh\"
-        safe_rm '$PATH_SERVER'
-        safe_rm '$PATH_CLIENT'
-    "
-    ui_print success "已卸载。重启酒馆后生效。"
-    ui_pause
-}
-
-uninstall_deps() {
-    ui_header "卸载环境依赖"
-    echo -e "${RED}警告：这将卸载 Node.js, Cloudflared 等组件。${NC}"
-    echo -e "如果您的 Termux 中有其他软件依赖它们，可能会导致崩溃。"
-    echo ""
-    
-    if ! verify_kill_switch; then return; fi
-    
-    local PKGS="nodejs nodejs-lts cloudflared git android-tools"
-    
-    if ui_spinner "正在卸载系统包..." "pkg uninstall $PKGS -y"; then
-        ui_print success "依赖环境已清理。"
-        echo "提示: Gum (UI组件) 被保留以维持脚本运行。"
-    else
-        ui_print error "卸载过程出现错误。"
     fi
     ui_pause
 }
@@ -217,24 +62,12 @@ uninstall_menu() {
         
         CHOICE=$(ui_menu "请选择操作" \
             "🗑️ 卸载 SillyTavern" \
-            "🦀 卸载 ClewdR 模块" \
-            "♊ 卸载 Gemini 模块" \
-            "🤖 卸载 AutoGLM 智能体" \
-            "🏗️ 卸载 AIStudio 插件" \
-            "📟 卸载 ADB 组件" \
-            "📦 卸载环境依赖" \
             "💥 一键彻底毁灭(全清)" \
-            "🔙 返回上级"
+            "🔙 返回上级" \
         )
         
         case "$CHOICE" in
             *"SillyTavern"*) uninstall_st ;;
-            *"ClewdR"*) uninstall_clewd ;;
-            *"Gemini"*) uninstall_gemini ;;
-            *"AutoGLM"*) uninstall_autoglm ;;
-            *"AIStudio"*) uninstall_aistudio ;;
-            *"ADB"*) uninstall_adb ;;
-            *"环境依赖"*) uninstall_deps ;;
             *"彻底毁灭"*) full_wipe ;;
             *"返回"*) return ;;
         esac
