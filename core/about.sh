@@ -6,11 +6,12 @@ GROUP_QQ="616353694"
 CONTACT_EMAIL="future_404@outlook.com"
 PROJECT_URL="https://github.com/Future-404/TAV-X"
 SLOGAN="别让虚拟的温柔，偷走了你在现实里本该拥有的温暖。"
-UPDATE_SUMMARY="v2.6.5 核心修复与优化：
-  1. [重构] ClewdR/Mihomo 启动逻辑，解决 Syntax Error 导致的秒退问题
-  2. [修复] AIStudio 插件安装脚本缺失函数及流程错误
-  3. [修复] Mihomo 配置文件格式兼容性 (Header 解析错误)
-  4. [优化] 全局日志系统增强，支持全量调试信息记录 (set -x)"
+UPDATE_SUMMARY="v2.7.0 架构标准化与模块扩展：
+  1. [规范] 全模块 UI 统一化，采用 ui_status_card 标准化状态展示
+  2. [规范] 核心路径标准化，PID 统一至 run/，Logs 统一至 logs/
+  3. [重构] 主菜单仪表盘，支持全动态模块自动扫描与运行状态识别
+  4. [新增] 模块：gcli2api (GeminiCLI 转 API 服务集成)
+  5. [优化] 系统清理逻辑适配新路径，更彻底的文件粉碎机制"
 
 show_about_page() {
     ui_header "帮助与支持"

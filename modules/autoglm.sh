@@ -299,16 +299,35 @@ uninstall_autoglm() {
 autoglm_menu() {
     while true; do
         ui_header "AutoGLM 智能体"
-        local status="${RED}未安装${NC}"; if [ -d "$AUTOGLM_DIR" ] && [ -f "$VENV_DIR/bin/activate" ]; then status="${GREEN}已就绪${NC}"; fi
-        echo -e "状态: $status"
-        echo "----------------------------------------"
+        
+        local state_type="stopped"
+        local status_text="未就绪"
+        local info_list=()
+        
+        local core_ok=false
+        local env_ok=false
+        
+        if [ -d "$AUTOGLM_DIR" ]; then core_ok=true; info_list+=( "核心代码: 已安装" ); else info_list+=( "核心代码: 未安装" ); fi
+        if [ -f "$VENV_DIR/bin/activate" ]; then env_ok=true; info_list+=( "环境依赖: 已配置" ); else info_list+=( "环境依赖: 未配置" ); fi
+        
+        if $core_ok && $env_ok; then
+            state_type="success"
+            status_text="已就绪"
+            info_list+=( "快捷指令: 输入 'ai' 启动" )
+        elif $core_ok || $env_ok; then
+            state_type="warn"
+            status_text="部分安装"
+        fi
+        
+        ui_status_card "$state_type" "$status_text" "${info_list[@]}"
+
         CHOICE=$(ui_menu "请选择操作" \
             "🚀 启动智能体" \
             "⬇️  安装/更新 核心代码" \
             "📦 安装/更新 依赖" \
             "⚙️  编辑配置文件" \
             "🗑️  卸载 AutoGLM 模块" \
-            "🔙 返回上级"
+            "🔙 返回上级" \
         )
         case "$CHOICE" in
             *"启动"*) if [ -f "$LAUNCHER_SCRIPT" ]; then bash "$LAUNCHER_SCRIPT"; else ui_print error "请先安装！"; ui_pause; fi ;;

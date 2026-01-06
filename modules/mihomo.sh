@@ -15,13 +15,14 @@ CONFIG_FILE="$MIHOMO_DIR/config.yaml"
 PROVIDER_DIR="$MIHOMO_DIR/proxy_providers"
 UI_DIR="$MIHOMO_DIR/ui"
 LOG_FILE="$MIHOMO_DIR/mihomo.log"
-PID_FILE="$MIHOMO_DIR/mihomo.pid"
+PID_FILE="$TAVX_DIR/run/mihomo.pid"
 ENV_FILE="$TAVX_DIR/config/mihomo.conf"
+SECRET_FILE="$TAVX_DIR/config/mihomo_secret.conf"
 MIHOMO_VER="v1.19.18"
-UI_VER="gh-pages"
 
 generate_config() {
     local sub_url="$1"
+    local secret="${2:-}"
     mkdir -p "$PROVIDER_DIR"
     cat > "$CONFIG_FILE" <<EOF
 port: 17890
@@ -32,7 +33,7 @@ log-level: info
 ipv6: true
 external-controller: 0.0.0.0:19090
 external-ui: ui
-secret: ""
+secret: "$secret"
 
 proxy-providers:
   UserProvider:
@@ -153,10 +154,37 @@ update_subscription() {
     
     echo "$sub_url" > "$ENV_FILE"
     ui_print info "正在应用新配置..."
-    generate_config "$sub_url"
+    local secret=""
+    [ -f "$SECRET_FILE" ] && secret=$(cat "$SECRET_FILE")
+    generate_config "$sub_url" "$secret"
     safe_rm "$PROVIDER_DIR/subscription.yaml"
     ui_print success "配置已更新！核心将在启动时自动拉取节点。"
     ui_pause
+}
+
+configure_secret() {
+    ui_header "设置面板密钥 (Secret)"
+    local current_secret=""
+    [ -f "$SECRET_FILE" ] && current_secret=$(cat "$SECRET_FILE")
+    
+    echo -e "当前状态: $([ -n "$current_secret" ] && echo -e "${GREEN}已设置${NC}" || echo -e "${YELLOW}未设置 (公开)${NC}")"
+    echo -e "提示: 设置密钥后，登录 Web 面板需输入此密钥。"
+    echo ""
+    
+    local sub=$(ui_menu "选择操作" "✏️  修改/设置密钥" "🗑️  清除密钥 (公开访问)" "🔙 返回")
+    case "$sub" in
+        *"修改"*)
+            local inp=$(ui_input "输入新密钥" "$current_secret" "false")
+            if [ -n "$inp" ]; then
+                echo "$inp" > "$SECRET_FILE"
+                ui_print success "密钥已保存！"
+            fi
+            ;;
+        *"清除"*)
+            rm -f "$SECRET_FILE"
+            ui_print success "密钥已清除。"
+            ;;
+    esac
 }
 
 start_mihomo() {
@@ -167,7 +195,9 @@ start_mihomo() {
         if [ ! -f "$ENV_FILE" ]; then return; fi
     fi
     local url=$(cat "$ENV_FILE")
-    generate_config "$url"
+    local secret=""
+    [ -f "$SECRET_FILE" ] && secret=$(cat "$SECRET_FILE")
+    generate_config "$url" "$secret"
     
     if check_process_smart "$PID_FILE" "mihomo"; then
         ui_print info "服务已经在运行中。"
@@ -256,19 +286,28 @@ mihomo_menu() {
 
     while true; do
         ui_header "Mihomo 代理核心 ($MIHOMO_VER)"
-        local status="${RED}● 已停止${NC}"
-        if check_process_smart "$PID_FILE" "mihomo"; then status="${GREEN}● 运行中${NC}"; fi
         
-        echo -e "状态: $status"
-        echo -e "WebUI: ${CYAN}http://127.0.0.1:19090/ui${NC}"
-        echo -e "HTTP : ${YELLOW}127.0.0.1:17890${NC}"
-        echo -e "SOCKS: ${YELLOW}127.0.0.1:17891${NC}"
-        echo "----------------------------------------"
+        local state_type="stopped"
+        local status_text="已停止"
+        local info_list=()
+        
+        if check_process_smart "$PID_FILE" "mihomo"; then 
+            state_type="running"
+            status_text="运行中"
+            info_list+=( "WebUI: http://127.0.0.1:19090/ui" )
+            info_list+=( "HTTP : 127.0.0.1:17890" )
+            info_list+=( "SOCKS: 127.0.0.1:17891" )
+        else
+            info_list+=( "提示 : 请先启动服务" )
+        fi
+        
+        ui_status_card "$state_type" "$status_text" "${info_list[@]}"
         
         CHOICE=$(ui_menu "请选择操作" \
             "🚀 启动/重启服务" \
             "🛑 停止服务" \
             "✏️  设置订阅链接" \
+            "🔑 设置面板密钥" \
             "📊 打开 WebUI 面板" \
             "📜 查看运行日志" \
             "🗑️  卸载此模块" \
@@ -278,7 +317,8 @@ mihomo_menu() {
         case "$CHOICE" in
             *"启动"*) start_mihomo ;;
             *"停止"*) stop_mihomo ;;
-            *"设置"*) update_subscription ;;
+            *"设置订阅"*) update_subscription ;;
+            *"设置面板密钥"*) configure_secret ;;
             *"WebUI"*) open_browser "http://127.0.0.1:19090/ui"; ui_pause ;;
             *"日志"*) safe_log_monitor "$LOG_FILE" ;;
             *"卸载"*) uninstall_mihomo; [ $? -eq 2 ] && return ;;

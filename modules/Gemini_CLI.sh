@@ -15,8 +15,11 @@ VENV_PIP="$VENV_DIR/bin/pip"
 REPO_URL="gzzhongqi/geminicli2api"
 CREDS_FILE="$GEMINI_DIR/oauth_creds.json"
 ENV_FILE="$GEMINI_DIR/.env"
-LOG_FILE="$GEMINI_DIR/service.log"
-TUNNEL_LOG="$GEMINI_DIR/tunnel.log"
+LOG_FILE="$TAVX_DIR/logs/gemini_service.log"
+TUNNEL_LOG="$TAVX_DIR/logs/gemini_tunnel.log"
+
+# 确保日志目录
+mkdir -p "$TAVX_DIR/logs"
 
 get_proxy_address() {
     get_active_proxy
@@ -487,16 +490,34 @@ uninstall_gemini() {
 gemini_menu() {
     while true; do
         ui_header "Gemini 3.0 智能代理"
-        local s="${RED}● 已停止${NC}"
+        
+        local state_type="stopped"
+        local status_text="已停止"
+        local info_list=()
+        
         if check_process_smart "$GEMINI_PID_FILE" "python.*run.py"; then
-            s="${GREEN}● 运行中${NC}"
+            state_type="running"
+            status_text="运行中"
+            # 端口信息
+            local port=$(grep "^PORT=" "$ENV_FILE" 2>/dev/null | cut -d= -f2)
+            info_list+=( "本地端口: ${port:-8888}" )
         fi
         
-        local cf="${RED}关${NC}"; pgrep -f "cloudflared" >/dev/null && cf="${GREEN}开${NC}"
-        local a="${YELLOW}未认证${NC}"; [ -f "$CREDS_FILE" ] && a="${GREEN}已认证${NC}"
+        # 隧道状态
+        if pgrep -f "cloudflared" >/dev/null; then
+             info_list+=( "远程穿透: 开启" )
+        else
+             info_list+=( "远程穿透: 关闭" )
+        fi
         
-        echo -e "状态: $s | 隧道: $cf | 授权: $a"
-        echo "----------------------------------------"
+        # 授权状态
+        if [ -f "$CREDS_FILE" ]; then
+             info_list+=( "Google授权: 已认证" )
+        else
+             info_list+=( "Google授权: 未认证" )
+        fi
+        
+        ui_status_card "$state_type" "$status_text" "${info_list[@]}"
 
         CHOICE=$(ui_menu "请选择操作" \
             "🚀 启动/重启服务" \

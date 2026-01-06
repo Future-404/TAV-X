@@ -36,10 +36,13 @@ export TAVX_TRACKED_LOGS=(
     "$TAVX_DIR/.temp_link"
     "$INSTALL_DIR/server.log"
     "$INSTALL_DIR/cf_tunnel.log"
-    "$TAVX_DIR/clewdr/clewdr.log"
-    "$TAVX_DIR/gemini_proxy/service.log"
-    "$TAVX_DIR/gemini_proxy/tunnel.log"
-    "$TAVX_DIR/adb_log.txt"
+    "$TAVX_DIR/logs/clewd.log"
+    "$TAVX_DIR/logs/gemini_service.log"
+    "$TAVX_DIR/logs/gemini_tunnel.log"
+    "$TAVX_DIR/logs/adb_manager.log"
+    "$TAVX_DIR/logs/cf_manager.log",
+    "$TAVX_DIR/logs/gcli2api.log",
+    "$TAVX_DIR/logs/mihomo.log",
     "$TAVX_DIR/autoglm_install.log"
     "$TMP_DIR/tavx_git_error.log"
     "$TMP_DIR/tavx_curl_error.log"
@@ -58,13 +61,13 @@ if [ ! -f "$TAVX_LOG_FILE" ]; then
 fi
 echo "--- Session Started: $(date '+%Y-%m-%d %H:%M:%S') ---" >> "$TAVX_LOG_FILE"
 export NETWORK_CONFIG="$CONFIG_DIR/network.conf"
-export ST_PID_FILE="$TAVX_DIR/.st.pid"
-export CF_PID_FILE="$TAVX_DIR/.cf.pid"
-export CLEWD_PID_FILE="$TAVX_DIR/.clewd.pid"
-export GEMINI_PID_FILE="$TAVX_DIR/.gemini.pid"
-export AUDIO_PID_FILE="$TAVX_DIR/.audio_heartbeat.pid"
+export ST_PID_FILE="$TAVX_DIR/run/st.pid"
+export CF_PID_FILE="$TAVX_DIR/run/cf_manager.pid"
+export CLEWD_PID_FILE="$TAVX_DIR/run/clewd.pid"
+export GEMINI_PID_FILE="$TAVX_DIR/run/gemini.pid"
+export AUDIO_PID_FILE="$TAVX_DIR/run/audio_heartbeat.pid"
 
-export CURRENT_VERSION="v2.6.5"
+export CURRENT_VERSION="v2.7.0"
 export RED='\033[0;31m'
 export GREEN='\033[0;32m'
 export YELLOW='\033[1;33m'

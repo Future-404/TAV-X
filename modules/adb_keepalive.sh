@@ -8,10 +8,14 @@ source "$TAVX_DIR/core/ui.sh"
 source "$TAVX_DIR/core/utils.sh"
 
 PKG="com.termux"
-LOG_FILE="$TAVX_DIR/adb_log.txt"
+LOG_FILE="$TAVX_DIR/logs/adb_manager.log"
 LEGACY_ADB_DIR="$TAVX_DIR/adb_tools"
-HEARTBEAT_PID="$TAVX_DIR/.audio_heartbeat.pid"
+HEARTBEAT_PID="$TAVX_DIR/run/audio_heartbeat.pid"
 SILENCE_FILE="$TAVX_DIR/config/silence.wav"
+
+# 确保目录存在
+mkdir -p "$TAVX_DIR/logs"
+mkdir -p "$TAVX_DIR/run"
 
 revert_optimization_core() {
     local PKG="com.termux"
@@ -353,14 +357,37 @@ adb_menu_loop() {
     while true; do
         ui_header "ADB 智能保活"
         
-        local s_adb="${RED}● 未连接${NC}"; check_adb_status && s_adb="${GREEN}● 已连接${NC}"
-        local s_audio="${RED}● 关闭${NC}"
-        if [ -f "$HEARTBEAT_PID" ] && kill -0 $(cat "$HEARTBEAT_PID") 2>/dev/null; then 
-            s_audio="${GREEN}● 运行中${NC}"
+        local state_type="stopped"
+        local status_text="未连接"
+        local info_list=()
+        
+        # 1. 检测 ADB 状态
+        local adb_ok=false
+        if check_adb_status; then
+            adb_ok=true
+            status_text="已连接"
+            # 获取连接设备数
+            local dev_count=$(adb devices | grep "device$" | wc -l)
+            info_list+=( "连接设备: $dev_count 台" )
         fi
         
-        echo -e "ADB状态: $s_adb | 音频心跳: $s_audio"
-        echo "----------------------------------------"
+        # 2. 检测音频心跳
+        local audio_ok=false
+        if [ -f "$HEARTBEAT_PID" ] && kill -0 $(cat "$HEARTBEAT_PID") 2>/dev/null; then 
+            audio_ok=true
+            info_list+=( "音频心跳: 运行中 (PID: $(cat "$HEARTBEAT_PID"))" )
+        else
+            info_list+=( "音频心跳: 已关闭" )
+        fi
+        
+        # 综合状态判定
+        if $adb_ok; then
+            if $audio_ok; then state_type="running"; status_text="全功能运行"; else state_type="working"; fi
+        elif $audio_ok; then
+            state_type="warn"; status_text="仅音频运行"
+        fi
+        
+        ui_status_card "$state_type" "$status_text" "${info_list[@]}"
         
         if [ "$OS_TYPE" == "LINUX" ]; then
              echo -e "${BLUE}ℹ️  Linux 模式: 此工具仅用于管理远程/USB连接 of Android 设备。${NC}"

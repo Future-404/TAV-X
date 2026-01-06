@@ -606,7 +606,6 @@ kill_process_safe() {
     fi
 }
 
-# === [新增] 安全验证函数 (从 uninstall.sh 迁移) ===
 verify_kill_switch() {
     local TARGET_PHRASE="我已知此操作风险并且已做好备份"
     

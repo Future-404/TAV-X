@@ -98,21 +98,29 @@ uninstall_aistudio() {
     return 2
 }
 
-check_status() {
-    local s_status="${RED}未安装${NC}"
-    local c_status="${RED}未安装${NC}"
-    
-    if [ -d "$PATH_SERVER" ]; then s_status="${GREEN}已安装${NC}"; fi
-    if [ -d "$PATH_CLIENT" ]; then c_status="${GREEN}已安装${NC}"; fi
-    
-    echo -e "服务端: $s_status | 客户端: $c_status"
-    echo "----------------------------------------"
-}
-
 aistudio_menu() {
     while true; do
         ui_header "AIStudio 代理服务"
-        check_status
+        
+        local state_type="stopped"
+        local status_text="未安装"
+        local info_list=()
+        
+        local s_ok=false
+        local c_ok=false
+        
+        if [ -d "$PATH_SERVER" ]; then s_ok=true; info_list+=( "服务端: 已安装" ); else info_list+=( "服务端: 未安装" ); fi
+        if [ -d "$PATH_CLIENT" ]; then c_ok=true; info_list+=( "客户端: 已安装" ); else info_list+=( "客户端: 未安装" ); fi
+        
+        if $s_ok && $c_ok; then
+            state_type="success"
+            status_text="已安装"
+        elif $s_ok || $c_ok; then
+            state_type="warn"
+            status_text="部分安装"
+        fi
+        
+        ui_status_card "$state_type" "$status_text" "${info_list[@]}"
 
         CHOICE=$(ui_menu "请选择操作" \
             "📥 安装/更新插件" \

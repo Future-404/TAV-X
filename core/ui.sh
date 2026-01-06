@@ -52,9 +52,9 @@ ui_header() {
 }
 
 ui_dashboard() {
-    local st=$1; local cf=$2; local adb=$3
-    local net_dl="$4"; local net_api="$5"
-    local clewd="${6:-0}"; local gemini="${7:-0}"; local audio="${8:-0}"
+    local st=$1; local adb=$2
+    local net_dl="$3"; local net_api="$4"
+    local modules_line="$5"
 
     if [ "$HAS_GUM" = true ]; then
         make_dynamic_badge() {
@@ -65,15 +65,20 @@ ui_dashboard() {
         }
 
         local spacer="      "
-
         local active_items=()
         
-        [ "$st" == "1" ]     && active_items+=("$(make_dynamic_badge "酒馆" $st)")
-        [ "$cf" == "1" ]     && active_items+=("$(make_dynamic_badge "穿透" $cf)")
-        [ "$adb" == "1" ]    && active_items+=("$(make_dynamic_badge "ADB" $adb)")
-        [ "$audio" == "1" ]  && active_items+=("$(make_dynamic_badge "🎵保活" $audio)")
-        [ "$clewd" == "1" ]  && active_items+=("$(make_dynamic_badge "ClewdR" $clewd)")
-        [ "$gemini" == "1" ] && active_items+=("$(make_dynamic_badge "Gemini" $gemini)")
+        # 1. 核心服务状态
+        [ "$st" == "1" ]  && active_items+=("$(make_dynamic_badge "酒馆" $st)")
+        [ "$adb" == "1" ] && active_items+=("$(make_dynamic_badge "ADB" $adb)")
+        
+        # 2. 动态模块状态 (纯文本列表，遍历渲染)
+        if [ -n "$modules_line" ]; then
+             for mod in $modules_line; do
+                 # 过滤无效字符 (可选)
+                 [ -z "$mod" ] && continue
+                 active_items+=("$(make_dynamic_badge "$mod" "1")")
+             done
+        fi
 
         local line1=""
         if [ ${#active_items[@]} -eq 0 ]; then
@@ -91,7 +96,8 @@ ui_dashboard() {
 
         gum style --border normal --border-foreground $C_DIM --padding "0 1" --margin "0 0 1 0" --align center "$line1" "" "$line2"
     else
-        echo "运行中: ST[$st] CF[$cf] ADB[$adb] Audio[$audio] Clewd[$clewd] Gemini[$gemini]"
+        echo "核心: ST[$st] ADB[$adb]"
+        echo "模块: $modules_line"
         echo "下载: $net_dl"
         echo "API : $net_api"
         echo "----------------------------------------"
@@ -166,8 +172,6 @@ ui_spinner() {
         result=$?
     fi
     
-    # === [增强日志记录] ===
-    # 将临时日志的完整内容追加到主日志，确保不遗漏任何细节
     if [ -n "$TAVX_LOG_FILE" ] && [ -f "$tmp_log" ]; then
         echo "--- [Task Log Dump: $title] ---" >> "$TAVX_LOG_FILE"
         cat "$tmp_log" >> "$TAVX_LOG_FILE"
@@ -176,15 +180,78 @@ ui_spinner() {
     
     if [ $result -eq 0 ]; then
         write_log "TASK_END" "Success: $title"
-        # 成功后删除临时文件，因为内容已归档到主日志
         rm -f "$tmp_log"
         return 0
     else
         write_log "TASK_END" "FAILED (Code $result): $title"
-        # 失败时不在控制台重复打印 Last 20 lines，因为主日志里已经有了全量。
-        # 但为了终端用户体验，如果不是在排查模式，还是可以显示一点。
-        # 鉴于当前是排查阶段，我们让用户直接去看主日志。
         return 1
+    fi
+}
+
+ui_status_card() {
+    local type="$1"
+    local main_text="$2"
+    shift 2
+    local infos=("$@")
+
+    local color_code=""
+    local gum_color=""
+    local icon=""
+    
+    case "$type" in
+        running|success) 
+            color_code="$GREEN"
+            gum_color="$C_GREEN"
+            icon="●" 
+            ;;
+        stopped|error|failure) 
+            color_code="$RED"
+            gum_color="$C_RED"
+            icon="●" 
+            ;;
+        warn|working) 
+            color_code="$YELLOW"
+            gum_color="$C_YELLOW"
+            icon="●" 
+            ;;
+        *) 
+            color_code="$BLUE"
+            gum_color="$C_BLUE"
+            icon="●" 
+            ;;
+    esac
+
+    if [ "$HAS_GUM" = true ]; then
+        local content=""
+        content+=$(gum style --foreground "$gum_color" --bold "$icon $main_text")
+        content+=$'\n'
+        if [ ${#infos[@]} -gt 0 ]; then
+            content+=$'\n'
+            for line in "${infos[@]}"; do
+                if [[ "$line" == *": "* ]]; then
+                    local k="${line%%: *}"
+                    local v="${line#*: }"
+                    content+="$(gum style --foreground $C_PURPLE "$k"): $v"
+                else
+                    content+="$line"
+                fi
+                content+=$'\n'
+            done
+        fi
+        
+        gum style --border normal --border-foreground $C_DIM --padding "0 1" --margin "0 0 1 0" --align left "$content"
+    else
+        echo -e "状态: ${color_code}${icon} ${main_text}${NC}"
+        for line in "${infos[@]}"; do
+            if [[ "$line" == *": "* ]]; then
+                local k="${line%%: *}"
+                local v="${line#*: }"
+                echo -e "${CYAN}${k}${NC}: ${v}"
+            else
+                echo -e "$line"
+            fi
+        done
+        echo "----------------------------------------"
     fi
 }
 

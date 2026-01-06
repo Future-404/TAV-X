@@ -268,13 +268,47 @@ check_python_status() {
 python_mgr_menu() {
     while true; do
         ui_header "🐍 Python 环境管理器"
-        echo -e "统一管理 Python 运行时、编译工具链及包管理器。"
-        echo "----------------------------------------"
+        
+        local state_type="stopped"
+        local status_text="环境缺失"
+        local info_list=()
+        
+        if command -v python3 &>/dev/null; then
+            state_type="success"
+            status_text="环境正常"
+            local py_v=$(python3 --version | awk '{print $2}')
+            info_list+=( "Python : $py_v" )
+            
+            if command -v pip3 &>/dev/null; then
+                info_list+=( "Pip    : 已就绪" )
+            else
+                info_list+=( "Pip    : 未安装" )
+            fi
+            
+            if command -v uv &>/dev/null; then
+                local uv_v=$(uv --version | awk '{print $2}')
+                info_list+=( "UV     : $uv_v" )
+            else
+                info_list+=( "UV     : 未安装" )
+            fi
+        else
+            info_list+=( "提示: 请先安装系统 Python" )
+        fi
+        
+        if [ "$OS_TYPE" == "TERMUX" ]; then
+            if command -v rustc &>/dev/null; then
+                info_list+=( "Rust   : 已就绪" )
+            else
+                info_list+=( "Rust   : 未安装 (编译必需)" )
+            fi
+        fi
+        
+        ui_status_card "$state_type" "$status_text" "${info_list[@]}"
         
         CHOICE=$(ui_menu "请选择操作" \
             "🛠️ 安装/修复 系统 Python" \
             "⚡ 安装/更新 UV" \
-            "🔍 环境完整性诊断" \
+            "🔍 更多诊断信息" \
             "🔙 返回主菜单" \
         )
         

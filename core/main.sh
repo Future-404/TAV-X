@@ -30,11 +30,9 @@ stop_all_services_routine() {
     
     kill_process_safe "$ST_PID_FILE" "node.*server.js"
     kill_process_safe "$CF_PID_FILE" "cloudflared"
-    
     kill_process_safe "$CLEWD_PID_FILE" "clewd"
     kill_process_safe "$GEMINI_PID_FILE" "run.py"
-    
-    # 清理 Mihomo 进程
+    kill_process_safe "$TAVX_DIR/run/gcli2api.pid" "python.*web.py"
     kill_process_safe "$TAVX_DIR/mihomo/mihomo.pid" "mihomo"
     pkill -f "$TAVX_DIR/mihomo/mihomo"
     
@@ -105,17 +103,15 @@ load_advanced_tools_menu() {
 }
 
 while true; do
-    S_ST=0; S_CF=0; S_ADB=0; S_CLEWD=0; S_GEMINI=0; S_AUDIO=0
+    S_ST=0; S_ADB=0
 
     check_process_smart "$ST_PID_FILE" "node.*server.js" && S_ST=1
-    check_process_smart "$CF_PID_FILE" "cloudflared.*tunnel" && S_CF=1
-    check_process_smart "$CLEWD_PID_FILE" "clewdr|node.*clewd\.js" && S_CLEWD=1
-    check_process_smart "$GEMINI_PID_FILE" "python.*run.py" && S_GEMINI=1
-    check_process_smart "$AUDIO_PID_FILE" "mpv.*--no-terminal" && S_AUDIO=1
     
     if command -v adb &>/dev/null && adb devices 2>/dev/null | grep -q "device$"; then
         S_ADB=1
     fi
+
+    MODULES_LINE=$(get_modules_status_line)
 
     NET_DL="自动优选"
     if [ -f "$NETWORK_CONFIG" ]; then
@@ -136,7 +132,7 @@ while true; do
     fi
 
     ui_header ""
-    ui_dashboard "$S_ST" "$S_CF" "$S_ADB" "$NET_DL" "$NET_API" "$S_CLEWD" "$S_GEMINI" "$S_AUDIO"
+    ui_dashboard "$S_ST" "$S_ADB" "$NET_DL" "$NET_API" "$MODULES_LINE"
 
     OPT_UPD="🔄 安装与更新"
     [ -f "$TAVX_DIR/.update_available" ] && OPT_UPD="🔄 安装与更新 🔔"

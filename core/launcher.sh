@@ -209,22 +209,27 @@ start_menu() {
         
         local status_txt=""
         
+        local state_type="stopped"
+        local status_text="已停止"
+
         if check_process_smart "$CF_PID_FILE" "cloudflared.*tunnel"; then
             if grep -q "protocol=quic" "$CF_LOG" 2>/dev/null; then P="QUIC"; else P="HTTP2"; fi
-            status_txt="${GREEN}● 穿透运行中 ($P)${NC}"
+            state_type="running"
+            status_text="穿透运行中 ($P)"
         elif check_process_smart "$ST_PID_FILE" "node.*server.js"; then
-            status_txt="${GREEN}● 本地运行中${NC}"
-        else 
-            status_txt="${RED}● 已停止${NC}"
+            state_type="running"
+            status_text="本地运行中"
         fi
         
-        [ -n "$PROXY_URL" ] && status_txt="$status_txt ${CYAN}[代理活跃]${NC}"
-        local MEM_SHOW=""
-        if [ -n "$MEM_ARGS" ]; then MEM_SHOW=" | 🧠 $(echo $MEM_ARGS | cut -d'=' -f2)MB"; fi
+        local info_list=()
+        [ -n "$PROXY_URL" ] && info_list+=( "前置代理: 已启用" )
+        if [ -n "$MEM_ARGS" ]; then 
+            local mem_val=$(echo $MEM_ARGS | cut -d'=' -f2)
+            info_list+=( "内存限制: ${mem_val}MB" )
+        fi
 
-        ui_header "启动中心 (Port: $PORT$MEM_SHOW)"
-        echo -e "状态: $status_txt"
-        echo ""
+        ui_header "启动中心 (Port: $PORT)"
+        ui_status_card "$state_type" "$status_text" "${info_list[@]}"
 
         CHOICE=$(ui_menu "请选择操作" "🏠 启动本地模式" "🌍 启动远程穿透" "🔍 获取远程链接" "⚡ 一键应用推荐配置" "📜 监控运行日志" "🛑 停止所有服务" "🔙 返回主菜单")
 

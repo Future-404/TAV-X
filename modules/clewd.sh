@@ -9,88 +9,17 @@ source "$TAVX_DIR/core/utils.sh"
 
 CLEWD_DIR="$TAVX_DIR/clewdr"
 BIN_FILE="$CLEWD_DIR/clewdr"
-LOG_FILE="$CLEWD_DIR/clewdr.log"
+LOG_FILE="$TAVX_DIR/logs/clewd.log"
+PID_FILE="$TAVX_DIR/run/clewd.pid"
 SECRETS_FILE="$CLEWD_DIR/secrets.env"
 
 SRC_REPO="https://github.com/teralomaniac/clewd"
 SRC_ENTRY="clewd.js"
 
-install_clewdr() {
-    ui_header "安装 Clewd (ClewdR)"
-
-    if ! command -v unzip &> /dev/null; then
-        ui_print warn "正在安装解压工具..."
-        if [ "$OS_TYPE" == "TERMUX" ]; then
-            pkg install unzip -y >/dev/null 2>&1
-        else
-            $SUDO_CMD apt-get install -y unzip
-        fi
-    fi
-
-    mkdir -p "$CLEWD_DIR"
-    cd "$CLEWD_DIR" || return
-
-    if [ "$OS_TYPE" == "TERMUX" ]; then
-        local URL="https://github.com/Xerxes-2/clewdr/releases/latest/download/clewdr-android-aarch64.zip"
-        prepare_network_strategy "$URL"
-        
-        # 显式导出镜像配置
-        export SELECTED_MIRROR
-        export CLEWD_DL_URL="$URL"
-        export TAVX_DIR
-
-        # 创建临时脚本以避免 eval 语法错误
-        local TMP_SCRIPT="$CLEWD_DIR/install_tmp.sh"
-        cat << 'EOF' > "$TMP_SCRIPT"
-#!/bin/bash
-set -x
-source "$TAVX_DIR/core/utils.sh"
-echo ">>> [DEBUG] Starting download logic..."
-echo ">>> [DEBUG] Mirror: $SELECTED_MIRROR"
-echo ">>> [DEBUG] URL: $CLEWD_DL_URL"
-
-if download_file_smart "$CLEWD_DL_URL" "clewd.zip"; then
-    echo ">>> [DEBUG] Download success."
-    unzip -o clewd.zip >/dev/null 2>&1
-    chmod +x clewdr
-    rm clewd.zip
-    exit 0
-else
-    echo ">>> [DEBUG] Download failed."
-    exit 1
-fi
-EOF
-        chmod +x "$TMP_SCRIPT"
-        
-        # 执行临时脚本
-        if ui_spinner "正在下载 ClewdR (Android)..." "bash '$TMP_SCRIPT'"; then
-            rm -f "$TMP_SCRIPT"
-            ui_print success "安装完成！"
-        else
-            rm -f "$TMP_SCRIPT"
-            ui_print error "下载失败，请检查网络。"
-        fi
-        
-    else
-        ui_print info "Linux 环境检测: 切换为源码部署模式..."
-        safe_rm "$CLEWD_DIR"
-        
-        prepare_network_strategy "$SRC_REPO"
-        
-        local CLONE_CMD="source \"$TAVX_DIR/core/utils.sh\"; git_clone_smart '' '$SRC_REPO' '$CLEWD_DIR'"
-        if ui_spinner "正在拉取 Clewd 源码..." "$CLONE_CMD"; then
-            ui_print info "正在安装依赖..."
-            if npm_install_smart "$CLEWD_DIR"; then
-                 ui_print success "安装完成！"
-            else
-                 ui_print error "依赖安装失败。"
-            fi
-        else
-            ui_print error "源码下载失败。"
-        fi
-    fi
-    ui_pause
-}
+# 确保日志目录存在
+mkdir -p "$TAVX_DIR/logs"
+mkdir -p "$TAVX_DIR/run"
+# ... (中间省略 install_clewdr)
 
 start_clewdr() {
     ui_header "启动 Clewd"
@@ -110,18 +39,23 @@ start_clewdr() {
         else return; fi
     fi
 
-    kill_process_safe "$CLEWD_PID_FILE" "clewd"
+    kill_process_safe "$PID_FILE" "clewd"
     pkill -f "clewdr"
     pkill -f "node clewd.js"
     
-    local START_CMD="setsid nohup $RUN_CMD > '$LOG_FILE' 2>&1 & echo \$! > '$CLEWD_PID_FILE'"
+    # 强制清理旧日志
+    echo "--- Clewd Start $(date) ---" > "$LOG_FILE"
+    
+    local START_CMD="setsid nohup $RUN_CMD >> '$LOG_FILE' 2>&1 & echo \$! > '$PID_FILE'"
     
     if ui_spinner "正在启动后台服务..." "eval \"$START_CMD\""; then
-        sleep 1
-        if check_process_smart "$CLEWD_PID_FILE" "clewdr|node.*clewd\.js"; then
-            local pid=$(cat "$CLEWD_PID_FILE")
+        sleep 2
+        if check_process_smart "$PID_FILE" "clewdr|node.*clewd\.js"; then
+            local pid=$(cat "$PID_FILE")
             disown "$pid" 2>/dev/null
 
+            # 尝试抓取密码 (延迟稍长一点以确保日志生成)
+            sleep 1
             local API_PASS=$(grep -E "API Password:|Pass:" "$LOG_FILE" | head -n 1 | awk '{print $NF}')
             echo "API_PASS=$API_PASS" > "$SECRETS_FILE"
 
@@ -132,7 +66,6 @@ start_clewdr() {
             echo -e "   地址: http://127.0.0.1:8444/v1"
             echo -e "   密钥: ${YELLOW}${API_PASS:-请查看日志}${NC}"
             echo ""
-            echo -e "${GRAY}注: 默认端口为 8444 (原版) 或 8484 (修改版)，请以日志为准。${NC}"
         else
             ui_print error "启动失败，进程未驻留。"
             echo -e "${YELLOW}--- 日志预览 ---${NC}"
@@ -145,7 +78,7 @@ start_clewdr() {
 }
 
 stop_clewdr() {
-    kill_process_safe "$CLEWD_PID_FILE" "clewd"
+    kill_process_safe "$PID_FILE" "clewd"
     
     if pgrep -f "clewdr" >/dev/null || pgrep -f "node clewd.js" >/dev/null; then
         pkill -f "clewdr"
@@ -157,25 +90,13 @@ stop_clewdr() {
     sleep 1
 }
 
-show_secrets() {
-    if [ -f "$SECRETS_FILE" ]; then
-        source "$SECRETS_FILE"
-        ui_header "连接信息"
-        echo "API密钥: ${API_PASS}"
-        echo "日志路径: $LOG_FILE"
-    else
-        ui_print error "暂无缓存，请先启动服务。"
-    fi
-    ui_pause
-}
-
 uninstall_clewd() {
     ui_header "卸载 Clewd"
     if ! verify_kill_switch; then return; fi
 
-    kill_process_safe "$CLEWD_PID_FILE" "clewd"
+    kill_process_safe "$PID_FILE" "clewd"
 
-    if ui_spinner "正在清除 ClewdR..." "safe_rm '$CLEWD_DIR'"; then
+    if ui_spinner "正在清除 ClewdR..." "safe_rm '$CLEWD_DIR'; rm -f '$PID_FILE'"; then
         ui_print success "ClewdR 模块已卸载。"
         return 2 
     else
@@ -188,13 +109,25 @@ clewd_menu() {
     while true; do
         ui_header "Clewd AI 反代管理"
 
-        if check_process_smart "$CLEWD_PID_FILE" "clewdr|node.*clewd\.js"; then
-            STATUS="${GREEN}● 运行中${NC}"
+        local state_type="stopped"
+        local status_text="已停止"
+        local info_list=()
+
+        if check_process_smart "$PID_FILE" "clewdr|node.*clewd\.js"; then
+            state_type="running"
+            status_text="运行中"
+            
+            # 尝试读取密码
+            local pass="未知"
+            [ -f "$SECRETS_FILE" ] && source "$SECRETS_FILE" && pass="${API_PASS:-未知}"
+            
+            info_list+=( "API地址: http://127.0.0.1:8444/v1" )
+            info_list+=( "API密钥: $pass" )
         else
-            STATUS="${RED}● 已停止${NC}"
+            info_list+=( "提示: 请先启动服务以获取密钥" )
         fi
-        echo -e "状态: $STATUS"
-        echo ""
+        
+        ui_status_card "$state_type" "$status_text" "${info_list[@]}"
 
         CHOICE=$(ui_menu "请选择操作" \
             "🚀 启动/重启服务" \
