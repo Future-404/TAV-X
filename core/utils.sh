@@ -177,7 +177,7 @@ check_github_speed() {
     local TEST_URL="https://raw.githubusercontent.com/Future-404/TAV-X/main/core/env.sh"
     echo -e "${CYAN}正在测试 GitHub 直连速度 (阈值: 800KB/s)...${NC}"
     
-    local speed=$(curl -s -L -m 5 -w "% {speed_download}\n" -o /dev/null "$TEST_URL" 2>/dev/null)
+    local speed=$(curl -s -L -m 5 -w "%{speed_download}\n" -o /dev/null "$TEST_URL" 2>/dev/null)
     speed=${speed%.*}
     [ -z "$speed" ] && speed=0
     
