@@ -6,12 +6,12 @@ GROUP_QQ="616353694"
 CONTACT_EMAIL="future_404@outlook.com"
 PROJECT_URL="https://github.com/Future-404/TAV-X"
 SLOGAN="别让虚拟的温柔，偷走了你在现实里本该拥有的温暖。"
-UPDATE_SUMMARY="v2.7.0 架构标准化与模块扩展：
-  1. [规范] 全模块 UI 统一化，采用 ui_status_card 标准化状态展示
-  2. [规范] 核心路径标准化，PID 统一至 run/，Logs 统一至 logs/
-  3. [重构] 主菜单仪表盘，支持全动态模块自动扫描与运行状态识别
-  4. [新增] 模块：gcli2api (GeminiCLI 转 API 服务集成)
-  5. [优化] 系统清理逻辑适配新路径，更彻底的文件粉碎机制"
+UPDATE_SUMMARY="v2.7.1 累积修复：
+  1. [修复] 修正 GitHub 测速函数中的 curl 参数格式错误
+  2. [规范] 全模块 UI 统一化，采用 ui_status_card 标准化状态展示
+  3. [规范] 核心路径标准化，PID 统一至 run/，Logs 统一至 logs/
+  4. [重构] 主菜单仪表盘，支持全动态模块自动扫描与运行状态识别
+  5. [新增] 模块：gcli2api (GeminiCLI 转 API 服务集成)"
 
 show_about_page() {
     ui_header "帮助与支持"

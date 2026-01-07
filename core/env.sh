@@ -67,7 +67,7 @@ export CLEWD_PID_FILE="$TAVX_DIR/run/clewd.pid"
 export GEMINI_PID_FILE="$TAVX_DIR/run/gemini.pid"
 export AUDIO_PID_FILE="$TAVX_DIR/run/audio_heartbeat.pid"
 
-export CURRENT_VERSION="v2.7.0"
+export CURRENT_VERSION="v2.7.1"
 export RED='\033[0;31m'
 export GREEN='\033[0;32m'
 export YELLOW='\033[1;33m'
