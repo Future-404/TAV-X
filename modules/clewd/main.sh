@@ -1,0 +1,161 @@
+#!/bin/bash
+# [METADATA]
+# MODULE_ID: clewd
+# MODULE_NAME: ClewdR 管理
+# MODULE_ENTRY: clewd_menu
+# [END_METADATA]
+
+source "$TAVX_DIR/core/env.sh"
+source "$TAVX_DIR/core/ui.sh"
+source "$TAVX_DIR/core/utils.sh"
+
+_clewd_vars() {
+    CL_APP_ID="clewd"
+    CL_DIR=$(get_app_path "$CL_APP_ID")
+    CL_LOG="$LOGS_DIR/clewd.log"
+    CL_PID="$RUN_DIR/clewd.pid"
+    CL_CONF="$CL_DIR/config.js"
+    CL_SECRETS="$CONFIG_DIR/clewd_secrets.conf"
+    mkdir -p "$CL_DIR"
+}
+
+clewd_install() {
+    _clewd_vars
+    ui_header "安装 Clewd (Rust版)" 
+    
+    local arch=$(uname -m)
+    local asset_pattern="linux-x86_64"
+    [[ "$arch" == "aarch64" || "$arch" == "arm64" ]] && asset_pattern="android-aarch64"
+    
+    ui_print info "正在获取版本信息 ($asset_pattern)..."
+    auto_load_proxy_env
+    
+    local api_url="https://api.github.com/repos/Xerxes-2/clewdr/releases/latest"
+    local json=$(curl -s -m 10 "$api_url")
+    
+    if [ -z "$json" ] || [[ "$json" == *"rate limit"* ]]; then
+        ui_print error "GitHub API 请求失败 (可能触发频率限制)。"
+        ui_pause; return 1
+    fi
+
+    local download_url=$(echo "$json" | yq -p json '.assets[] | select(.name | contains("'"$asset_pattern"'")) | .browser_download_url' 2>/dev/null | head -n 1)
+    
+    if [[ -z "$download_url" || "$download_url" == "null" ]]; then
+        ui_print error "无法从 API 解析下载地址。架构: $asset_pattern"
+        ui_pause; return 1
+    fi
+    
+    local tmp_file="$TMP_DIR/clewdr_dist.zip"
+    local DL_CMD="source \"$TAVX_DIR/core/utils.sh\"; download_file_smart '$download_url' '$tmp_file' 'false'"
+    
+    if ui_stream_task "正在下载发行包..." "$DL_CMD"; then
+        ui_print info "正在解压..."
+        unzip -q -o "$tmp_file" -d "$CL_DIR"
+        chmod +x "$CL_DIR"/* 2>/dev/null
+        
+        if [ ! -f "$CL_DIR/clewdr" ]; then
+            local bin_path=$(find "$CL_DIR" -name "clewdr" -type f | head -n 1)
+            [ -n "$bin_path" ] && mv "$bin_path" "$CL_DIR/clewdr"
+        fi
+        
+        safe_rm "$tmp_file"
+        ui_print success "安装完成。"
+    else
+        ui_print error "安装失败。"
+        ui_pause; return 1
+    fi
+}
+
+clewd_start() {
+    _clewd_vars
+    if [ ! -f "$CL_DIR/clewdr" ] && [ ! -f "$CL_DIR/clewd.js" ]; then
+        if ui_confirm "未检测到程序，是否立即安装？"; then clewd_install || return 1; else return 1; fi
+    fi
+    
+    ui_header "启动 Clewd"
+    cd "$CL_DIR" || return 1
+    
+    local RUN_CMD=""
+    if [ -f "clewdr" ]; then RUN_CMD="./clewdr"
+    elif [ -f "clewd.js" ]; then RUN_CMD="node clewd.js"
+    fi
+
+    clewd_stop
+    echo "--- Clewd Start $(date) --- " > "$CL_LOG"
+    local START_CMD="setsid nohup $RUN_CMD >> '$CL_LOG' 2>&1 & echo \$! > '$CL_PID'"
+    
+    if ui_spinner "正在启动后台服务..." "eval \"$START_CMD\" "; then
+        sleep 2
+        if check_process_smart "$CL_PID" "clewdr|node.*clewd\.js"; then
+            local API_PASS=$(grep -iE "password:|Pass:" "$CL_LOG" | head -n 1 | awk -F': ' '{print $2}' | tr -d ' ')
+            [ -z "$API_PASS" ] && API_PASS=$(grep -E "API Password:|Pass:" "$CL_LOG" | head -n 1 | awk '{print $NF}')
+            if [ -n "$API_PASS" ]; then echo "API_PASS=$API_PASS" > "$CL_SECRETS"; fi
+            ui_print success "服务已启动！"
+        else
+            ui_print error "启动失败，进程未驻留。"
+            ui_pause; return 1
+        fi
+    fi
+}
+
+clewd_stop() {
+    _clewd_vars
+    kill_process_safe "$CL_PID" "clewdr|node.*clewd\.js"
+    pkill -f "clewdr" 2>/dev/null
+    pkill -f "node clewd.js" 2>/dev/null
+}
+
+clewd_uninstall() {
+    _clewd_vars
+    ui_header "卸卸 Clewd"
+    if ! verify_kill_switch; then return; fi
+    
+    clewd_stop
+    if ui_spinner "正在清除..." "safe_rm '$CL_DIR' '$CL_PID'"; then
+        ui_print success "模块数据已卸载。"
+        return 2 
+    fi
+}
+
+clewd_menu() {
+    while true; do
+        _clewd_vars
+        ui_header "Clewd AI 反代管理"
+        
+        local state="stopped"; local text="已停止"; local info=()
+        if check_process_smart "$CL_PID" "clewdr|node.*clewd\.js"; then
+            state="running"; text="运行中"
+            local pass="未知"
+            if [ -f "$CL_SECRETS" ]; then
+                pass=$(grep "^API_PASS=" "$CL_SECRETS" | cut -d'=' -f2)
+                [ -z "$pass" ] && pass="未知"
+            fi
+            
+            local port="8444"
+            [ -f "$CL_LOG" ] && grep -q "8484" "$CL_LOG" && port="8484"
+            
+            info+=( "接口: http://127.0.0.1:$port/v1" "密钥: $pass" )
+        else
+            info+=( "提示: 请先启动服务" )
+        fi
+        
+        ui_status_card "$state" "$text" "${info[@]}"
+        local CHOICE=$(ui_menu "请选择操作" "🚀 启动/重启" "🔑 查看密码" "📜 查看日志" "🛑 停止服务" "📥 更新重装" "🗑️  卸载模块" "🔙 返回")
+        case "$CHOICE" in
+            *"启动"*) clewd_start ;; 
+            *"密码"*) 
+                if [ -f "$CL_LOG" ]; then
+                    ui_header "Clewd 运行密码"
+                    grep -iE "password|pass" "$CL_LOG" | head -n 10
+                else
+                    ui_print warn "日志文件不存在。"
+                fi
+                ui_pause ;; 
+            *"日志"*) safe_log_monitor "$CL_LOG" ;; 
+            *"停止"*) clewd_stop; ui_print success "已停止"; ui_pause ;; 
+            *"更新"*) clewd_install ;; 
+            *"卸载"*) clewd_uninstall && [ $? -eq 2 ] && return ;; 
+            *"返回"*) return ;; 
+        esac
+    done
+}

@@ -9,7 +9,6 @@ DEFAULT_POOL=(
     "https://hub.gitmirror.com/"
     "https://hk.gh-proxy.com/"
     "https://ui.ghproxy.cc/"
-    "https://gh.ddlc.top/"
     "https://gh-proxy.com/"
     "https://gh.jasonzeng.dev/"
     "https://gh.idayer.com/"
@@ -109,7 +108,7 @@ select_mirror_interactive() {
     for url in "${DEFAULT_POOL[@]}"; do
         (
             start=$(date +%s%N)
-            if curl -s -I -m 2 "${url}https://github.com/${REPO_PATH}" >/dev/null 2>&1; then
+            if curl -fsL -I -m 2 "${url}https://github.com/${REPO_PATH}" >/dev/null 2>&1; then
                 end=$(date +%s%N)
                 dur=$(( (end - start) / 1000000 ))
                 echo "$dur $url" >> "$tmp_file"

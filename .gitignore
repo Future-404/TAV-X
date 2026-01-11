@@ -16,7 +16,6 @@ Thumbs.db
 *.zip
 *.tar.gz
 *.7z
-ST_Backup_*.tar.gz
 .temp_link
 .tag_cache
 .mirror_cache
@@ -25,24 +24,26 @@ ST_Backup_*.tar.gz
 .mirror_race
 .api_req
 .api_res
-.audio_heartbeat.pid
+.gemini/
 
-# --- Python / Node / Virtualenv ---
-node_modules/
-venv/
-__pycache__/
+# --- TAV-X 运行态目录 ---
+run/
+logs/
+temp_restore/
+apps/
+bin/
 
-# --- 项目目录 ---
+# --- 模块内临时文件 ---
+modules/**/venv/
+modules/**/node_modules/
+modules/**/__pycache__/
+modules/**/.env
+
+# --- 旧版残留 ---
 clewdr/
 adb_tools/
-adb_log.txt
 gemini_proxy/
-gemini_proxy/*.log
-SillyTavern/
-bin/
-temp_restore/
 autoglm/
-autoglm_install.log
 
 # --- 机密文件 ---
 .env
@@ -51,16 +52,16 @@ secrets.env
 secrets.json
 oauth_creds.json
 client_secret.json
-
-# --- 配置文件 ---
-config/*.conf
-config/*.env
-config/network.conf
-config/memory.conf
 config/cf_token
+config/cf_api_token
+
+# --- 配置文件 (本地个性化) ---
+config/*.conf
+config/memory.conf
+config/network.conf
+config/shortcuts.list
 
 # --- 保留的例外 ---
-!config/plugins.list
+!config/store.csv
 !config/silence.wav
-
-core/ai_launcher.sh
+!modules/sillytavern/plugins.list

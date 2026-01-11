@@ -5,14 +5,25 @@ _TAVX_UI_LOADED=true
 
 HAS_GUM=false
 if command -v gum &> /dev/null; then HAS_GUM=true; fi
+export HAS_GUM
 
-C_PINK=212    
-C_PURPLE=99   
-C_DIM=240     
-C_GREEN=82    
-C_RED=196     
-C_BLUE=39     
-C_YELLOW=220  
+# ANSI Colors (Fallback)
+export NC='\033[0m'
+export RED='\033[0;31m'
+export GREEN='\033[0;32m'
+export YELLOW='\033[0;33m'
+export BLUE='\033[0;34m'
+export PURPLE='\033[0;35m'
+export CYAN='\033[0;36m'
+
+# Gum Colors
+export C_PINK=212    
+export C_PURPLE=99   
+export C_DIM=240     
+export C_GREEN=82    
+export C_RED=196     
+export C_BLUE=39     
+export C_YELLOW=220  
 
 get_ascii_logo() {
     cat << "LOGO_END"
@@ -25,10 +36,11 @@ get_ascii_logo() {
                 T A V   X
 LOGO_END
 }
+export -f get_ascii_logo
 
 ui_header() {
     local subtitle="$1"
-    local ver="${CURRENT_VERSION:-v2.0-beta}"
+    local ver="${CURRENT_VERSION:-3.0}"
     
     clear
     if [ "$HAS_GUM" = true ]; then
@@ -45,90 +57,85 @@ ui_header() {
         fi
     else
         get_ascii_logo
-        echo "Ver: $ver | by Future 404"
+        echo -e "Ver: ${CYAN}$ver${NC} | by Future 404"
         echo "----------------------------------------"
-        [ -n "$subtitle" ] && echo -e ">>> $subtitle\n----------------------------------------"
+        if [ -n "$subtitle" ]; then
+            echo -e "${PURPLE}🚀 $subtitle${NC}"
+            echo "----------------------------------------"
+        fi
     fi
 }
+export -f ui_header
 
 ui_dashboard() {
-    local st=$1; local adb=$2
-    local net_dl="$3"; local net_api="$4"
-    local modules_line="$5"
+    local modules_line="$1"
+    local net_info="$2"
+    local mem_val="$3"
+    
+    local base_items=()
+    [ -n "$mem_val" ] && base_items+=("${PURPLE}● ${NC}🧠 $mem_val")
+    [ -n "$net_info" ] && base_items+=("${CYAN}● ${NC}$net_info")
+    [ -f "$TAVX_DIR/config/.adb_optimized" ] && base_items+=("${RED}● ${NC}已保活")
 
-    if [ "$HAS_GUM" = true ]; then
-        make_dynamic_badge() {
-            local label="$1"; local state="$2"
-            if [ "$state" == "1" ]; then
-                echo "$(gum style --foreground $C_GREEN "●") $label"
+    if [ ${#base_items[@]} -gt 0 ]; then
+        echo -n "  "
+        for i in "${!base_items[@]}"; do
+            echo -n -e "${base_items[$i]}"
+            [ $i -lt $((${#base_items[@]} - 1)) ] && echo -n "    "
+        done
+        echo -e "\n"
+    fi
+
+    if [ -n "$modules_line" ]; then
+        local mod_items=()
+        IFS=' ' read -r -a mod_items <<< "$modules_line"
+        
+        local m_count=0
+        echo -n "  "
+        for m in "${mod_items[@]}"; do
+            [ -z "$m" ] && continue
+            ((m_count++))
+            echo -n -e "$m"
+            if [ $((m_count % 3)) -eq 0 ]; then
+                echo -e "\n  "
+            else
+                echo -n "    "
             fi
-        }
-
-        local spacer="      "
-        local active_items=()
-        
-        # 1. 核心服务状态
-        [ "$st" == "1" ]  && active_items+=("$(make_dynamic_badge "酒馆" $st)")
-        [ "$adb" == "1" ] && active_items+=("$(make_dynamic_badge "ADB" $adb)")
-        
-        # 2. 动态模块状态 (纯文本列表，遍历渲染)
-        if [ -n "$modules_line" ]; then
-             for mod in $modules_line; do
-                 # 过滤无效字符 (可选)
-                 [ -z "$mod" ] && continue
-                 active_items+=("$(make_dynamic_badge "$mod" "1")")
-             done
-        fi
-
-        local line1=""
-        if [ ${#active_items[@]} -eq 0 ]; then
-            line1=$(gum style --foreground $C_DIM "💤 等待服务启动...")
-        else
-            for item in "${active_items[@]}"; do
-                line1="${line1}${item}${spacer}"
-            done
-        fi
-        
-        local line2=$(gum join --vertical --align center \
-            "$(gum style --foreground $C_BLUE "网络: $net_dl")" \
-            "$(gum style --foreground $C_PURPLE "API : $net_api")" \
-        )
-
-        gum style --border normal --border-foreground $C_DIM --padding "0 1" --margin "0 0 1 0" --align center "$line1" "" "$line2"
-    else
-        echo "核心: ST[$st] ADB[$adb]"
-        echo "模块: $modules_line"
-        echo "下载: $net_dl"
-        echo "API : $net_api"
-        echo "----------------------------------------"
+        done
+        echo ""
     fi
 }
+export -f ui_dashboard
 
 write_log() {
-    local level="$1"
-    local msg="$2"
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    
-    local clean_msg=$(echo "$msg" | sed 's/\x1b\[[0-9;]*m//g')
-    
-    if [ -n "$TAVX_LOG_FILE" ]; then
-        echo "[$timestamp] [$level] $clean_msg" >> "$TAVX_LOG_FILE"
-    fi
+    return 0
 }
+export -f write_log
 
 ui_menu() {
-    local header="$1"; shift; local options=("$@")
+    local header="$1"; shift
     if [ "$HAS_GUM" = true ]; then
-        gum choose --header="" --cursor.foreground $C_PINK --selected.foreground $C_PINK "${options[@]}"
+        gum choose --header="" --cursor="👉 " --cursor.foreground "$C_PINK" --selected.foreground "$C_PINK" -- "$@"
     else
-        echo -e "\n[ $header ]"; local i=1
-        for opt in "${options[@]}"; do echo "$i. $opt"; ((i++)); done
-        read -p "请输入编号: " idx; echo "${options[$((idx-1))]}"
+        echo -e "\n${CYAN}[ $header ]${NC}" >&2
+        local i=1
+        local options=("$@")
+        for opt in "${options[@]}"; do
+            echo -e "  ${YELLOW}$i.${NC} $opt" >&2
+            ((i++))
+        done
+        echo -n -e "\n  ${BLUE}➜${NC} 请输入编号: " >&2
+        local idx; read -r idx
+        echo "${options[$((idx-1))]}"
     fi
 }
+export -f ui_menu
 
 ui_input() {
-    local prompt="$1"; local default="$2"; local is_pass="$3"
+    local prompt="${1:-请输入}"
+    local default="$2"
+    local is_pass="$3"
+    
     if [ "$HAS_GUM" = true ]; then
         local args=(--placeholder "$prompt" --width 40 --cursor.foreground $C_PINK)
         [ -n "$default" ] && args+=(--value "$default")
@@ -136,57 +143,110 @@ ui_input() {
         gum input "${args[@]}"
     else
         local flag=""; [ "$is_pass" = "true" ] && flag="-s"
-        read $flag -p "$prompt [$default]: " val; echo "${val:-$default}"
+        echo -n -e "  ${CYAN}➜${NC} $prompt" >&2
+        [ -n "$default" ] && echo -n -e " [${YELLOW}$default${NC}]" >&2
+        echo -n ": " >&2
+        local val; read $flag val; echo "${val:-$default}"
     fi
 }
+export -f ui_input
+
+ui_input_validated() {
+    local prompt="$1"
+    local default="$2"
+    local type="${3:-any}"
+    local result=""
+    
+    while true; do
+        result=$(ui_input "$prompt" "$default" "false")
+        if [ -z "$result" ]; then
+            if [ -n "$default" ]; then result="$default"; else continue; fi
+        fi
+        local danger_chars='[;\|&><\$\(\)\`]'
+        if [[ "$result" =~ $danger_chars ]]; then
+            ui_print error "检测到非法字符，请重新输入。" >&2
+            continue
+        fi
+
+        local is_ok=false
+        case "$type" in
+            "numeric") [[ "$result" =~ ^[0-9]+$ ]] && is_ok=true ;;
+            "url") [[ "$result" =~ ^https?:// ]] && is_ok=true ;;
+            "ip") [[ "$result" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] && is_ok=true ;;
+            "alphanumeric") [[ "$result" =~ ^[a-zA-Z0-9_-]+$ ]] && is_ok=true ;;
+            "any"|*) is_ok=true ;;
+        esac
+        
+        if [ "$is_ok" = true ]; then
+            echo "$result"
+            return 0
+        else
+            ui_print error "输入格式 ($type) 不符合要求，请重新输入。" >&2
+            sleep 0.5
+        fi
+    done
+}
+export -f ui_input_validated
 
 ui_confirm() {
-    local prompt="$1"
+    local prompt="${1:-确定要执行此操作吗？}"
     if [ "$HAS_GUM" = true ]; then
         gum confirm "$prompt" --affirmative "是" --negative "否" --selected.background $C_PINK
     else
-        read -p "$prompt (y/n): " c; [[ "$c" == "y" || "$c" == "Y" ]]
+        echo -e -n "${YELLOW}⚠ $prompt (y/n): ${NC}" >&2
+        read -r c; [[ "$c" == "y" || "$c" == "Y" ]]
     fi
 }
+export -f ui_confirm
 
 ui_spinner() {
-    local title="$1"; shift; local cmd="$@"
-    local tmp_log=""
-    if command -v mktemp &> /dev/null; then
-        tmp_log=$(mktemp "$TMP_DIR/task_XXXXXX.log")
-    else
-        tmp_log="$TMP_DIR/task_${BASHPID}_$(date +%s%N).log"
-    fi
+    local title="$1"; shift
+    ui_stream_task "$title" "$*"
+}
+export -f ui_spinner
 
-    write_log "TASK_START" "$title (Log: $tmp_log)"
-    
-    local wrapped_cmd="{ $cmd ; } > \"$tmp_log\" 2>&1"
+ui_restore_terminal() {
+    [ -f "$HOME/.bashrc" ] && source "$HOME/.bashrc" 2>/dev/null
+}
 
-    local result=0
-    if [ "$HAS_GUM" = true ]; then
-        gum spin --spinner dot --title "$title" --title.foreground $C_PURPLE -- bash -c "$wrapped_cmd"
-        result=$?
-    else
-        echo ">>> $title"
-        eval "$wrapped_cmd"
-        result=$?
-    fi
-    
-    if [ -n "$TAVX_LOG_FILE" ] && [ -f "$tmp_log" ]; then
-        echo "--- [Task Log Dump: $title] ---" >> "$TAVX_LOG_FILE"
-        cat "$tmp_log" >> "$TAVX_LOG_FILE"
-        echo "-------------------------------" >> "$TAVX_LOG_FILE"
-    fi
-    
-    if [ $result -eq 0 ]; then
-        write_log "TASK_END" "Success: $title"
-        rm -f "$tmp_log"
+ui_stream_task() {
+    local title="$1"; local cmd="$2"
+    local exit_status_file="$TMP_DIR/status_$$"
+
+    ui_print info "$title"
+
+    local stdbuf_cmd=""
+    command -v stdbuf &>/dev/null && stdbuf_cmd="stdbuf -oL -eL"
+    local term_width=60
+    [ -n "$COLUMNS" ] && [ "$COLUMNS" -gt 20 ] && term_width=$((COLUMNS - 15))
+
+    (
+        $stdbuf_cmd bash -c "$cmd" 2>&1
+        echo $? > "$exit_status_file"
+    ) | while IFS= read -r line; do
+        local clean_line=$(echo "$line" | tr -d '\r' | sed 's/^[[:space:]]*//')
+        [ -z "$clean_line" ] && continue
+        
+        if [ "$HAS_GUM" = true ]; then
+            local display_line="${clean_line:0:$term_width}"
+            [ "${#clean_line}" -gt "$term_width" ] && display_line="${display_line}..."
+            gum style --foreground "$C_DIM" "  │ $display_line"
+        else
+            echo -e "  \033[0;90m│\033[0m ${clean_line:0:$term_width}"
+        fi
+    done
+
+    local result=1
+    [ -f "$exit_status_file" ] && result=$(cat "$exit_status_file") && rm -f "$exit_status_file"
+
+    if [ "$result" -eq 0 ]; then
         return 0
     else
-        write_log "TASK_END" "FAILED (Code $result): $title"
+        ui_print error "任务执行失败 [Code: $result]"
         return 1
     fi
 }
+export -f ui_stream_task
 
 ui_status_card() {
     local type="$1"
@@ -194,53 +254,45 @@ ui_status_card() {
     shift 2
     local infos=("$@")
 
-    local color_code=""
     local gum_color=""
     local icon=""
     
     case "$type" in
-        running|success) 
-            color_code="$GREEN"
-            gum_color="$C_GREEN"
-            icon="●" 
-            ;;
-        stopped|error|failure) 
-            color_code="$RED"
-            gum_color="$C_RED"
-            icon="●" 
-            ;;
-        warn|working) 
-            color_code="$YELLOW"
-            gum_color="$C_YELLOW"
-            icon="●" 
-            ;;
-        *) 
-            color_code="$BLUE"
-            gum_color="$C_BLUE"
-            icon="●" 
-            ;;
+        running|success) gum_color="$C_GREEN"; icon="●" ;; 
+        stopped|error|failure) gum_color="$C_RED"; icon="●" ;; 
+        warn|working) gum_color="$C_YELLOW"; icon="●" ;; 
+        *) gum_color="$C_BLUE"; icon="●" ;; 
     esac
 
     if [ "$HAS_GUM" = true ]; then
-        local content=""
-        content+=$(gum style --foreground "$gum_color" --bold "$icon $main_text")
-        content+=$'\n'
+        local parts=()
+        parts+=("$(gum style --foreground "$gum_color" --bold "$icon $main_text")")
+        
         if [ ${#infos[@]} -gt 0 ]; then
-            content+=$'\n'
+            parts+=("")
             for line in "${infos[@]}"; do
                 if [[ "$line" == *": "* ]]; then
                     local k="${line%%: *}"
                     local v="${line#*: }"
-                    content+="$(gum style --foreground $C_PURPLE "$k"): $v"
+                    parts+=("$(gum style --foreground $C_PURPLE "$k"): $v")
                 else
-                    content+="$line"
+                    parts+=("$line")
                 fi
-                content+=$'\n'
             done
         fi
         
-        gum style --border normal --border-foreground $C_DIM --padding "0 1" --margin "0 0 1 0" --align left "$content"
+        local joined=$(gum join --vertical --align left "${parts[@]}")
+        gum style --border normal --border-foreground $C_DIM --padding "0 1" --margin "0 0 1 0" --width 45 "$joined"
     else
+        # Fallback
+        local color_code=""
+        case "$type" in
+            running|success) color_code="$GREEN" ;; 
+            stopped|error|failure) color_code="$RED" ;; 
+            warn|working) color_code="$YELLOW" ;; 
+            *) color_code="$BLUE" ;; 
+        esac
+        
         echo -e "状态: ${color_code}${icon} ${main_text}${NC}"
         for line in "${infos[@]}"; do
             if [[ "$line" == *": "* ]]; then
@@ -254,34 +306,41 @@ ui_status_card() {
         echo "----------------------------------------"
     fi
 }
+export -f ui_status_card
 
 ui_print() {
-    local type="$1"; local msg="$2"
+    local type="${1:-info}"
+    local msg="$2"
     
     local log_level=$(echo "$type" | tr '[:lower:]' '[:upper:]')
     write_log "$log_level" "$msg"
 
     if [ "$HAS_GUM" = true ]; then
         case $type in
-            success) gum style --foreground $C_GREEN "✔ $msg" ;;
-            error)   gum style --foreground $C_RED   "✘ $msg" ;;
-            warn)    gum style --foreground $C_YELLOW "⚠ $msg" ;;
-            *)       gum style --foreground $C_PURPLE "ℹ $msg" ;;
+            success) gum style --foreground $C_GREEN "  ✔ $msg" ;; 
+            error)   gum style --foreground $C_RED   "  ✘ $msg" ;; 
+            warn)    gum style --foreground $C_YELLOW "  ⚠ $msg" ;; 
+            *)       gum style --foreground $C_PURPLE "  ℹ $msg" ;; 
         esac
     else 
         case $type in
-            success) echo -e "\033[1;32m[DONE]\033[0m $msg" ;;
-            error)   echo -e "\033[1;31m[ERROR]\033[0m $msg" ;;
-            warn)    echo -e "\033[1;33m[WARN]\033[0m $msg" ;;
-            *)       echo -e "\033[1;34m[INFO]\033[0m $msg" ;;
+            success) echo -e "  ${GREEN}✔${NC} $msg" ;; 
+            error)   echo -e "  ${RED}✘${NC} $msg" ;; 
+            warn)    echo -e "  ${YELLOW}⚠${NC} $msg" ;; 
+            *)       echo -e "  ${BLUE}ℹ${NC} $msg" ;; 
         esac
     fi
 }
+export -f ui_print
 
 ui_pause() {
+    local prompt="${1:-按任意键继续...}"
+    echo ""
     if [ "$HAS_GUM" = true ]; then
-        echo ""; gum style --foreground $C_DIM "按任意键继续..."; read -n 1 -s -r
+        gum style --foreground $C_DIM "  $prompt"
+        read -n 1 -s -r
     else
-        echo ""; read -n 1 -s -r -p "按任意键继续..."
+        read -n 1 -s -r -p "  $prompt"
     fi
 }
+export -f ui_pause

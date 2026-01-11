@@ -1,85 +1,102 @@
 #!/bin/bash
-# TAV-X Core: Plugin Manager
+# SillyTavern Module: Plugin Manager
+# 负责管理酒馆的第三方扩展插件
 
-source "$TAVX_DIR/core/env.sh"
+[ -z "$TAVX_DIR" ] && source "$HOME/.tav_x/core/env.sh"
 source "$TAVX_DIR/core/ui.sh"
 source "$TAVX_DIR/core/utils.sh"
 
 API_URL="https://tav-x-api.future404.qzz.io"
-PLUGIN_LIST_FILE="$TAVX_DIR/config/plugins.list"
+CURRENT_MODULE_DIR="$(dirname "${BASH_SOURCE[0]}")"
+PLUGIN_LIST_FILE="$CURRENT_MODULE_DIR/plugins.list"
 
-is_installed() {
+_st_plugin_is_installed() {
     local d=$1
-    if [ -d "$INSTALL_DIR/plugins/$d" ] || [ -d "$INSTALL_DIR/public/scripts/extensions/third-party/$d" ]; then return 0; else return 1; fi
+    if [ -d "$ST_DIR/plugins/$d" ] || [ -d "$ST_DIR/public/scripts/extensions/third-party/$d" ]; then return 0; else return 1; fi
 }
 
-extract_repo_path() {
+_st_extract_repo_path() {
     local url=$1
     local short=${url#*github.com/}
     echo "$short"
 }
 
-install_single_plugin() {
+app_plugin_install_single() {
+    _st_vars
     local name=$1; local repo_url=$2; local s=$3; local c=$4; local dir=$5
+    
+    if [[ "$dir" == *".."* || "$dir" == *"/"* ]]; then
+        ui_print error "非法插件目录名: $dir"
+        ui_pause; return
+    fi
+
     ui_header "安装插件: $name"
     
-    if is_installed "$dir"; then
+    if _st_plugin_is_installed "$dir"; then
         if ! ui_confirm "插件已存在，是否重新安装？"; then return; fi
     fi
 
-    local repo_path=$(extract_repo_path "$repo_url")
+    local repo_path=$(_st_extract_repo_path "$repo_url")
 
-    prepare_network_strategy
+    prepare_network_strategy "SillyTavern Plugin"
     
     local TASKS=""
     
     if [ "$s" != "-" ]; then
         local b_arg=""; [ "$s" != "HEAD" ] && b_arg="-b $s"
-        TASKS+="safe_rm '$INSTALL_DIR/plugins/$dir'; git_clone_smart '$b_arg' '$repo_path' '$INSTALL_DIR/plugins/$dir' || exit 1;"
+        TASKS+="safe_rm '$ST_DIR/plugins/$dir'; git_clone_smart '$b_arg' '$repo_path' '$ST_DIR/plugins/$dir' || exit 1;"
     fi
     
     if [ "$c" != "-" ]; then
         local b_arg=""; [ "$c" != "HEAD" ] && b_arg="-b $c"
-        TASKS+="safe_rm '$INSTALL_DIR/public/scripts/extensions/third-party/$dir'; git_clone_smart '$b_arg' '$repo_path' '$INSTALL_DIR/public/scripts/extensions/third-party/$dir' || exit 1;"
+        TASKS+="safe_rm '$ST_DIR/public/scripts/extensions/third-party/$dir'; git_clone_smart '$b_arg' '$repo_path' '$ST_DIR/public/scripts/extensions/third-party/$dir' || exit 1;"
     fi
     
     local WRAP_CMD="source \"$TAVX_DIR/core/utils.sh\"; $TASKS"
     
-    if ui_spinner "正在下载插件 (智能优选)..." "$WRAP_CMD"; then
+    if ui_stream_task "正在下载插件..." "$WRAP_CMD"; then
+        local plugin_path="$ST_DIR/plugins/$dir"
+        [ "$s" == "-" ] && plugin_path="$ST_DIR/public/scripts/extensions/third-party/$dir"
+        
+        if [ -f "$plugin_path/package.json" ]; then
+            ui_print info "检测到插件依赖，正在自动安装..."
+            npm_install_smart "$plugin_path"
+        fi
         ui_print success "安装完成！"
     else
-        ui_print error "安装失败，请检查网络。"
+        ui_print error "下载失败，请尝试切换网络策略。"
     fi
     ui_pause
 }
 
-list_install_menu() {
-    if [ ! -f "$PLUGIN_LIST_FILE" ]; then ui_print error "未找到插件列表"; ui_pause; return; fi
+app_plugin_list_menu() {
+    if [ ! -f "$PLUGIN_LIST_FILE" ]; then ui_print error "未找到插件列表: $PLUGIN_LIST_FILE"; ui_pause; return; fi
 
     while true; do
         ui_header "插件仓库 (Repository)"
         MENU_ITEMS=()
-        rm -f "$TAVX_DIR/.plugin_map"
+        local map_file="$TAVX_DIR/.plugin_map"
+        safe_rm "$map_file"
         
         while IFS= read -r line; do
             [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
             IFS='|' read -r name repo s c dir <<< "$line"
             name=$(echo "$name"|xargs); dir=$(echo "$dir"|xargs)
             
-            if is_installed "$dir"; then ICON="✅"; else ICON="📦"; fi
+            if _st_plugin_is_installed "$dir"; then ICON="✅"; else ICON="📦"; fi
             ITEM="$ICON $name  [$dir]"
             MENU_ITEMS+=("$ITEM")
-            echo "$ITEM|$line" >> "$TAVX_DIR/.plugin_map"
+            echo "$ITEM|$line" >> "$map_file"
         done < "$PLUGIN_LIST_FILE"
         
         MENU_ITEMS+=("🔙 返回上级")
         CHOICE=$(ui_menu "输入关键词搜索" "${MENU_ITEMS[@]}")
         if [[ "$CHOICE" == *"返回上级"* ]]; then return; fi
         
-        RAW_LINE=$(grep -F "$CHOICE|" "$TAVX_DIR/.plugin_map" | head -n 1 | cut -d'|' -f2-)
+        RAW_LINE=$(grep -F "$CHOICE|" "$map_file" | head -n 1 | cut -d'|' -f2-)
         if [ -n "$RAW_LINE" ]; then
             IFS='|' read -r n r s c d <<< "$RAW_LINE"
-            install_single_plugin "$(echo "$n"|xargs)" "$(echo "$r"|xargs)" "$(echo "$s"|xargs)" "$(echo "$c"|xargs)" "$(echo "$d"|xargs)"
+            app_plugin_install_single "$(echo "$n"|xargs)" "$(echo "$r"|xargs)" "$(echo "$s"|xargs)" "$(echo "$c"|xargs)" "$(echo "$d"|xargs)"
         else
             ui_print error "数据解析错误"
             ui_pause
@@ -87,10 +104,10 @@ list_install_menu() {
     done
 }
 
-submit_plugin() {
+app_plugin_submit() {
     ui_header "提交新插件"
     echo -e "${YELLOW}欢迎贡献插件！${NC}"
-    echo -e "${CYAN}提示: 必填项留空或输入 '0' 可取消操作。${NC}"
+    echo -e "数据将提交至: $API_URL"
     echo ""
     local name=$(ui_input "1. 插件名称 (必填)" "" "false")
     if [[ -z "$name" || "$name" == "0" ]]; then ui_print info "已取消"; ui_pause; return; fi
@@ -134,45 +151,37 @@ submit_plugin() {
     ui_pause
 }
 
-reset_all_plugins() {
-    local PLUGIN_ROOT="$INSTALL_DIR/public/scripts/extensions/third-party"
-    
-    if [ -z "$(ls -A "$PLUGIN_ROOT" 2>/dev/null)" ]; then
-        ui_print info "插件目录已经是空的了。"
-        ui_pause
-        return
-    fi
+app_plugin_reset() {
+    local PLUGIN_ROOT="$ST_DIR/public/scripts/extensions/third-party"
+    if [ -z "$(ls -A "$PLUGIN_ROOT" 2>/dev/null)" ]; then ui_print info "插件目录已经是空的了。"; ui_pause; return; fi
 
     ui_header "💥 插件工厂重置"
-    echo -e "${RED}⚠️  警告：此操作将彻底删除所有第三方插件！${NC}"
-    echo -e "如果您的酒馆因为插件冲突打不开，这通常能解决问题。"
-    echo -e "系统自带的核心插件(Core)将保留。"
-    echo ""
-
+    echo -e "${RED}警告：将删除所有第三方扩展！${NC}"
     if ui_confirm "确认清空吗？"; then
         if ui_spinner "正在粉碎文件..." "safe_rm '$PLUGIN_ROOT'; mkdir -p '$PLUGIN_ROOT'"; then
-            ui_print success "所有第三方插件已清除。"
-            echo -e "${YELLOW}请稍后重启酒馆以生效。${NC}"
+            ui_print success "清理完成。请重启酒馆。"
         else
-            ui_print error "操作失败，请检查文件权限。"
+            ui_print error "操作失败。";
         fi
     fi
     ui_pause
 }
 
-plugin_menu() {
+app_plugin_menu() {
+    _st_vars
+    if [ ! -d "$ST_DIR" ]; then ui_print error "请先安装酒馆！"; ui_pause; return; fi
     while true; do
         ui_header "插件生态中心"
         CHOICE=$(ui_menu "请选择" \
-            "📥 安装插件" \
-            "➕ 提交插件" \
-            "💥 清空所有第三方插件" \
-            "🔙 返回主菜单"
+            "📥 在线安装插件" \
+            "➕ 提交新插件" \
+            "💥 重置所有插件" \
+            "🔙 返回"
         )
         case "$CHOICE" in
-            *"安装"*) list_install_menu ;; 
-            *"提交"*) submit_plugin ;; 
-            *"重置"*) reset_all_plugins ;; 
+            *"安装"*) app_plugin_list_menu ;; 
+            *"提交"*) app_plugin_submit ;; 
+            *"重置"*) app_plugin_reset ;; 
             *"返回"*) return ;; 
         esac 
     done

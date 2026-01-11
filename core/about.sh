@@ -6,12 +6,12 @@ GROUP_QQ="616353694"
 CONTACT_EMAIL="future_404@outlook.com"
 PROJECT_URL="https://github.com/Future-404/TAV-X"
 SLOGAN="别让虚拟的温柔，偷走了你在现实里本该拥有的温暖。"
-UPDATE_SUMMARY="v2.7.1 累积修复：
-  1. [修复] 修正 GitHub 测速函数中的 curl 参数格式错误
-  2. [规范] 全模块 UI 统一化，采用 ui_status_card 标准化状态展示
-  3. [规范] 核心路径标准化，PID 统一至 run/，Logs 统一至 logs/
-  4. [重构] 主菜单仪表盘，支持全动态模块自动扫描与运行状态识别
-  5. [新增] 模块：gcli2api (GeminiCLI 转 API 服务集成)"
+UPDATE_SUMMARY="v3.0 TMIS 架构重构里程碑：
+  1. [重构] 核心去中心化，实现“内核+应用”插件化架构
+  2. [新增] 统一应用中心，支持本地扫描、远程获取、分级安装
+  3. [优化] 自动化日志黑匣子系统，支持任务失败自动 Dump 与历史归档
+  4. [规范] 统一全模块路径标准 (apps/, logs/, run/)，完美兼容旧版数据
+  5. [迁移] 全员模块转正：酒馆、ClewdR、Mihomo、GCLI、AutoGLM、Gemini"
 
 show_about_page() {
     ui_header "帮助与支持"
