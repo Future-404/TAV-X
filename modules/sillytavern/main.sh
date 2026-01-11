@@ -32,7 +32,10 @@ sillytavern_install() {
     fi
     
     mkdir -p "$(dirname "$ST_DIR")"
-    prepare_network_strategy "SillyTavern/SillyTavern"
+    
+    # 提前准备网络策略 (交互式选源)，防止在进度条中触发 UI 崩坏
+    prepare_network_strategy
+    
     local CLONE_CMD="source \"$TAVX_DIR/core/utils.sh\"; git_clone_smart '-b release' 'SillyTavern/SillyTavern' '$ST_DIR'"
     
     if ! ui_stream_task "正在拉取源码..." "$CLONE_CMD"; then
@@ -63,7 +66,9 @@ sillytavern_update() {
         echo -e "${YELLOW}请先 [解除锁定] 后再尝试更新。${NC}"; ui_pause; return
     fi
     
-    prepare_network_strategy "SillyTavern/SillyTavern"
+    # 提前准备网络策略
+    prepare_network_strategy
+    
     local TEMP_URL=$(get_dynamic_repo_url "SillyTavern/SillyTavern")
     local UPDATE_CMD="cd \"$ST_DIR\"; git pull --autostash \"$TEMP_URL\""
     
@@ -102,7 +107,12 @@ sillytavern_rollback() {
         MENU_ITEMS+=("⏳ 回退至历史版本" "🔀 切换通道: Release" "🔀 切换通道: Staging" "🔙 返回")
         
         local CHOICE=$(ui_menu "选择操作" "${MENU_ITEMS[@]}")
-        prepare_network_strategy "SillyTavern/SillyTavern"
+        
+        # 提前准备网络策略
+        if [[ "$CHOICE" != *"返回"* ]]; then
+             prepare_network_strategy
+        fi
+
         local TEMP_URL=$(get_dynamic_repo_url "SillyTavern/SillyTavern")
         
         case "$CHOICE" in

@@ -22,17 +22,14 @@ fi
 
 mkdir -p "$TMP_DIR"
 
-if [ -f "$(pwd)/core/main.sh" ]; then
-    export TAVX_DIR="$(pwd)"
-else
-    export TAVX_DIR="${TAVX_DIR:-$HOME/.tav_x}"
-fi
+# 标准化运行目录：优先使用传入变量，否则默认为 ~/.tav_x
+export TAVX_DIR="${TAVX_DIR:-$HOME/.tav_x}"
 
 export TAVX_ROOT="$TAVX_DIR"
 export CONFIG_DIR="$TAVX_DIR/config"
 export LOGS_DIR="$TAVX_DIR/logs"
 export RUN_DIR="$TAVX_DIR/run"
-export APPS_DIR="$TAVX_DIR/apps"
+export APPS_DIR="$HOME/tav_apps"
 export TAVX_BIN="$TAVX_DIR/bin"
 
 mkdir -p "$CONFIG_DIR" "$LOGS_DIR" "$RUN_DIR" "$APPS_DIR" "$TAVX_BIN"

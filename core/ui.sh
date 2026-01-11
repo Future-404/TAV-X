@@ -7,7 +7,6 @@ HAS_GUM=false
 if command -v gum &> /dev/null; then HAS_GUM=true; fi
 export HAS_GUM
 
-# ANSI Colors (Fallback)
 export NC='\033[0m'
 export RED='\033[0;31m'
 export GREEN='\033[0;32m'
@@ -16,7 +15,6 @@ export BLUE='\033[0;34m'
 export PURPLE='\033[0;35m'
 export CYAN='\033[0;36m'
 
-# Gum Colors
 export C_PINK=212    
 export C_PURPLE=99   
 export C_DIM=240     
@@ -218,10 +216,11 @@ ui_stream_task() {
 
     local stdbuf_cmd=""
     command -v stdbuf &>/dev/null && stdbuf_cmd="stdbuf -oL -eL"
-    local term_width=60
-    [ -n "$COLUMNS" ] && [ "$COLUMNS" -gt 20 ] && term_width=$((COLUMNS - 15))
+    local term_width=80
+    [ -n "$COLUMNS" ] && [ "$COLUMNS" -gt 20 ] && term_width=$((COLUMNS - 8))
 
     (
+        export TAVX_NON_INTERACTIVE=true
         $stdbuf_cmd bash -c "$cmd" 2>&1
         echo $? > "$exit_status_file"
     ) | while IFS= read -r line; do
@@ -285,7 +284,6 @@ ui_status_card() {
         local joined=$(gum join --vertical --align left "${parts[@]}")
         gum style --border normal --border-foreground $C_DIM --padding "0 1" --margin "0 0 1 0" --width 45 "$joined"
     else
-        # Fallback
         local color_code=""
         case "$type" in
             running|success) color_code="$GREEN" ;; 

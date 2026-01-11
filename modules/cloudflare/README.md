@@ -36,7 +36,7 @@
 **操作步骤：**
 
 1.  **浏览器预登录**：
-    -   手动打开手机浏览器，访问 [Cloudflare Dashboard](https://dash.cloudflare.com/)。
+    -   手动打开浏览器，访问 [Cloudflare Dashboard](https://dash.cloudflare.com/)。
     -   **完成账号登录**，直到看到域名列表或控制面板。
 2.  **回到 TAV-X 脚本**：
     -   在 Cloudflare 菜单选择 **🔐 Tunnel 登录授权**。
@@ -51,7 +51,7 @@
 > 💡 **关键点**：如果先点击脚本链接再登录，Cloudflare 往往会卡在登录后的主页，不会自动回到授权页。
 
 ### 2. 临时内网穿透
-如果你只是临时测试一个本地服务（如 Web 界面）：
+如果你只是临时测试一个本地服务：
 - 选择 **⚡ 临时快速暴露**
 - 输入本地服务端口（默认 8000）
 - 获取生成的公网地址即可。
@@ -65,7 +65,7 @@
 
 ## 🔑 进阶功能：API Token
 
-为了获得更好的自动化体验（删除隧道时自动清理域名记录），建议配置 API Token：
+为了获得更好的自动化体验，建议配置 API Token：
 1. 前往 [Cloudflare Dashboard](https://dash.cloudflare.com/profile/api-tokens)。
 2. 创建一个具有 **Zone.DNS:Edit** 权限的 Token。
 3. 在模块菜单选择 **🔑 API Token 设置** 进行保存。

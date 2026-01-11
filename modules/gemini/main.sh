@@ -37,6 +37,9 @@ gemini_install() {
     _gemini_vars
     ui_header "部署 Gemini 代理"
     
+    # 提前准备网络策略
+    prepare_network_strategy
+
     if [ ! -d "$GE_DIR/.git" ]; then
         if ! git_clone_smart "" "$GE_REPO" "$GE_DIR"; then
             ui_print error "源码下载失败。"
@@ -64,7 +67,6 @@ gemini_install() {
         echo -e "HOST=0.0.0.0\nPORT=8888\nGEMINI_AUTH_PASSWORD=password" > "$GE_ENV_CONF"
     fi
     ui_print success "安装完成。"
-    ui_pause
 }
 
 gemini_start() {

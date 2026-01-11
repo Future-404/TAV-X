@@ -34,6 +34,9 @@ gcli2api_install() {
     
     mkdir -p "$GCLI_DIR"
     
+    # 提前准备网络，以便在需要时进行交互式选源
+    prepare_network_strategy
+    
     if [ ! -d "$GCLI_DIR/.git" ]; then
         if ! ui_stream_task "从 GitHub 克隆仓库..." "source \"\$TAVX_DIR/core/utils.sh\"; git_clone_smart '-b master' '$GCLI_REPO' '$GCLI_DIR'"; then
             ui_print error "克隆失败。"
@@ -56,7 +59,6 @@ gcli2api_install() {
     fi
     
     ui_print success "GCLI2API 部署完成。"
-    ui_pause
 }
 
 gcli2api_start() {

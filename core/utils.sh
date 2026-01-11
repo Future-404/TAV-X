@@ -39,6 +39,8 @@ safe_rm() {
             "$TAVX_DIR/modules"
             "$TAVX_DIR/apps"
             "$TAVX_DIR/core"
+            "$HOME/tav_apps"
+            "$APPS_DIR"
         )
 
         local is_bad=false
@@ -228,12 +230,17 @@ prepare_network_strategy() {
 }
 
 select_mirror_interactive() {
+    if [ "$TAVX_NON_INTERACTIVE" == "true" ]; then
+        echo "⚠️  检测到非交互环境，跳过镜像选择，默认使用官方源。"
+        SELECTED_MIRROR="https://github.com/"
+        return 0
+    fi
+
     reset_proxy_cache
     if [ -n "$SELECTED_MIRROR" ]; then return 0; fi
 
     ui_header "镜像源测速与选择"
     echo -e "${YELLOW}提示: 测速结果仅代表连接延迟，不代表下载成功率。${NC}"
-    echo -e "${CYAN}正在并发测速中，请稍候...${NC}"
     echo "----------------------------------------"
     
     local tmp_dir="${TMP_DIR:-$TAVX_DIR}"
@@ -251,20 +258,30 @@ select_mirror_interactive() {
             "https://hk.gh-proxy.com/"
         )
     fi
-    
-    for mirror in "${MIRROR_POOL[@]}"; do
-        (
+
+    _run_shell_speed_test() {
+        local mirrors_str="$1"
+        local mirrors=($mirrors_str)
+        local tmp_race_file="$2"
+        
+        for mirror in "${mirrors[@]}"; do
             local start=$(date +%s%N)
             local test_url="${mirror}https://github.com/Future-404/TAV-X/info/refs?service=git-upload-pack"
-            if curl -fsL -I -m 2 "$test_url" >/dev/null 2>&1;
+            echo -n -e "  Testing: ${mirror} ... \r"
+            if curl -fsL -A "Mozilla/5.0" -r 0-10 -o /dev/null -m 5 "$test_url" 2>/dev/null;
             then
                 local end=$(date +%s%N)
                 local dur=$(( (end - start) / 1000000 ))
                 echo "$dur|$mirror" >> "$tmp_race_file"
             fi
-        ) &
-    done
-    wait
+        done
+        echo "" # 换行
+    }
+    export -f _run_shell_speed_test
+    local mirrors_flat="${MIRROR_POOL[*]}"
+    echo -e "${CYAN}正在并发测速中，请稍候...${NC}"
+    _run_shell_speed_test "$mirrors_flat" "$tmp_race_file"
+    ui_header "镜像源测速与选择"
 
     local MENU_OPTIONS=()
     local URL_MAP=()
@@ -274,8 +291,8 @@ select_mirror_interactive() {
         while IFS='|' read -r dur url;
         do
             local mark="🟢"
-            [ "$dur" -gt 800 ] && mark="🟡"
-            [ "$dur" -gt 1500 ] && mark="🔴"
+            [ "$dur" -gt 1500 ] && mark="🟡"
+            [ "$dur" -gt 3000 ] && mark="🔴"
             local domain=$(echo "$url" | awk -F/ '{print $3}')
             local item="${mark} ${dur}ms | ${domain}"
             MENU_OPTIONS+=("$item")
@@ -710,16 +727,7 @@ get_app_path() {
         fi
     fi
     
-    local check_id="$id"
-    [ "$id" == "clewd" ] && check_id="clewdr"
-    
-    local old_path="$TAVX_DIR/$check_id"
-    if [ -d "$old_path" ] && [ -n "$(ls -A "$old_path" 2>/dev/null)" ]; then
-        echo "$old_path"
-        return
-    fi
-    
-    local new_path="$TAVX_DIR/apps/$id"
+    local new_path="${APPS_DIR:-$HOME/tav_apps}/$id"
     echo "$new_path"
 }
 
