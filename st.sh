@@ -42,7 +42,10 @@ else
     export TAVX_DIR="${HOME}/.tav_x"
 fi
 
-if [ -f "$TAVX_DIR/core/main.sh" ]; then
+CURRENT_SCRIPT=$(realpath "$0" 2>/dev/null || echo "$0")
+INSTALLED_SCRIPT=$(realpath "$TAVX_DIR/st.sh" 2>/dev/null || echo "$TAVX_DIR/st.sh")
+
+if [ -f "$TAVX_DIR/core/main.sh" ] && [ "$CURRENT_SCRIPT" == "$INSTALLED_SCRIPT" ]; then
     exec bash "$TAVX_DIR/core/main.sh" "$@"
 fi
 
