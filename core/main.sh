@@ -1,5 +1,6 @@
 #!/bin/bash
 # TAV-X Core: Main Logic (Refactored)
+set +m
 
 source "$TAVX_DIR/core/env.sh"
 source "$TAVX_DIR/core/ui.sh"

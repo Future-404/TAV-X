@@ -282,7 +282,7 @@ sillytavern_enable_public_access() {
     
     if [[ "$has_accounts" != "true" && "$has_auth" != "true" ]]; then
         ui_print warn "检测到您尚未开启任何身份验证。为了公网安全，请立即设置一个管理员密码。"
-        local u=$(ui_input "设置管理员账号" "admin" "false")
+        local u=$(ui_input "设置管理员账号" "default-user" "false")
         local p=$(ui_input "设置管理员密码" "" "true")
         if [ -n "$p" ]; then
             cd "$ST_DIR" || return
@@ -295,7 +295,7 @@ sillytavern_enable_public_access() {
     fi
 
     ui_print info "正在应用安全网络配置..."
-    local BATCH_JSON='{ "listen": true, "whitelistMode": false, "enableUserAccounts": true, "enableDiscreetLogin": true, "basicAuthMode": true }'
+    local BATCH_JSON='{ "listen": true, "whitelistMode": false, "enableUserAccounts": true, "enableDiscreetLogin": true, "basicAuthMode": false }'
     
     if _st_config_set_batch "$BATCH_JSON"; then
         ui_print success "公网访问模式已开启！"
@@ -567,6 +567,6 @@ _st_config_set_batch() {
     local file="$ST_DIR/config.yaml"
     [ ! -f "$file" ] && return 1
     
-    echo "$json" | yq -i '. * load("-")' "$file"
+    echo "$json" | yq -i '. * load("/dev/stdin")' "$file"
 }
 
