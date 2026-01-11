@@ -176,6 +176,17 @@ install_requirements_smart() {
             
             sys_install_pkg "$sys_pkgs"
         fi
+        
+        if grep -q "pydantic" "$req_file"; then
+            if command -v ui_print &>/dev/null; then
+                ui_print info "正在为 Termux 编译 pydantic-core..."
+            else
+                echo ">>> 正在为 Termux 编译 pydantic-core..."
+            fi
+            ensure_python_build_deps
+            # 在 venv 激活前预先安装 build 依赖，或者在激活后安装。
+            # 这里将在下面激活 venv 后执行，但为了确保编译环境，ensure_python_build_deps 必须在之前。
+        fi
     fi
 
     if [ ! -f "$venv_path/bin/activate" ]; then
@@ -184,6 +195,11 @@ install_requirements_smart() {
     fi
     
     source "$venv_path/bin/activate"
+    
+    if [ "$OS_TYPE" == "TERMUX" ] && grep -q "pydantic" "$req_file"; then
+        echo ">>> [Termux] 强制编译 pydantic-core 以修复运行库兼容性..."
+        pip install pydantic-core --no-binary pydantic-core
+    fi
     
     if [ "$OS_TYPE" == "TERMUX" ] && [ "$mode" == "compile" ]; then
         export CC="clang"

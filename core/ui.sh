@@ -173,6 +173,7 @@ ui_input_validated() {
             "numeric") [[ "$result" =~ ^[0-9]+$ ]] && is_ok=true ;;
             "url") [[ "$result" =~ ^https?:// ]] && is_ok=true ;;
             "ip") [[ "$result" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] && is_ok=true ;;
+            "host") [[ "$result" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}(:[0-9]{1,5})?$ ]] && is_ok=true ;;
             "alphanumeric") [[ "$result" =~ ^[a-zA-Z0-9_-]+$ ]] && is_ok=true ;;
             "any"|*) is_ok=true ;;
         esac

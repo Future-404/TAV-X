@@ -593,19 +593,32 @@ verify_kill_switch() {
     fi
 }
 get_modules_status_line() {
-    local line=""
+    local running_apps=()
     local run_dir="$TAVX_DIR/run"
     if [ ! -d "$run_dir" ]; then return; fi
+    
     for pid_file in "$run_dir"/*.pid; do
         [ ! -f "$pid_file" ] && continue
         local name=$(basename "$pid_file" .pid)
-        if [[ "$name" == "cf_manager" || "$name" == "audio_heartbeat" || "$name" == "cloudflare_monitor" ]]; then continue; fi
+        # 排除系统级/监控级进程
+        if [[ "$name" == "cf_manager" || "$name" == "audio_heartbeat" || "$name" == "cloudflare_monitor" ]]; then 
+            continue
+        fi
+        
         local pid=$(cat "$pid_file")
         if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then 
-            line="$line ${GREEN}● ${NC}$name  "
+            running_apps+=("$name")
         fi
     done
-    echo -e "$line"
+    
+    local count=${#running_apps[@]}
+    if [ $count -eq 0 ]; then
+        echo ""
+    elif [ $count -eq 1 ]; then
+        echo -e "${GREEN}● ${NC}${running_apps[0]}"
+    else
+        echo -e "${GREEN}● ${NC}${running_apps[0]} 等 ${count} 个应用正在运行"
+    fi
 }
 
 ensure_backup_dir() {

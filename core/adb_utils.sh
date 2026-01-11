@@ -250,11 +250,11 @@ adb_manager_ui() {
         local CHOICE=$(ui_menu "请选择操作" "🤝 无线配对" "🔗 快速连接" "⚡ 执行智能保活" "🎵 开启音频心跳" "🔇 关闭音频心跳" "♻️  撤销所有优化" "🗑️  重置环境" "🔙 返回")
         case "$CHOICE" in
             *"配对"*)
-                local host=$(ui_input_validated "输入 IP:端口" "127.0.0.1:" "ip")
+                local host=$(ui_input_validated "输入 IP:端口" "127.0.0.1:" "host")
                 local code=$(ui_input_validated "输入 6 位配对码" "" "numeric")
                 [ -n "$code" ] && ui_spinner "配对中..." "adb pair '$host' '$code'" && ui_pause ;;
             *"连接"*)
-                local target=$(ui_input_validated "输入 IP:端口" "127.0.0.1:" "ip")
+                local target=$(ui_input_validated "输入 IP:端口" "127.0.0.1:" "host")
                 [ -n "$target" ] && ui_spinner "连接中..." "adb connect '$target'" && ui_pause ;;
             *"智能保活"*)
                 if ! check_adb_connection; then ui_print error "请先连接设备！"; ui_pause; continue; fi
