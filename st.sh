@@ -36,16 +36,13 @@ PROXY_PORTS=(
 : "${REPO_PATH:=Future-404/TAV-X.git}"
 : "${TAV_VERSION:=Latest}"
 
-if [ -n "$TERMUX_VERSION" ]; then
-    export TAVX_DIR="/data/data/com.termux/files/home/.tav_x"
-else
-    export TAVX_DIR="${HOME}/.tav_x"
-fi
+export TAVX_DIR="${HOME}/.tav_x"
 
-CURRENT_SCRIPT=$(realpath "$0" 2>/dev/null || echo "$0")
-INSTALLED_SCRIPT=$(realpath "$TAVX_DIR/st.sh" 2>/dev/null || echo "$TAVX_DIR/st.sh")
+FORCE_UPDATE=false
+if [ "$TAVX_INSTALLER_MODE" == "true" ]; then FORCE_UPDATE=true; fi
+if [[ "$1" == "update" || "$1" == "install" || "$1" == "reinstall" ]]; then FORCE_UPDATE=true; fi
 
-if [ -f "$TAVX_DIR/core/main.sh" ] && [ "$CURRENT_SCRIPT" == "$INSTALLED_SCRIPT" ]; then
+if [ -f "$TAVX_DIR/core/main.sh" ] && [ "$FORCE_UPDATE" == "false" ]; then
     exec bash "$TAVX_DIR/core/main.sh" "$@"
 fi
 
@@ -196,7 +193,6 @@ if [ "$INSTALL_SUCCESS" = true ]; then
     
     chmod +x "$TAVX_DIR/st.sh" "$TAVX_DIR"/core/*.sh "$TAVX_DIR"/modules/*.sh 2>/dev/null
     
-    # Create .bashrc if it doesn't exist (common in fresh Termux installs)
     if [ ! -f "$HOME/.bashrc" ]; then
         touch "$HOME/.bashrc"
     fi
