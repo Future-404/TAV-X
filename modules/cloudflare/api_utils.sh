@@ -28,6 +28,8 @@ _cf_api_call() {
         return 1
     fi
 }
+export -f _cf_api_vars
+export -f _cf_api_call
 
 
 cf_verify_token() {
@@ -160,7 +162,11 @@ alive_tunnels=$(cloudflared tunnel list 2>/dev/null | awk 'NR>1 {print $1}')
         ui_print info "扫描 Zone: $zone_name"
 
         local dns_json
-        dns_json=$(_cf_api_call "GET" "/zones/$zone_id/dns_records?per_page=100&type=CNAME") || continue
+        # 捕获错误输出，避免打印原始 JSON 报错
+        if ! dns_json=$(_cf_api_call "GET" "/zones/$zone_id/dns_records?per_page=100&type=CNAME" 2>/dev/null); then
+            ui_print warn "跳过: 无法访问该 Zone (可能无权限)。"
+            continue
+        fi
 
         while read -r line; do
             [ -z "$line" ] && continue

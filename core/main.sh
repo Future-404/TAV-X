@@ -1,5 +1,5 @@
 #!/bin/bash
-# TAV-X Core: Main Logic (Refactored)
+# TAV-X Core: Main 
 set +m
 
 source "$TAVX_DIR/core/env.sh"
@@ -68,7 +68,12 @@ app_drawer_menu() {
             
             local icon="⚪"
             local pid_file="$TAVX_DIR/run/${id}.pid"
-            if [ -f "$pid_file" ] && [ -s "$pid_file" ]; then
+            
+            if [ "$id" == "cloudflare" ]; then
+                if pgrep -f "cloudflared" >/dev/null 2>&1; then
+                    icon="🟢"
+                fi
+            elif [ -f "$pid_file" ] && [ -s "$pid_file" ]; then
                 local pid=$(cat "$pid_file")
                 if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
                     icon="🟢"

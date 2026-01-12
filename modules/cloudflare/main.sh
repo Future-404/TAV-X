@@ -76,8 +76,8 @@ cf_login() {
     fi
     
     ui_header "Cloudflare 登录授权"
-    echo -e "${YELLOW}重要提示 (手机端必读):${NC}"
-    echo -e "请先在手机浏览器登录 Cloudflare 官网，然后再进行授权。"
+    echo -e "${YELLOW}重要提示:${NC}"
+    echo -e "请先在浏览器登录 Cloudflare 官网，然后再进行授权。"
     echo -e "否则 Cloudflare 可能会在登录后丢失授权进度。"
     echo ""
     echo -e "1. 请确认浏览器已登录: ${CYAN}dash.cloudflare.com${NC}"
@@ -88,28 +88,58 @@ cf_login() {
     
     if [ -f "$CF_USER_DATA/cert.pem" ]; then
         ui_print warn "检测到已存在登录凭证。"
-        if ! ui_confirm "是否重新登录？"; then return 0; fi
+        echo -e "${YELLOW}警告: 重新登录将删除现有证书，并可能导致正在运行的隧道失效。${NC}"
+        if ! ui_confirm "确定要删除旧证书并重新登录吗？"; then return 0; fi
+        rm -f "$CF_USER_DATA/cert.pem"
     fi
     
-    ui_print info "正在获取授权链接..."
+    ui_print info "正在启动授权进程..."
     
-    local login_url=""
-    while IFS= read -r line; do
-        echo "$line"
-        if [[ "$line" == *"https://"* ]]; then
-            login_url=$(echo "$line" | grep -oE "https://[a-zA-Z0-9./?=_-]+")
+    local login_log="$TMP_DIR/cf_login.log"
+    rm -f "$login_log"
+    
+    "$CF_BIN" tunnel login > "$login_log" 2>&1 &
+    local login_pid=$!
+    
+    ui_print info "等待获取授权链接..."
+    
+    local url_found=false
+    local start_time=$(date +%s)
+    
+    while true; do
+        if [ -f "$CF_USER_DATA/cert.pem" ]; then
+            ui_print success "检测到证书已生成！"
+            break
+        fi
+        
+        if ! kill -0 "$login_pid" 2>/dev/null; then
+            ui_print error "授权进程意外退出。"
+            cat "$login_log"
+            return 1
+        fi
+        
+        if [ "$url_found" = false ] && grep -q "https://" "$login_log"; then
+            local login_url=$(grep -oE "https://[a-zA-Z0-9./?=_-]+" "$login_log" | head -n 1)
             if [ -n "$login_url" ]; then
-                ui_print success "找到授权链接，正在尝试打开浏览器..."
+                ui_print success "找到授权链接，正在打开浏览器..."
+                echo -e "🔗 链接: ${CYAN}$login_url${NC}"
                 open_browser "$login_url"
+                url_found=true
+                ui_print info "请在浏览器完成授权，完成后脚本将自动继续..."
             fi
         fi
-    done < <("$CF_BIN" tunnel login 2>&1)
+        
+        sleep 2
+    done
+    
+    kill "$login_pid" 2>/dev/null
+    wait "$login_pid" 2>/dev/null
     
     if [ -f "$CF_USER_DATA/cert.pem" ]; then
         ui_print success "登录成功！凭证已保存。"
         return 0
     else
-        ui_print error "未检测到 cert.pem，登录可能失败或被取消。"
+        ui_print error "登录失败：未检测到证书文件。"
         return 1
     fi
 }
@@ -164,10 +194,10 @@ cf_add_ingress() {
     fi
     
     ui_header "添加域名映射"
-    local domain=$(ui_input "要绑定的域名 (如 blog.example.com)" "" "false")
+    local domain=$(ui_input "要绑定的域名" "" "false")
     [ -z "$domain" ] && return
     
-    local service=$(ui_input "本地服务地址" "http://localhost:8080" "false")
+    local service=$(ui_input "本地服务地址" "http://localhost:8000" "false")
     [ -z "$service" ] && return
     
     if ui_stream_task "配置 DNS 路由..." "\"$CF_BIN\" tunnel route dns \"$name\" \"$domain\""; then
@@ -264,7 +294,7 @@ cf_create_named_tunnel() {
     if ui_stream_task "注册隧道: $name" "\"$CF_BIN\" tunnel create \"$name\""; then
         ui_print success "隧道 ID 已生成。"
     else
-        ui_print error "创建失败 (名字可能已存在)。"; ui_pause; return 1
+        ui_print error "创建失败。"; ui_pause; return 1
     fi
     
     local json_file=$(ls -t "$CF_USER_DATA"/*.json | head -n 1)

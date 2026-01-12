@@ -275,7 +275,7 @@ select_mirror_interactive() {
                 echo "$dur|$mirror" >> "$tmp_race_file"
             fi
         done
-        echo "" # 换行
+        echo ""
     }
     export -f _run_shell_speed_test
     local mirrors_flat="${MIRROR_POOL[*]}"

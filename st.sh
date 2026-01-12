@@ -120,7 +120,7 @@ select_mirror_interactive() {
     local VALID_URLS=()
     if [ -s "$tmp_file" ]; then
         sort -n "$tmp_file" -o "$tmp_file"
-        echo -e "\n\033[1;36m可用镜像列表 (按延迟排序):\033[0m"
+        echo -e "\n\033[1;36m可用镜像列表:\033[0m"
         local i=1
         while read -r dur url; do
             local mark="\033[1;32m🟢"
@@ -139,7 +139,7 @@ select_mirror_interactive() {
     fi
     rm -f "$tmp_file"
     
-    echo -e "$i. 🌐 官方源 (无视速度强制直连)"
+    echo -e "$i. 🌐 官方源"
     VALID_URLS+=("https://github.com/")
     
     echo ""
@@ -173,7 +173,7 @@ echo -e "Source: $DL_URL"
 
 INSTALL_SUCCESS=false
 if [ -d "$TAVX_DIR/.git" ]; then
-    echo -e "\033[1;33m检测到现有安装，尝试修复更新 (保留用户数据)...\033[0m"
+    echo -e "\033[1;33m检测到现有安装，尝试修复更新TAV-X...\033[0m"
     cd "$TAVX_DIR" || exit
     git remote set-url origin "$DL_URL"
     if git fetch origin main && git reset --hard origin/main; then
