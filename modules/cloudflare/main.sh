@@ -67,6 +67,32 @@ cloudflare_install() {
     fi
 }
 
+cf_import_cert() {
+    _cf_vars
+    ui_header "手动导入凭证"
+    echo -e "请选择已下载的 ${CYAN}cert.pem${NC} 文件。"
+    echo "----------------------------------------"
+    
+    local selected_file=""
+    if [ "$HAS_GUM" = true ]; then
+        selected_file=$(gum file --cursor.foreground="$C_PINK" "$HOME")
+    else
+        selected_file=$(ui_input "请输入文件绝对路径" "" "false")
+    fi
+    
+    [ -z "$selected_file" ] && return 1
+    [ ! -f "$selected_file" ] && { ui_print error "文件不存在: $selected_file"; ui_pause; return 1; }
+    
+    if ! grep -q "PRIVATE KEY" "$selected_file"; then
+        ui_print error "无效的证书文件（未检测到私钥标识）。"
+        ui_pause; return 1
+    fi
+    
+    ui_spinner "正在导入凭证..." "cp '$selected_file' '$CF_USER_DATA/cert.pem'"
+    ui_print success "导入成功！"
+    return 0
+}
+
 cf_login() {
     _cf_vars
     if [ "$OS_TYPE" == "TERMUX" ]; then
@@ -77,24 +103,24 @@ cf_login() {
     
     ui_header "Cloudflare 登录授权"
     echo -e "${YELLOW}重要提示:${NC}"
-    echo -e "请先在浏览器登录 Cloudflare 官网，然后再进行授权。"
-    echo -e "否则 Cloudflare 可能会在登录后丢失授权进度。"
-    echo ""
     echo -e "1. 请确认浏览器已登录: ${CYAN}dash.cloudflare.com${NC}"
-    echo -e "2. 如果已登录，请点击下方确认开始授权。"
+    echo -e "2. 如果自动回调失败，浏览器会下载 ${CYAN}cert.pem${NC} 文件。"
+    echo -e "3. 脚本会自动扫描下载目录，无需手动移动。"
     echo ""
     
-    if ! ui_confirm "我已在浏览器登录，开始授权"; then return 0; fi
+    local ACTION=$(ui_menu "请选择授权方式" "🚀 启动浏览器授权 (推荐)" "📂 手动导入 cert.pem" "🔙 返回")
+    case "$ACTION" in
+        *"手动"*) cf_import_cert; return $? ;;
+        *"返回"*) return 0 ;;
+    esac
     
     if [ -f "$CF_USER_DATA/cert.pem" ]; then
         ui_print warn "检测到已存在登录凭证。"
-        echo -e "${YELLOW}警告: 重新登录将删除现有证书，并可能导致正在运行的隧道失效。${NC}"
-        if ! ui_confirm "确定要删除旧证书并重新登录吗？"; then return 0; fi
+        if ! ui_confirm "重新授权将覆盖现有证书，确定吗？"; then return 0; fi
         rm -f "$CF_USER_DATA/cert.pem"
     fi
     
     ui_print info "正在启动授权进程..."
-    
     local login_log="$TMP_DIR/cf_login.log"
     rm -f "$login_log"
     
@@ -102,44 +128,67 @@ cf_login() {
     local login_pid=$!
     
     ui_print info "等待获取授权链接..."
-    
     local url_found=false
-    local start_time=$(date +%s)
-    
     while true; do
         if [ -f "$CF_USER_DATA/cert.pem" ]; then
-            ui_print success "检测到证书已生成！"
+            ui_print success "检测到证书已自动生成！"
             break
         fi
         
         if ! kill -0 "$login_pid" 2>/dev/null; then
-            ui_print error "授权进程意外退出。"
-            cat "$login_log"
-            return 1
+            ui_print warn "授权进程已结束 (可能是回调失败并转为文件下载)。"
+            break
         fi
         
         if [ "$url_found" = false ] && grep -q "https://" "$login_log"; then
             local login_url=$(grep -oE "https://[a-zA-Z0-9./?=_-]+" "$login_log" | head -n 1)
             if [ -n "$login_url" ]; then
                 ui_print success "找到授权链接，正在打开浏览器..."
-                echo -e "🔗 链接: ${CYAN}$login_url${NC}"
                 open_browser "$login_url"
                 url_found=true
-                ui_print info "请在浏览器完成授权，完成后脚本将自动继续..."
+                ui_print info "请在浏览器完成授权，成功后脚本会自动扫描..."
             fi
         fi
-        
         sleep 2
     done
     
     kill "$login_pid" 2>/dev/null
     wait "$login_pid" 2>/dev/null
     
+    if [ ! -f "$CF_USER_DATA/cert.pem" ]; then
+        ui_print info "正在自动扫描下载目录..."
+        local scan_paths=(
+            "$HOME/storage/downloads/cert*.pem"
+            "$HOME/downloads/cert*.pem"
+            "/sdcard/Download/cert*.pem"
+        )
+        
+        local latest_file=""
+        for pattern in "${scan_paths[@]}"; do
+            local found=$(ls -t $pattern 2>/dev/null | head -n 1)
+            if [ -n "$found" ]; then
+                if [ -z "$latest_file" ] || [ "$found" -nt "$latest_file" ]; then
+                    latest_file="$found"
+                fi
+            fi
+        done
+        
+        if [ -n "$latest_file" ]; then
+            ui_print info "发现最新凭证: $(basename "$latest_file")"
+            mv "$latest_file" "$CF_USER_DATA/cert.pem"
+            ui_print success "凭证已自动迁移！"
+        fi
+    fi
+
     if [ -f "$CF_USER_DATA/cert.pem" ]; then
-        ui_print success "登录成功！凭证已保存。"
+        ui_print success "登录成功！"
         return 0
     else
-        ui_print error "登录失败：未检测到证书文件。"
+        ui_print error "自动获取失败。"
+        if ui_confirm "是否手动选择已下载的 cert.pem 文件？"; then
+            cf_import_cert
+            return $?
+        fi
         return 1
     fi
 }

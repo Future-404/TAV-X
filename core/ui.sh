@@ -108,8 +108,16 @@ ui_menu() {
             echo -e "  ${YELLOW}$i.${NC} $opt" >&2
             ((i++))
         done
-        echo -n -e "\n  ${BLUE}➜${NC} 请输入编号: " >&2
-        local idx; read -r idx
+        
+        local idx
+        while true; do
+            echo -n -e "\n  ${BLUE}➜${NC} 请输入编号: " >&2
+            read -r idx
+            if [[ "$idx" =~ ^[0-9]+$ ]] && [ "$idx" -ge 1 ] && [ "$idx" -le "${#options[@]}" ]; then
+                 break
+            fi
+            echo -e "  ${RED}✘ 无效选择，请重试。${NC}" >&2
+        done
         echo "${options[$((idx-1))]}"
     fi
 }

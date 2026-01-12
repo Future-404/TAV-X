@@ -36,7 +36,7 @@ mkdir -p "$CONFIG_DIR" "$LOGS_DIR" "$RUN_DIR" "$APPS_DIR" "$TAVX_BIN"
 
 [[ ":$PATH:" != *":$TAVX_BIN:"* ]] && export PATH="$TAVX_BIN:$PATH"
 
-export CURRENT_VERSION="3.0.5"
+export CURRENT_VERSION="3.0.6"
 export NETWORK_CONFIG="$CONFIG_DIR/network.conf"
 
 export RED='\033[0;31m'
