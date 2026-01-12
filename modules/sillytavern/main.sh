@@ -155,7 +155,7 @@ sillytavern_start() {
     sillytavern_stop
     
     rm -f "$ST_LOG"
-    local START_CMD="nohup node $mem_args server.js > '$ST_LOG' 2>&1 & echo \\$! > '$ST_PID_FILE'"
+    local START_CMD="setsid nohup node $mem_args server.js > '$ST_LOG' 2>&1 & echo \$! > '$ST_PID_FILE'"
     
     if ui_spinner "启动酒馆服务..." "eval \"$START_CMD\""; then
         sleep 2

@@ -106,6 +106,8 @@ safe_log_monitor() {
     fi
 
     if command -v less &>/dev/null; then
+        echo -e "${YELLOW}💡 提示: 按 ${CYAN}q${YELLOW} 退出，按 ${CYAN}Ctrl+C${YELLOW} 暂停滚动，暂停后按 ${CYAN}F${YELLOW} 恢复${NC}"
+        sleep 1
         less -R -S +F "$file"
     else
         ui_header "实时日志预览"
@@ -733,4 +735,33 @@ get_app_path() {
 
 export -f download_file_smart
 export -f get_dynamic_repo_url
-export -f auto_load_proxy_env
+stop_all_services_routine() {
+    ui_print info "正在停止所有服务..."
+    
+    local run_dir="$TAVX_DIR/run"
+    if [ -d "$run_dir" ]; then
+        for pid_file in "$run_dir"/*.pid; do
+            [ ! -f "$pid_file" ] && continue
+            
+            local pid=$(cat "$pid_file")
+            local name=$(basename "$pid_file" .pid)
+            
+            if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+                kill -15 "$pid" 2>/dev/null
+                sleep 0.5
+                if kill -0 "$pid" 2>/dev/null; then
+                    kill -9 "$pid" 2>/dev/null
+                    ui_print warn "强制停止: $name ($pid)"
+                else
+                    ui_print success "已停止: $name"
+                fi
+            fi
+            rm -f "$pid_file"
+        done
+    fi
+    
+    if command -v termux-wake-unlock &> /dev/null; then termux-wake-unlock >/dev/null 2>&1; fi
+    rm -f "$TAVX_DIR/.temp_link"
+}
+export -f stop_all_services_routine
+

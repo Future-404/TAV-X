@@ -71,7 +71,7 @@ gcli2api_start() {
 
     gcli2api_stop
     pkill -9 -f "python.*web.py" 2>/dev/null
-    local CMD="(cd '$GCLI_DIR' && source '$GCLI_VENV/bin/activate' && export PORT='$GCLI_PORT' PASSWORD='$GCLI_PWD' HOST='$GCLI_HOST' && nohup python web.py >> '$GCLI_LOG' 2>&1 </dev/null & echo \$! > '$GCLI_PID')"
+    local CMD="(cd '$GCLI_DIR' && source '$GCLI_VENV/bin/activate' && export PORT='$GCLI_PORT' PASSWORD='$GCLI_PWD' HOST='$GCLI_HOST' && setsid nohup python web.py >> '$GCLI_LOG' 2>&1 </dev/null & echo \$! > '$GCLI_PID')"
     
     ui_print info "正在启动服务..."
     eval "$CMD"

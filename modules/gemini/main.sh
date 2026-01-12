@@ -87,7 +87,7 @@ gemini_start() {
     local p_env=""
     [ -n "$proxy" ] && p_env="http_proxy='$proxy' https_proxy='$proxy' all_proxy='$proxy'"
     
-    local CMD="cd '$GE_DIR' && source '$GE_VENV/bin/activate' && env $p_env nohup python run.py > '$GE_LOG' 2>&1 & echo \$! > '$GE_PID'"
+    local CMD="cd '$GE_DIR' && source '$GE_VENV/bin/activate' && env $p_env setsid nohup python run.py > '$GE_LOG' 2>&1 & echo \$! > '$GE_PID'"
     
     if ui_spinner "启动进程..." "eval \"$CMD\"" ; then
         sleep 2

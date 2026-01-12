@@ -18,36 +18,6 @@ scan_and_load_modules
 check_for_updates
 send_analytics
 
-stop_all_services_routine() {
-    ui_print info "正在停止所有服务..."
-    
-    local run_dir="$TAVX_DIR/run"
-    if [ -d "$run_dir" ]; then
-        for pid_file in "$run_dir"/*.pid; do
-            [ ! -f "$pid_file" ] && continue
-            
-            local pid=$(cat "$pid_file")
-            local name=$(basename "$pid_file" .pid)
-            
-            if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-                kill -15 "$pid" 2>/dev/null
-                sleep 0.5
-                if kill -0 "$pid" 2>/dev/null; then
-                    kill -9 "$pid" 2>/dev/null
-                    ui_print warn "强制停止: $name ($pid)"
-                else
-                    ui_print success "已停止: $name"
-                fi
-            fi
-            rm -f "$pid_file"
-        done
-    fi
-    
-    if command -v termux-wake-unlock &> /dev/null; then termux-wake-unlock >/dev/null 2>&1; fi
-    rm -f "$TAVX_DIR/.temp_link"
-}
-export -f stop_all_services_routine
-
 app_drawer_menu() {
     while true; do
         if [ ${#REGISTERED_MODULE_NAMES[@]} -eq 0 ]; then
@@ -219,7 +189,7 @@ while true; do
                     echo ""
                     if ui_confirm "确定要关闭所有服务吗？"; then
                         write_log "EXIT" "User requested stop all"
-                        ui_spinner "正在停止所有进程..." "stop_all_services_routine"
+                        ui_spinner "正在停止所有进程..." "source \"$TAVX_DIR/core/utils.sh\"; stop_all_services_routine"
                         ui_print success "所有服务已停止。"
                         ui_restore_terminal
                         exit 0

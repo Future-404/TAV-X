@@ -161,7 +161,7 @@ cf_quick_tunnel() {
     local log_file="$CF_LOG_DIR/quick.log"
     rm -f "$log_file"
     
-    nohup "$CF_BIN" tunnel --url "http://127.0.0.1:$port" --no-autoupdate > "$log_file" 2>&1 & disown
+    setsid nohup "$CF_BIN" tunnel --url "http://127.0.0.1:$port" --no-autoupdate > "$log_file" 2>&1 &
     echo $! > "$pid_file"
     
     local url=""
@@ -338,7 +338,7 @@ _start_named_tunnel() {
     kill_process_safe "$pid_file" "cloudflared"
     
     ui_print info "正在启动: $name ..."
-    nohup "$CF_BIN" tunnel --config "$conf" run "$name" > "$log_file" 2>&1 & disown
+    setsid nohup "$CF_BIN" tunnel --config "$conf" run "$name" > "$log_file" 2>&1 &
     echo $! > "$pid_file"
     
     sleep 2

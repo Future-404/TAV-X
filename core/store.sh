@@ -54,8 +54,7 @@ _load_store_data() {
 
 manage_shortcuts_menu() {
     local SHORTCUT_FILE="$TAVX_DIR/config/shortcuts.list"
-    local installed_ids=()
-    local installed_names=()
+    local raw_list=()
     
     for mod_dir in "$TAVX_DIR/modules/"*; do
         [ ! -d "$mod_dir" ] && continue
@@ -66,15 +65,29 @@ manage_shortcuts_menu() {
         local name=$(grep "MODULE_NAME:" "$main_sh" | cut -d ':' -f 2 | xargs)
         [ -z "$name" ] && name="$id"
         
-        installed_ids+=("$id")
-        installed_names+=("$name ($id)")
+        local status="🟡"
+        local app_path=$(get_app_path "$id")
+        if [ -d "$app_path" ] && [ -n "$(ls -A "$app_path" 2>/dev/null)" ]; then
+            status="🟢"
+        fi
+        
+        raw_list+=("$status $name|$id")
     done
     
-    if [ ${#installed_ids[@]} -eq 0 ]; then
+    if [ ${#raw_list[@]} -eq 0 ]; then
         ui_print warn "本地未发现任何模块。"
         ui_pause
         return
     fi
+    
+    IFS=$'\n' sorted_list=($(printf "%s\n" "${raw_list[@]}" | sort))
+    
+    local display_names=()
+    local mapping_ids=()
+    for item in "${sorted_list[@]}"; do
+        display_names+=("${item%|*}")
+        mapping_ids+=("${item#*|}")
+    done
     
     local current_shortcuts=()
     if [ -f "$SHORTCUT_FILE" ]; then
@@ -82,50 +95,46 @@ manage_shortcuts_menu() {
     fi
     
     ui_header "⭐ 主页快捷方式"
-    echo -e "${CYAN}请勾选要固定在主菜单顶部的应用:${NC}"
+    echo -e "  ${CYAN}勾选要固定在主菜单顶部的应用 (🟢=已安装 🟡=未安装)${NC}"
+    if [ "$HAS_GUM" = true ]; then
+        gum style --foreground "$C_DIM" "  按 <空格> 勾选，按 <回车> 提交保存"
+        echo ""
+    else
+        echo "----------------------------------------"
+    fi
     
     local new_selection=()
     
-    if command -v gum &>/dev/null; then
-        export GUM_CHOOSE_SELECTED=""
-        if [ ${#current_shortcuts[@]} -gt 0 ]; then
-             local selected_labels=()
-             for cur in "${current_shortcuts[@]}"; do
-                 for i in "${!installed_ids[@]}"; do
-                     if [ "${installed_ids[$i]}" == "$cur" ]; then
-                         selected_labels+=("${installed_names[$i]}")
-                         break
-                     fi
-                 done
-             done
-             
-             if [ ${#selected_labels[@]} -gt 0 ]; then
-                 local joined_sel=$(IFS=,; echo "${selected_labels[*]}")
-                 if [ -n "$joined_sel" ]; then
-                     export GUM_CHOOSE_SELECTED="$joined_sel"
-                 fi
-             fi
-        fi
+    if [ "$HAS_GUM" = true ]; then
+        local selected_labels=()
+        for cur in "${current_shortcuts[@]}"; do
+            for i in "${!mapping_ids[@]}"; do
+                if [ "${mapping_ids[$i]}" == "$cur" ]; then
+                    selected_labels+=("${display_names[$i]}")
+                    break
+                fi
+            done
+        done
         
-        local choices=$(gum choose --no-limit -- "${installed_names[@]}")
+        export GUM_CHOOSE_SELECTED=$(IFS=,; echo "${selected_labels[*]}")
+        local choices=$(gum choose --no-limit --header="" --cursor="👉 " --cursor.foreground="$C_PINK" --selected.foreground="$C_PINK" -- "${display_names[@]}")
         unset GUM_CHOOSE_SELECTED
+        
         new_selection=()
         IFS=$'\n' read -rd '' -a choices_arr <<< "$choices"
         for choice in "${choices_arr[@]}"; do
             [ -z "$choice" ] && continue
-            for i in "${!installed_names[@]}"; do
-                if [ "${installed_names[$i]}" == "$choice" ]; then
-                    new_selection+=("${installed_ids[$i]}")
+            for i in "${!display_names[@]}"; do
+                if [ "${display_names[$i]}" == "$choice" ]; then
+                    new_selection+=("${mapping_ids[$i]}")
                     break
                 fi
             done
         done
     else
-        ui_print info "提示：安装 gum 可以使用多选界面。"
-        echo "----------------------------------------"
-        for i in "${!installed_ids[@]}"; do
-             local id="${installed_ids[$i]}"
-             local name="${installed_names[$i]}"
+        for i in "${!display_names[@]}"; do
+             local id="${mapping_ids[$i]}"
+             local name="${display_names[$i]}"
              local is_pinned="false"
              for cur in "${current_shortcuts[@]}"; do [[ "$cur" == "$id" ]] && is_pinned="true"; done
              
@@ -136,11 +145,9 @@ manage_shortcuts_menu() {
         done
     fi
     
-    > "$SHORTCUT_FILE"
-    for s in "${new_selection[@]}"; do
-        echo "$s" >> "$SHORTCUT_FILE"
-    done
+    printf "%s\n" "${new_selection[@]}" > "$SHORTCUT_FILE"
     ui_print success "快捷方式已更新！"
+    ui_pause
 }
 
 app_store_menu() {
