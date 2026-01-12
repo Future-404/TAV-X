@@ -85,21 +85,7 @@ ui_dashboard() {
     fi
 
     if [ -n "$modules_line" ]; then
-        local mod_items=()
-        IFS=' ' read -r -a mod_items <<< "$modules_line"
-        
-        local m_count=0
-        echo -n "  "
-        for m in "${mod_items[@]}"; do
-            [ -z "$m" ] && continue
-            ((m_count++))
-            echo -n -e "$m"
-            if [ $((m_count % 3)) -eq 0 ]; then
-                echo -e "\n  "
-            else
-                echo -n "    "
-            fi
-        done
+        echo -e "  $modules_line"
         echo ""
     fi
 }

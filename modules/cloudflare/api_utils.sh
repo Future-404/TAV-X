@@ -65,7 +65,6 @@ cf_configure_api_token() {
     ui_pause
 }
 
-# 根据域名自动删除dns记录
 cf_api_delete_dns() {
     local hostname="$1"
     [ -z "$hostname" ] && return 1
@@ -162,7 +161,7 @@ alive_tunnels=$(cloudflared tunnel list 2>/dev/null | awk 'NR>1 {print $1}')
         ui_print info "扫描 Zone: $zone_name"
 
         local dns_json
-        # 捕获错误输出，避免打印原始 JSON 报错
+        
         if ! dns_json=$(_cf_api_call "GET" "/zones/$zone_id/dns_records?per_page=100&type=CNAME" 2>/dev/null); then
             ui_print warn "跳过: 无法访问该 Zone (可能无权限)。"
             continue

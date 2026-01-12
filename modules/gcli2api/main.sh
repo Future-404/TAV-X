@@ -34,7 +34,6 @@ gcli2api_install() {
     
     mkdir -p "$GCLI_DIR"
     
-    # 提前准备网络，以便在需要时进行交互式选源
     prepare_network_strategy
     
     if [ ! -d "$GCLI_DIR/.git" ]; then
@@ -71,24 +70,17 @@ gcli2api_start() {
     fi
 
     gcli2api_stop
-    
-    local WRAPPER="$GCLI_DIR/start_wrapper.sh"
-    cat > "$WRAPPER" <<EOF
-#!/bin/bash
-source "$GCLI_VENV/bin/activate"
-export PORT="$GCLI_PORT" PASSWORD="$GCLI_PWD" HOST="$GCLI_HOST"
-exec python web.py
-EOF
-    chmod +x "$WRAPPER"
-    
-    echo "--- GCLI Start \$(date) --- " > "$GCLI_LOG"
-    local CMD="cd '$GCLI_DIR' && nohup ./start_wrapper.sh >> '$GCLI_LOG' 2>&1 & echo \$! > '$GCLI_PID'"
+    pkill -9 -f "python.*web.py" 2>/dev/null
+    local CMD="(cd '$GCLI_DIR' && source '$GCLI_VENV/bin/activate' && export PORT='$GCLI_PORT' PASSWORD='$GCLI_PWD' HOST='$GCLI_HOST' && nohup python web.py >> '$GCLI_LOG' 2>&1 </dev/null & echo \$! > '$GCLI_PID')"
     
     ui_print info "正在启动服务..."
     eval "$CMD"
     sleep 2
     
-    if check_process_smart "$GCLI_PID" "python.*web.py"; then
+    local real_pid=$(pgrep -f "python.*web.py" | grep -v "grep" | head -n 1)
+    
+    if [ -n "$real_pid" ]; then
+        echo "$real_pid" > "$GCLI_PID"
         ui_print success "启动成功！"
     else
         ui_print error "启动失败，请查看日志。"

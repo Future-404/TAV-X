@@ -31,6 +31,7 @@ stop_all_services_routine() {
             
             if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
                 kill -15 "$pid" 2>/dev/null
+                sleep 0.5
                 if kill -0 "$pid" 2>/dev/null; then
                     kill -9 "$pid" 2>/dev/null
                     ui_print warn "强制停止: $name ($pid)"
