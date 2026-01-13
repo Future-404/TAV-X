@@ -8,6 +8,25 @@ source "$TAVX_DIR/core/utils.sh"
 
 PY_CONFIG="$TAVX_DIR/config/python.conf"
 
+get_python_version() {
+    if command -v python3 &>/dev/null; then
+        python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
+    else
+        echo "0.0"
+    fi
+}
+export -f get_python_version
+
+check_python_version_match() {
+    local target="$1"
+    local current=$(get_python_version)
+    if [ "$current" == "$target" ]; then
+        return 0
+    fi
+    return 1
+}
+export -f check_python_version_match
+
 select_pypi_mirror() {
     local current_mirror=""
     if [ -f "$PY_CONFIG" ]; then
@@ -30,6 +49,8 @@ select_pypi_mirror() {
         "🇨🇳 清华大学" \
         "🇨🇳 阿里云" \
         "🇨🇳 腾讯云" \
+        "🇨🇳 华为云" \
+        "🇨🇳 中国科大" \
         "🌐 官方源" \
         "✏️  自定义输入" \
         "🔙 返回" \
@@ -41,6 +62,8 @@ select_pypi_mirror() {
         *"清华"*) new_url="https://pypi.tuna.tsinghua.edu.cn/simple" ;; 
         *"阿里"*) new_url="https://mirrors.aliyun.com/pypi/simple/" ;; 
         *"腾讯"*) new_url="https://mirrors.cloud.tencent.com/pypi/simple" ;; 
+        *"华为"*) new_url="https://repo.huaweicloud.com/repository/pypi/simple" ;; 
+        *"科大"*) new_url="https://pypi.mirrors.ustc.edu.cn/simple/" ;; 
         *"官方"*) new_url="https://pypi.org/simple" ;; 
         *"自定义"*) new_url=$(ui_input "请输入完整 Index URL" "" "false") ;; 
     esac
@@ -176,17 +199,6 @@ install_requirements_smart() {
             
             sys_install_pkg "$sys_pkgs"
         fi
-        
-        if grep -q "pydantic" "$req_file"; then
-            if command -v ui_print &>/dev/null; then
-                ui_print info "正在为 Termux 编译 pydantic-core..."
-            else
-                echo ">>> 正在为 Termux 编译 pydantic-core..."
-            fi
-            ensure_python_build_deps
-            # 在 venv 激活前预先安装 build 依赖，或者在激活后安装。
-            # 这里将在下面激活 venv 后执行，但为了确保编译环境，ensure_python_build_deps 必须在之前。
-        fi
     fi
 
     if [ ! -f "$venv_path/bin/activate" ]; then
@@ -195,11 +207,6 @@ install_requirements_smart() {
     fi
     
     source "$venv_path/bin/activate"
-    
-    if [ "$OS_TYPE" == "TERMUX" ] && grep -q "pydantic" "$req_file"; then
-        echo ">>> [Termux] 强制编译 pydantic-core 以修复运行库兼容性..."
-        pip install pydantic-core --no-binary pydantic-core
-    fi
     
     if [ "$OS_TYPE" == "TERMUX" ] && [ "$mode" == "compile" ]; then
         export CC="clang"
@@ -252,11 +259,11 @@ python_environment_manager_ui() {
                 ui_header "卸载 Python 环境"
                 echo -e "${RED}警告：此操作将执行以下动作：${NC}"
                 if [ "$OS_TYPE" == "TERMUX" ]; then
-                    echo -e "  1. 彻底从 Termux 移除 Python 及其所有二进制文件"
-                    echo -e "  2. 清空全局 Pip 缓存"
+                    echo -e "  1. 彻底从 Termux 移除 Python & UV 及其所有二进制文件"
+                    echo -e "  2. 清空全局 Pip & UV 缓存"
                 else
-                    echo -e "  1. 清理当前用户的 Python 残留"
-                    echo -e "  2. 清空全局 Pip 缓存"
+                    echo -e "  1. 清理当前用户的 Python & UV 残留"
+                    echo -e "  2. 清空全局 Pip & UV 缓存"
                     echo -e "  (注：出于安全考虑，Linux 下不会移除系统级 Python3)"
                 fi
                 echo ""
@@ -264,15 +271,18 @@ python_environment_manager_ui() {
                 
                 ui_print info "正在执行清理..."
                 if [ "$OS_TYPE" == "TERMUX" ]; then
-                    sys_remove_pkg "python"
+                    sys_remove_pkg "python uv"
                 fi
-                ui_spinner "清理用户数据..." "source \"$TAVX_DIR/core/utils.sh\"; safe_rm ~/.cache/pip ~/.local/lib/python*"
+                ui_spinner "清理用户数据..." "source \"$TAVX_DIR/core/utils.sh\"; safe_rm ~/.cache/pip ~/.cache/uv ~/.local/lib/python* ~/.cargo/bin/uv"
                 
-                ui_print success "Python 环境已归零。"
+                ui_print success "Python & UV 环境已归零。"
                 ui_pause ;;
             *"UV"*) 
                 ui_header "UV 安装"
-                if [ "$OS_TYPE" == "TERMUX" ]; then ui_print warn "Termux 环境建议使用标准 Pip。"; else
+                if [ "$OS_TYPE" == "TERMUX" ]; then 
+                    ui_print info "正在通过 pkg 安装 UV..."
+                    sys_install_pkg "uv"
+                else
                     ui_print info "正在获取 UV..."
                     curl -LsSf https://astral.sh/uv/install.sh | sh
                 fi; ui_pause ;;

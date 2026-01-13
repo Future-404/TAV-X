@@ -215,6 +215,9 @@ ui_stream_task() {
 
     (
         export TAVX_NON_INTERACTIVE=true
+        export TAVX_DIR="$TAVX_DIR"
+        [ -n "$TERMUX_VERSION" ] && export PATH="$PREFIX/bin:$PREFIX/bin/applets:$PATH"
+        
         $stdbuf_cmd bash -c "$cmd" 2>&1
         echo $? > "$exit_status_file"
     ) | while IFS= read -r line; do

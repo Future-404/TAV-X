@@ -94,10 +94,10 @@ while true; do
     MODULES_LINE=$(get_modules_status_line)
     MEM_STR=$(get_sys_resources_info)
 
-    NET_DL="自动优选"
+    NET_DL="自动"
     if [ -f "$NETWORK_CONFIG" ]; then
         CONF=$(cat "$NETWORK_CONFIG"); TYPE=${CONF%%|*}
-        [ "$TYPE" == "PROXY" ] && NET_DL="本地加速"
+        [ "$TYPE" == "PROXY" ] && NET_DL="代理"
     fi
 
     ui_header ""

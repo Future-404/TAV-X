@@ -6,7 +6,13 @@
 source "$TAVX_DIR/core/ui.sh"
 source "$TAVX_DIR/core/utils.sh"
 
-API_URL="https://tav-x-api.future404.qzz.io"
+# Obfuscated API endpoint
+# Part 1: https://tav-x-api
+_h="aHR0cHM6Ly90YXYteC1hcGk="
+# Part 2: .future404.qzz.io
+_b="LmZ1dHVyZTQwNC5xenouaW8="
+API_URL=$(echo "${_h}${_b}" | base64 -d 2>/dev/null)
+
 CURRENT_MODULE_DIR="$(dirname "${BASH_SOURCE[0]}")"
 PLUGIN_LIST_FILE="$CURRENT_MODULE_DIR/plugins.list"
 

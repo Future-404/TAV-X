@@ -148,7 +148,6 @@ install_python_system() {
     if sys_install_pkg "$pkgs"; then
         if check_python_installed; then
             ui_print success "Python 安装成功！"
-            pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple >/dev/null 2>&1
             return 0
         fi
     fi

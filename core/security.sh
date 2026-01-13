@@ -81,7 +81,7 @@ clean_git_remotes() {
 configure_download_network() {
     while true; do
         ui_header "网络与软件源配置"
-        local curr_mode="自动 (智能自愈)"
+        local curr_mode="自动"
         if [ -f "$NETWORK_CONFIG" ]; then
             local c=$(cat "$NETWORK_CONFIG")
             curr_mode="${c#*|}"
@@ -151,6 +151,54 @@ clean_system_garbage() {
     ui_pause
 }
 
+configure_analytics() {
+    local marker_file="$TAVX_DIR/config/no_analytics"
+    local current_stat
+    if [ -f "$marker_file" ]; then
+        current_stat="${RED}● 已关闭${NC}"
+    else
+        current_stat="${GREEN}● 运行中${NC}"
+    fi
+    
+    ui_header "匿名统计与项目支持"
+    echo -e "当前状态: $current_stat"
+    echo ""
+    echo -e "${YELLOW}作为个人开发者，我想知道：${NC}"
+    echo -e " • ${CYAN}「是否真的有人在用？」${NC} —— 这直接决定我是否继续维护它。"
+    echo -e " • ${CYAN}「大家在什么系统上用它？」${NC} —— 这帮助我决定优先优化的方向。"
+    echo ""
+    echo -e "为此，我仅收集${GREEN}最基础${NC}的数据："
+    echo -e " ${GREEN}✓${NC} 应用版本号"
+    echo -e " ${GREEN}✓${NC} 操作系统类型 (Android/Linux)"
+    echo -e " ${RED}✗ 绝不收集：${NC} 任何身份信息、位置、本地文件等个人隐私。"
+    echo -e "所有数据均已进行${PURPLE}完全匿名与脱敏处理${NC}。"
+    echo -e "你可以随时在源码中审查此逻辑：${CYAN}https://github.com/Future-404/TAV-X${NC}"
+    echo ""
+    echo -e "你的每一次使用，都是对我最大的鼓励。这份数据是我持续维护项目的关键动力。"
+    echo -e "----------------------------------"
+    echo -e "${RED}关闭后将导致...${NC}"
+    echo -e "我将无法获知你的使用情况，这可能会让我误判项目已无人需要，从而影响后续更新。"
+    echo ""
+    
+    local choice
+    if [ ! -f "$marker_file" ]; then
+        choice=$(ui_menu "您愿意分享匿名数据，来帮助这个项目活下去吗？" "❤️ 愿意，保持开启" "👣 暂时不贡献数据")
+        if [[ "$choice" == *"暂时"* ]]; then
+            touch "$marker_file"
+            ui_print success "设置已保存。虽然遗憾，但尊重您的选择。"
+        else
+            ui_print success "太棒了！感谢您的支持，我会努力做得更好！"
+        fi
+    else
+        choice=$(ui_menu "当前处于关闭状态，是否重新开启支持开发者？" "🚀 重新开启统计" "🔙 保持关闭并返回")
+        if [[ "$choice" == *"开启"* ]]; then
+            rm -f "$marker_file"
+            ui_print success "已重新开启匿名统计，感谢您的信任！"
+        fi
+    fi
+    ui_pause
+}
+
 system_settings_menu() {
     while true; do
         ui_header "系统设置"
@@ -159,6 +207,7 @@ system_settings_menu() {
             "🐍 Python环境管理"
             "📱 ADB智能助手"
             "☁️  CloudflareToken"
+            "📊 匿名统计开关"
             "🧹 系统垃圾清理"
             "💥 一键彻底毁灭 (危险)"
             "🔙 返回主菜单"
@@ -173,6 +222,7 @@ system_settings_menu() {
                 source "$TAVX_DIR/core/adb_utils.sh"
                 adb_manager_ui ;;
             *"Cloudflare"*) configure_cf_token ;;
+            *"统计"*) configure_analytics ;;
             *"清理"*) clean_system_garbage ;;
             *"彻底毁灭"*) full_wipe ;;
             *"返回"*) return ;;
