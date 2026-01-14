@@ -8,7 +8,7 @@ source "$TAVX_DIR/core/ui.sh"
 source "$TAVX_DIR/core/utils.sh"
 
 install_gum_linux() {
-    echo -e "${YELLOW}>>> 正在安装 Gum (UI 组件)...${NC}"
+    echo -e "${YELLOW}>>> 正在安装 Gum ...${NC}"
     local ARCH=$(uname -m)
     local G_ARCH=""
     case "$ARCH" in
@@ -25,7 +25,7 @@ install_gum_linux() {
     fi
 
     local DL_CMD="curl -L -o $TMP_DIR/gum.tar.gz '$URL'"
-    if ui_stream_task "正在下载 Gum (UI 组件)..." "$DL_CMD"; then
+    if ui_stream_task "正在下载 Gum ..." "$DL_CMD"; then
         cd "$TMP_DIR"
         tar -xzf gum.tar.gz
         local BIN_DIR="/usr/local/bin"
@@ -52,11 +52,11 @@ export -f install_gum_linux
 
 install_yq() {
     if command -v yq &>/dev/null; then return 0; fi
-    ui_print info "正在获取 yq (YAML解析器)..."
+    ui_print info "正在获取 yq ..."
     
     if [ "$OS_TYPE" == "TERMUX" ]; then
         if sys_install_pkg "yq"; then
-            ui_print success "yq 安装成功 (pkg)"
+            ui_print success "yq 安装成功"
             return 0
         fi
         ui_print warn "pkg 安装失败，切换至手动下载模式..."

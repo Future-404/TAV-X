@@ -51,29 +51,13 @@ gcli2api_install() {
         return 1
     fi
 
-    # [加速逻辑] Termux Python 3.12 专属预编译包
-    if [ "$OS_TYPE" == "TERMUX" ] && check_python_version_match "3.12"; then
-        ui_print info "正在获取 Termux 预编译加速包..."
-        mkdir -p "$TMP_DIR/gcli_wheels"
-        local wheel_base="https://github.com/Future-404/termux-python-wheels/raw/main/wheels"
-        
-        # 必须使用 linux_aarch64 后缀以兼容 pip
-        local p_whl="pydantic_core-2.41.5-cp312-cp312-linux_aarch64.whl"
-        local m_whl="pymongo-4.16.0-cp312-cp312-linux_aarch64.whl"
-        
-        # 在子shell中激活环境并安装 wheel
-        (
-            source "$GCLI_VENV/bin/activate"
-            
-            ui_stream_task "下载 pydantic-core..." "curl -L -f -s -o '$TMP_DIR/gcli_wheels/$p_whl' '$wheel_base/$p_whl'" && \
-            pip install "$TMP_DIR/gcli_wheels/$p_whl"
-            
-            ui_stream_task "下载 pymongo..." "curl -L -f -s -o '$TMP_DIR/gcli_wheels/$m_whl' '$wheel_base/$m_whl'" && \
-            pip install "$TMP_DIR/gcli_wheels/$m_whl"
-        )
+    local TARGET_REQ="$GCLI_DIR/requirements.txt"
+    if [ "$OS_TYPE" == "TERMUX" ] && [ -f "$GCLI_DIR/requirements-termux.txt" ]; then
+        ui_print info "检测到 Termux 专属依赖列表，已自动启用加速方案。"
+        TARGET_REQ="$GCLI_DIR/requirements-termux.txt"
     fi
     
-    local INSTALL_CMD="source \"\$TAVX_DIR/core/python_utils.sh\"; install_requirements_smart '$GCLI_VENV' '$GCLI_DIR/requirements.txt' 'standard'"
+    local INSTALL_CMD="source \"\$TAVX_DIR/core/python_utils.sh\"; install_requirements_smart '$GCLI_VENV' '$TARGET_REQ' 'standard'"
     if ! ui_stream_task "正在安装 Pip 依赖 (可能较慢)..." "$INSTALL_CMD"; then
         ui_print error "依赖安装失败。"
         return 1
