@@ -21,6 +21,7 @@ show_shortcuts_help() {
     printf "  ${CYAN}%-15s${NC} %s\n" "st ps" "查看当前运行中的服务"
     printf "  ${CYAN}%-15s${NC} %s\n" "st re" "重启所有运行中的服务"
     printf "  ${CYAN}%-15s${NC} %s\n" "st stop" "一键停止所有服务"
+    printf "  ${CYAN}%-15s${NC} %s\n" "st update" "强制进入脚本更新模式"
     printf "  ${CYAN}%-15s${NC} %s\n" "st log" "查看可用日志的应用 ID"
     printf "  ${CYAN}%-15s${NC} %s\n" "st log [ID]" "实时监控指定应用日志"
     echo ""
