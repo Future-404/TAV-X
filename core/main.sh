@@ -38,17 +38,8 @@ app_drawer_menu() {
             fi
             
             local icon="⚪"
-            local pid_file="$TAVX_DIR/run/${id}.pid"
-            
-            if [ "$id" == "cloudflare" ]; then
-                if pgrep -f "cloudflared" >/dev/null 2>&1; then
-                    icon="🟢"
-                fi
-            elif [ -f "$pid_file" ] && [ -s "$pid_file" ]; then
-                local pid=$(cat "$pid_file")
-                if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-                    icon="🟢"
-                fi
+            if is_app_running "$id"; then
+                icon="🟢"
             fi
             
             APP_MENU_OPTS+=("$icon $name")
@@ -121,8 +112,7 @@ while true; do
                 if [ $idx -ge 0 ]; then
                     name="${REGISTERED_MODULE_NAMES[$idx]}"
                     icon="⚪"
-                    pid_file="$TAVX_DIR/run/${sid}.pid"
-                    if [ -f "$pid_file" ] && [ -s "$pid_file" ] && kill -0 $(cat "$pid_file") 2>/dev/null; then
+                    if is_app_running "$sid"; then
                         icon="🟢"
                     fi
                     

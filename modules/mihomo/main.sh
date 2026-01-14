@@ -132,38 +132,48 @@ EOF
     fi
 
     mihomo_stop
-    echo "--- Mihomo Start $(date) --- " > "$MIHOMO_LOG"
     
     ui_print info "正在启动 Mihomo 核心服务..."
-    cd "$MIHOMO_DIR" || return 1
     
-    local START_CMD="setsid ./mihomo -d . >> '$MIHOMO_LOG' 2>&1 & echo \$!"
-    local new_pid=$(eval "$START_CMD")
-    
-    if [ -n "$new_pid" ]; then
-        echo "$new_pid" > "$MIHOMO_PID"
-        renice -n -5 -p "$new_pid" >/dev/null 2>&1
-        
-        sleep 2
-        if check_process_smart "$MIHOMO_PID" "mihomo"; then
-            ui_print success "核心服务启动成功！"
-            echo -e "  - 控制面板: http://127.0.0.1:19090/ui"
-            echo -e "  - 代理端口: 17890 (HTTP) / 17891 (SOCKS5)"
-        else
-            ui_print error "服务未能正常启动。"
-            echo -e "${YELLOW}最后 10 行日志：${NC}"
-            tail -n 10 "$MIHOMO_LOG"
-        fi
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        tavx_service_register "mihomo" "./mihomo -d ." "$MIHOMO_DIR"
+        tavx_service_control "up" "mihomo"
+        ui_print success "服务启动命令已发送。"
     else
-        ui_print error "系统进程创建失败。"
+        cd "$MIHOMO_DIR" || return 1
+        echo "--- Mihomo Start $(date) --- " > "$MIHOMO_LOG"
+        local START_CMD="setsid ./mihomo -d . >> '$MIHOMO_LOG' 2>&1 & echo \$!"
+        local new_pid=$(eval "$START_CMD")
+        
+        if [ -n "$new_pid" ]; then
+            echo "$new_pid" > "$MIHOMO_PID"
+            renice -n -5 -p "$new_pid" >/dev/null 2>&1
+            
+            sleep 2
+            if check_process_smart "$MIHOMO_PID" "mihomo"; then
+                ui_print success "核心服务启动成功！"
+                echo -e "  - 控制面板: http://127.0.0.1:19090/ui"
+                echo -e "  - 代理端口: 17890 (HTTP) / 17891 (SOCKS5)"
+            else
+                ui_print error "服务未能正常启动。"
+                echo -e "${YELLOW}最后 10 行日志：${NC}"
+                tail -n 10 "$MIHOMO_LOG"
+            fi
+        else
+            ui_print error "系统进程创建失败。"
+        fi
     fi
 }
 
 mihomo_stop() {
     _mihomo_vars
-    kill_process_safe "$MIHOMO_PID" "mihomo" >/dev/null 2>&1
-    pkill -9 -f "mihomo" >/dev/null 2>&1
-    rm -f "$MIHOMO_PID"
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        tavx_service_control "down" "mihomo"
+    else
+        kill_process_safe "$MIHOMO_PID" "mihomo" >/dev/null 2>&1
+        pkill -9 -f "mihomo" >/dev/null 2>&1
+        rm -f "$MIHOMO_PID"
+    fi
 }
 
 mihomo_uninstall() {
@@ -181,13 +191,24 @@ mihomo_menu() {
         _mihomo_vars
         ui_header "Mihomo 代理管理"
         local state="stopped"; local text="已停止"; local info=()
-        if check_process_smart "$MIHOMO_PID" "mihomo"; then
+        local log_path="$MIHOMO_LOG"
+        [ "$OS_TYPE" == "TERMUX" ] && log_path="$PREFIX/var/service/mihomo/log/current"
+
+        if [ "$OS_TYPE" == "TERMUX" ]; then
+            if sv status mihomo 2>/dev/null | grep -q "^run:"; then
+                state="running"; text="运行中"
+            fi
+        elif check_process_smart "$MIHOMO_PID" "mihomo"; then
             state="running"; text="运行中"
+        fi
+
+        if [ "$state" == "running" ]; then
             info+=( "面板: http://127.0.0.1:19090/ui" "代理: 127.0.0.1:17890" )
         fi
+        
         ui_status_card "$state" "$text" "${info[@]}"
         
-        local CHOICE=$(ui_menu "操作菜单" "🚀 启动/重启" "🛑 停止服务" "🔗 设置订阅" "🔧 高级配置 (Patch)" "🔑 设置密钥" "📊 打开面板" "📜 查看日志" "⚙️  更新核心" "🗑️  卸载模块" "🔙 返回")
+        local CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🛑 停止服务" "🔗 设置订阅" "🔧 高级配置 (Patch)" "🔑 设置密钥" "📊 打开面板" "📜 查看日志" "⚙️  更新核心" "🗑️  卸载模块" "🔙 返回")
         case "$CHOICE" in
             *"启动"*) mihomo_start; ui_pause ;; 
             *"停止"*) mihomo_stop; ui_print success "已停止"; ui_pause ;; 
@@ -225,7 +246,6 @@ mihomo_menu() {
                 if [ ! -f "$MIHOMO_PATCH" ]; then
                     ui_print info "正在生成示例补丁文件..."
                     cat > "$MIHOMO_PATCH" <<EOF
-# Mihomo 高级配置补丁
 # 此文件内容将在启动时合并到 config.yaml 中 
 # 你可以在此覆盖默认设置，或添加自定义规则
 
@@ -259,7 +279,7 @@ EOF
                 local sec=$(ui_input "面板密钥" "$cur" "false")
                 echo "$sec" > "$MIHOMO_SECRET_CONF"; ui_print success "已保存"; ui_pause ;; 
             *"面板"*) open_browser "http://127.0.0.1:19090/ui" ;; 
-            *"日志"*) safe_log_monitor "$MIHOMO_LOG" ;; 
+            *"日志"*) safe_log_monitor "$log_path" ;; 
             *"更新"*) mihomo_install ;; 
             *"卸载"*) mihomo_uninstall && [ $? -eq 2 ] && return ;; 
             *"返回"*) return ;; 

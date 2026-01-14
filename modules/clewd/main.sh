@@ -80,34 +80,41 @@ clewd_start() {
     elif [ -f "clewd.js" ]; then RUN_CMD="node clewd.js"
     fi
 
-    clewd_stop
-    echo "--- Clewd Start $(date) --- " > "$CL_LOG"
-    local START_CMD="setsid nohup $RUN_CMD >> '$CL_LOG' 2>&1 & echo \$! > '$CL_PID'"
-    
-    if ui_spinner "正在启动后台服务..." "eval \"$START_CMD\" "; then
-        sleep 2
-        if check_process_smart "$CL_PID" "clewdr|node.*clewd\.js"; then
-            local API_PASS=$(grep -iE "password:|Pass:" "$CL_LOG" | head -n 1 | awk -F': ' '{print $2}' | tr -d ' ')
-            [ -z "$API_PASS" ] && API_PASS=$(grep -E "API Password:|Pass:" "$CL_LOG" | head -n 1 | awk '{print $NF}')
-            if [ -n "$API_PASS" ]; then echo "API_PASS=$API_PASS" > "$CL_SECRETS"; fi
-            ui_print success "服务已启动！"
-        else
-            ui_print error "启动失败，进程未驻留。"
-            ui_pause; return 1
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        tavx_service_register "clewd" "$RUN_CMD" "$CL_DIR"
+        tavx_service_control "up" "clewd"
+        ui_print success "服务启动命令已发送。"
+    else
+        clewd_stop
+        echo "--- Clewd Start $(date) --- " > "$CL_LOG"
+        local START_CMD="setsid nohup $RUN_CMD >> '$CL_LOG' 2>&1 & echo \$! > '$CL_PID'"
+        
+        if ui_spinner "正在启动后台服务..." "eval \"$START_CMD\" "; then
+            sleep 2
+            if check_process_smart "$CL_PID" "clewdr|node.*clewd\.js"; then
+                ui_print success "服务已启动！"
+            else
+                ui_print error "启动失败，进程未驻留。"
+                ui_pause; return 1
+            fi
         fi
     fi
 }
 
 clewd_stop() {
     _clewd_vars
-    kill_process_safe "$CL_PID" "clewdr|node.*clewd\.js"
-    pkill -f "clewdr" 2>/dev/null
-    pkill -f "node clewd.js" 2>/dev/null
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        tavx_service_control "down" "clewd"
+    else
+        kill_process_safe "$CL_PID" "clewdr|node.*clewd\.js"
+        pkill -f "clewdr" 2>/dev/null
+        pkill -f "node clewd.js" 2>/dev/null
+    fi
 }
 
 clewd_uninstall() {
     _clewd_vars
-    ui_header "卸卸 Clewd"
+    ui_header "卸载 Clewd"
     if ! verify_kill_switch; then return; fi
     
     clewd_stop
@@ -123,16 +130,27 @@ clewd_menu() {
         ui_header "Clewd AI 反代管理"
         
         local state="stopped"; local text="已停止"; local info=()
-        if check_process_smart "$CL_PID" "clewdr|node.*clewd\.js"; then
+        local log_path="$CL_LOG"
+        [ "$OS_TYPE" == "TERMUX" ] && log_path="$PREFIX/var/service/clewd/log/current"
+
+        if [ "$OS_TYPE" == "TERMUX" ]; then
+            if sv status clewd 2>/dev/null | grep -q "^run:"; then
+                state="running"; text="运行中"
+            fi
+        elif check_process_smart "$CL_PID" "clewdr|node.*clewd\.js"; then
             state="running"; text="运行中"
+        fi
+
+        if [ "$state" == "running" ]; then
             local pass="未知"
-            if [ -f "$CL_SECRETS" ]; then
-                pass=$(grep "^API_PASS=" "$CL_SECRETS" | cut -d'=' -f2)
-                [ -z "$pass" ] && pass="未知"
+            if [ -f "$log_path" ]; then
+                local API_PASS=$(grep -iE "password:|Pass:" "$log_path" | head -n 1 | awk -F': ' '{print $2}' | tr -d ' ')
+                [ -z "$API_PASS" ] && API_PASS=$(grep -E "API Password:|Pass:" "$log_path" | head -n 1 | awk '{print $NF}')
+                [ -n "$API_PASS" ] && pass="$API_PASS"
             fi
             
             local port="8444"
-            [ -f "$CL_LOG" ] && grep -q "8484" "$CL_LOG" && port="8484"
+            [ -f "$log_path" ] && grep -q "8484" "$log_path" && port="8484"
             
             info+=( "接口: http://127.0.0.1:$port/v1" "密钥: $pass" )
         else
@@ -140,18 +158,18 @@ clewd_menu() {
         fi
         
         ui_status_card "$state" "$text" "${info[@]}"
-        local CHOICE=$(ui_menu "请选择操作" "🚀 启动/重启" "🔑 查看密码" "📜 查看日志" "🛑 停止服务" "📥 更新重装" "🗑️  卸载模块" "🔙 返回")
+        local CHOICE=$(ui_menu "请选择操作" "🚀 启动服务" "🔑 查看密码" "📜 查看日志" "🛑 停止服务" "📥 更新重装" "🗑️  卸载模块" "🔙 返回")
         case "$CHOICE" in
-            *"启动"*) clewd_start ;; 
+            *"启动"*) clewd_start; ui_pause ;; 
             *"密码"*) 
-                if [ -f "$CL_LOG" ]; then
+                if [ -f "$log_path" ]; then
                     ui_header "Clewd 运行密码"
-                    grep -iE "password|pass" "$CL_LOG" | head -n 10
+                    grep -iE "password|pass" "$log_path" | head -n 10
                 else
                     ui_print warn "日志文件不存在。"
                 fi
                 ui_pause ;; 
-            *"日志"*) safe_log_monitor "$CL_LOG" ;; 
+            *"日志"*) safe_log_monitor "$log_path" ;; 
             *"停止"*) clewd_stop; ui_print success "已停止"; ui_pause ;; 
             *"更新"*) clewd_install ;; 
             *"卸载"*) clewd_uninstall && [ $? -eq 2 ] && return ;; 

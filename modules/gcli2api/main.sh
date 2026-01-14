@@ -77,26 +77,39 @@ gcli2api_start() {
 
     gcli2api_stop
     pkill -9 -f "python.*web.py" 2>/dev/null
-    local CMD="(cd '$GCLI_DIR' && source '$GCLI_VENV/bin/activate' && export PORT='$GCLI_PORT' PASSWORD='$GCLI_PWD' HOST='$GCLI_HOST' && setsid nohup python web.py >> '$GCLI_LOG' 2>&1 </dev/null & echo \$! > '$GCLI_PID')"
     
+    local RUN_CMD="source '$GCLI_VENV/bin/activate' && export PORT='$GCLI_PORT' PASSWORD='$GCLI_PWD' HOST='$GCLI_HOST' && python web.py"
+
     ui_print info "正在启动服务..."
-    eval "$CMD"
-    sleep 2
-    
-    local real_pid=$(pgrep -f "python.*web.py" | grep -v "grep" | head -n 1)
-    
-    if [ -n "$real_pid" ]; then
-        echo "$real_pid" > "$GCLI_PID"
-        ui_print success "启动成功！"
+
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        tavx_service_register "gcli2api" "sh -c \"$RUN_CMD\"" "$GCLI_DIR"
+        tavx_service_control "up" "gcli2api"
+        ui_print success "服务启动命令已发送。"
     else
-        ui_print error "启动失败，请查看日志。"
-        tail -n 5 "$GCLI_LOG"
+        local CMD="(cd '$GCLI_DIR' && $RUN_CMD >> '$GCLI_LOG' 2>&1 </dev/null & echo \$! > '$GCLI_PID')"
+        eval "$CMD"
+        sleep 2
+        
+        local real_pid=$(pgrep -f "python.*web.py" | grep -v "grep" | head -n 1)
+        
+        if [ -n "$real_pid" ]; then
+            echo "$real_pid" > "$GCLI_PID"
+            ui_print success "启动成功！"
+        else
+            ui_print error "启动失败，请查看日志。"
+            tail -n 5 "$GCLI_LOG"
+        fi
     fi
 }
 
 gcli2api_stop() {
     _gcli2api_vars
-    kill_process_safe "$GCLI_PID" "python.*web.py"
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        tavx_service_control "down" "gcli2api"
+    else
+        kill_process_safe "$GCLI_PID" "python.*web.py"
+    fi
 }
 
 gcli2api_uninstall() {
@@ -114,13 +127,24 @@ gcli2api_menu() {
         _gcli2api_load_config
         ui_header "🌐 GCLI 转 API"
         local state="stopped"; local text="未运行"; local info=()
-        if check_process_smart "$GCLI_PID" "python.*web.py"; then
+        local log_path="$GCLI_LOG"
+        [ "$OS_TYPE" == "TERMUX" ] && log_path="$PREFIX/var/service/gcli2api/log/current"
+
+        if [ "$OS_TYPE" == "TERMUX" ]; then
+            if sv status gcli2api 2>/dev/null | grep -q "^run:"; then
+                state="running"; text="运行中"
+            fi
+        elif check_process_smart "$GCLI_PID" "python.*web.py"; then
             state="running"; text="运行中"
+        fi
+
+        if [ "$state" == "running" ]; then
             info+=( "地址: http://127.0.0.1:$GCLI_PORT" "密码: $GCLI_PWD" )
         fi
+        
         ui_status_card "$state" "$text" "${info[@]}"
         
-        local CHOICE=$(ui_menu "操作菜单" "🚀 启动/重启" "🛑 停止服务" "⚙️  修改配置" "📜 查看日志" "⬆️  更新重装" "🗑️  卸载模块" "🔙 返回")
+        local CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🛑 停止服务" "⚙️  修改配置" "📜 查看日志" "⬆️  更新重装" "🗑️  卸载模块" "🔙 返回")
         case "$CHOICE" in
             *"启动"*) gcli2api_start; ui_pause ;; 
             *"停止"*) gcli2api_stop; ui_print success "已停止"; ui_pause ;; 
@@ -133,7 +157,7 @@ gcli2api_menu() {
                 write_env_safe "$GCLI_CONF" "GCLI_HOST" "$GCLI_HOST"
                 
                 ui_print success "配置已保存"; ui_pause ;; 
-            *"日志"*) safe_log_monitor "$GCLI_LOG" ;; 
+            *"日志"*) safe_log_monitor "$log_path" ;; 
             *"更新"*) gcli2api_install ;; 
             *"卸载"*) gcli2api_uninstall && [ $? -eq 2 ] && return ;; 
             *"返回"*) return ;; 

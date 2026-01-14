@@ -22,10 +22,8 @@ fi
 
 mkdir -p "$TMP_DIR"
 
-# 标准化运行目录：优先使用传入变量，其次尝试检测当前脚本位置，最后默认为 ~/.tav_x
 if [ -z "$TAVX_DIR" ]; then
     CURRENT_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    # 假设 env.sh 位于 core/ 目录，上一级即为项目根目录
     POSSIBLE_ROOT="$(dirname "$CURRENT_SCRIPT_DIR")"
     if [ -f "$POSSIBLE_ROOT/core/main.sh" ]; then
         export TAVX_DIR="$POSSIBLE_ROOT"
@@ -45,8 +43,22 @@ mkdir -p "$CONFIG_DIR" "$LOGS_DIR" "$RUN_DIR" "$APPS_DIR" "$TAVX_BIN"
 
 [[ ":$PATH:" != *":$TAVX_BIN:"* ]] && export PATH="$TAVX_BIN:$PATH"
 
-export CURRENT_VERSION="3.0.8"
+export CURRENT_VERSION="3.1.0"
 export NETWORK_CONFIG="$CONFIG_DIR/network.conf"
+
+export CORE_DEPENDENCIES=(
+    "git|git|git"
+    "node|nodejs|nodejs"
+    "python3|python|python3"
+    "yq|yq|yq"
+    "jq|jq|jq"
+    "gum|gum|gum"
+    "tar|tar|tar"
+    "less|less|less"
+    "curl|curl|curl"
+    "pkill|procps|procps"
+    "sv|termux-services|runit"
+)
 
 export RED='\033[0;31m'
 export GREEN='\033[0;32m'

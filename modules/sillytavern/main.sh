@@ -33,7 +33,6 @@ sillytavern_install() {
     
     mkdir -p "$(dirname "$ST_DIR")"
     
-    # 提前准备网络策略 (交互式选源)，防止在进度条中触发 UI 崩坏
     prepare_network_strategy
     
     local CLONE_CMD="source \"$TAVX_DIR/core/utils.sh\"; git_clone_smart '-b release' 'SillyTavern/SillyTavern' '$ST_DIR'"
@@ -66,7 +65,6 @@ sillytavern_update() {
         echo -e "${YELLOW}请先 [解除锁定] 后再尝试更新。${NC}"; ui_pause; return
     fi
     
-    # 提前准备网络策略
     prepare_network_strategy
     
     local TEMP_URL=$(get_dynamic_repo_url "SillyTavern/SillyTavern")
@@ -108,7 +106,6 @@ sillytavern_rollback() {
         
         local CHOICE=$(ui_menu "选择操作" "${MENU_ITEMS[@]}")
         
-        # 提前准备网络策略
         if [[ "$CHOICE" != *"返回"* ]]; then
              prepare_network_strategy
         fi
@@ -151,25 +148,26 @@ sillytavern_start() {
         [[ "$m" =~ ^[0-9]+$ ]] && mem_args="--max-old-space-size=$m"
     fi
     
-    cd "$ST_DIR" || return 1
-    sillytavern_stop
-    
-    rm -f "$ST_LOG"
-    local START_CMD="setsid nohup node $mem_args server.js > '$ST_LOG' 2>&1 & echo \$! > '$ST_PID_FILE'"
-    
-    if ui_spinner "启动酒馆服务..." "eval \"$START_CMD\""; then
-        sleep 2
-        if check_process_smart "$ST_PID_FILE" "node.*server.js"; then
-            ui_print success "服务已启动。"
-            return 0
-        fi
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        tavx_service_register "sillytavern" "node $mem_args server.js" "$ST_DIR"
+        tavx_service_control "up" "sillytavern"
+        ui_print success "服务启动命令已发送。"
+    else
+        cd "$ST_DIR" || return 1
+        sillytavern_stop
+        rm -f "$ST_LOG"
+        local START_CMD="setsid nohup node $mem_args server.js > '$ST_LOG' 2>&1 & echo \$! > '$ST_PID_FILE'"
+        ui_spinner "启动酒馆服务..." "eval \"$START_CMD\""
     fi
-    ui_print error "启动失败，请检查日志。"; return 1
 }
 
 sillytavern_stop() {
     _st_vars
-    kill_process_safe "$ST_PID_FILE" "node.*server.js"
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        tavx_service_control "down" "sillytavern"
+    else
+        kill_process_safe "$ST_PID_FILE" "node.*server.js"
+    fi
 }
 
 sillytavern_uninstall() {
@@ -473,7 +471,12 @@ sillytavern_menu() {
         local port=$(_st_get_port)
         local state="stopped"; local text="已停止"; local info=()
         
-        if check_process_smart "$ST_PID_FILE" "node.*server.js"; then
+        if [ "$OS_TYPE" == "TERMUX" ]; then
+            if sv status sillytavern 2>/dev/null | grep -q "^run:"; then
+                state="running"
+                text="运行中"
+            fi
+        elif check_process_smart "$ST_PID_FILE" "node.*server.js"; then
             state="running"
             text="运行中"
         fi
@@ -482,7 +485,7 @@ sillytavern_menu() {
         ui_header "SillyTavern 管理面板"
         ui_status_card "$state" "$text" "${info[@]}"
         
-        local CHOICE=$(ui_menu "操作菜单" "🚀 启动/重启" "🛑 停止服务" "⚙️  应用配置" "🧩 插件管理" "⬇️  更新与版本" "💾 备份与恢复" "📜 查看日志" "🗑️  卸载模块" "🔙 返回")
+        local CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🛑 停止服务" "⚙️  应用配置" "🧩 插件管理" "⬇️  更新与版本" "💾 备份与恢复" "📜 查看日志" "🗑️  卸载模块" "🔙 返回")
         case "$CHOICE" in
             *"启动"*) sillytavern_start; ui_pause ;;
             *"停止"*) sillytavern_stop; ui_print success "已停止"; ui_pause ;;
@@ -490,7 +493,11 @@ sillytavern_menu() {
             *"插件"*) app_plugin_menu ;;
             *"更新"*) _st_update_submenu ;;
             *"备份"*) _st_backup_submenu ;;
-            *"日志"*) safe_log_monitor "$ST_LOG" ;;
+            *"日志"*) 
+                local log_path="$ST_LOG"
+                [ "$OS_TYPE" == "TERMUX" ] && log_path="$PREFIX/var/service/sillytavern/log/current"
+                safe_log_monitor "$log_path" 
+                ;;
             *"卸载"*) sillytavern_uninstall && [ $? -eq 2 ] && return ;;
             *"返回"*) return ;;
         esac

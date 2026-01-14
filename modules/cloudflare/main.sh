@@ -383,19 +383,26 @@ _start_named_tunnel() {
     
     local pid_file="$CF_RUN_DIR/cf_${name}.pid"
     local log_file="$CF_LOG_DIR/${name}.log"
-    
-    kill_process_safe "$pid_file" "cloudflared"
+    local svc_name="cf_tunnel_${name}"
     
     ui_print info "正在启动: $name ..."
-    setsid nohup "$CF_BIN" tunnel --config "$conf" run "$name" > "$log_file" 2>&1 &
-    echo $! > "$pid_file"
-    
-    sleep 2
-    if check_process_smart "$pid_file" "cloudflared"; then
-        ui_print success "运行中！"
+
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        tavx_service_register "$svc_name" "\"$CF_BIN\" tunnel --config \"$conf\" run \"$name\"" "$CF_DIR"
+        tavx_service_control "up" "$svc_name"
+        ui_print success "服务启动命令已发送。"
     else
-        ui_print error "启动失败，查看日志: $log_file"
-        tail -n 5 "$log_file"
+        kill_process_safe "$pid_file" "cloudflared"
+        setsid nohup "$CF_BIN" tunnel --config "$conf" run "$name" > "$log_file" 2>&1 &
+        echo $! > "$pid_file"
+        
+        sleep 2
+        if check_process_smart "$pid_file" "cloudflared"; then
+            ui_print success "运行中！"
+        else
+            ui_print error "启动失败，查看日志: $log_file"
+            tail -n 5 "$log_file"
+        fi
     fi
     ui_pause
 }
@@ -411,8 +418,14 @@ cf_manage_tunnels() {
             [ ! -f "$f" ] && continue
             local t_name=$(basename "$f" .yml)
             local pid_f="$CF_RUN_DIR/cf_${t_name}.pid"
+            local svc_name="cf_tunnel_${t_name}"
             local status="🔴"
-            if check_process_smart "$pid_f" "cloudflared"; then status="🟢"; fi
+            
+            if [ "$OS_TYPE" == "TERMUX" ]; then
+                if sv status "$svc_name" 2>/dev/null | grep -q "^run:"; then status="🟢"; fi
+            elif check_process_smart "$pid_f" "cloudflared"; then 
+                status="🟢"
+            fi
             
             local desc=""
             if command -v yq &>/dev/null; then
@@ -435,12 +448,12 @@ cf_manage_tunnels() {
         
         local C=$(ui_menu "选择隧道" "${opts[@]}")
         case "$C" in
-            *"创建"*) cf_create_named_tunnel ;; 
-            *"返回"*) return ;; 
+            *"创建"*) cf_create_named_tunnel ;;
+            *"返回"*) return ;;
             *)
                 local sel_name=$(echo "$C" | awk '{print $2}')
                 _tunnel_action_menu "$sel_name"
-                ;; 
+                ;;
         esac
     done
 }
@@ -449,11 +462,19 @@ _tunnel_action_menu() {
     local name="$1"
     local conf="$CF_DIR/${name}.yml"
     local pid_f="$CF_RUN_DIR/cf_${name}.pid"
+    local svc_name="cf_tunnel_${name}"
     
     while true; do
         ui_header "操作: $name"
         local state="🔴 停止"
-        if check_process_smart "$pid_f" "cloudflared"; then state="🟢 运行中"; fi
+        local log_path="$CF_LOG_DIR/${name}.log"
+        [ "$OS_TYPE" == "TERMUX" ] && log_path="$PREFIX/var/service/$svc_name/log/current"
+
+        if [ "$OS_TYPE" == "TERMUX" ]; then
+            if sv status "$svc_name" 2>/dev/null | grep -q "^run:"; then state="🟢 运行中"; fi
+        elif check_process_smart "$pid_f" "cloudflared"; then 
+            state="🟢 运行中"
+        fi
         echo -e "状态: $state"
         
         if command -v yq &>/dev/null; then
@@ -466,7 +487,7 @@ _tunnel_action_menu() {
              echo -e "配置: $conf"
         fi
         
-        local menu_opts=("🚀 启动/重启" "🛑 停止")
+        local menu_opts=("🚀 启动服务" "🛑 停止")
         
         if command -v yq &>/dev/null; then
              menu_opts+=("➕ 添加域名映射" "🔧 修改映射配置" "➖ 删除域名映射")
@@ -476,34 +497,47 @@ _tunnel_action_menu() {
         
         local ACT=$(ui_menu "动作" "${menu_opts[@]}")
         case "$ACT" in
-            *"启动"*) _start_named_tunnel "$name" "$conf" ;; 
-            *"停止"*) kill_process_safe "$pid_f" "cloudflared"; ui_print success "已停止"; ui_pause ;; 
+            *"启动"*) _start_named_tunnel "$name" "$conf" ;;
+            *"停止"*) 
+                if [ "$OS_TYPE" == "TERMUX" ]; then
+                    tavx_service_control "down" "$svc_name"
+                else
+                    kill_process_safe "$pid_f" "cloudflared"
+                fi
+                ui_print success "已停止"; ui_pause ;;
             *"添加"*) 
                 cf_add_ingress "$name" "$conf"
-                if check_process_smart "$pid_f" "cloudflared"; then
+                if [[ "$state" == *"运行中"* ]]; then
                     ui_print info "配置已变更，正在重启隧道..."
                     _start_named_tunnel "$name" "$conf"
                 fi ;;
             *"修改映射"*)
                 if cf_edit_ingress "$name" "$conf"; then
-                    if check_process_smart "$pid_f" "cloudflared"; then
+                    if [[ "$state" == *"运行中"* ]]; then
                         ui_print info "配置已变更，正在重启隧道..."
                         _start_named_tunnel "$name" "$conf"
                     fi
                 fi ;;
             *"删除域名"*) 
                 cf_del_ingress "$name" "$conf" 
-                if check_process_smart "$pid_f" "cloudflared"; then
+                if [[ "$state" == *"运行中"* ]]; then
                     ui_print info "配置已变更，正在重启隧道..."
                     _start_named_tunnel "$name" "$conf"
                 fi ;;
             *"编辑"*) 
-                if command -v nano &>/dev/null; then nano "$conf"; else vi "$conf"; fi ;; 
-            *"日志"*) safe_log_monitor "$CF_LOG_DIR/${name}.log" ;; 
+                if command -v nano &>/dev/null; then nano "$conf"; else vi "$conf"; fi ;;
+            *"日志"*) safe_log_monitor "$log_path" ;;
             *"删除隧道"*) 
                 if verify_kill_switch; then
                     ui_print info "正在停止本地服务..."
-                    kill_process_safe "$pid_f" "cloudflared"
+                    if [ "$OS_TYPE" == "TERMUX" ]; then
+                        tavx_service_control "down" "$svc_name"
+                        # 彻底移除服务目录
+                        rm -rf "$PREFIX/var/service/$svc_name"
+                    else
+                        kill_process_safe "$pid_f" "cloudflared"
+                    fi
+
                     if command -v yq &>/dev/null; then
                         local uuid=$(yq '.tunnel' "$conf" 2>/dev/null)
                         local hosts=($(yq '.ingress[] | select(has("hostname")) | .hostname' "$conf"))
@@ -520,30 +554,40 @@ _tunnel_action_menu() {
                                 cf_api_delete_dns "$h"
                              fi
                         done
-                    else
-                        ui_print warn "未检测到 yq，跳过云端资源智能清理。"
-                    fi
+                                            else
+                                            ui_print warn "未检测到 yq，跳过云端资源智能清理。"
+                                        fi
+                                        
+                                        rm -f "$conf"
+                                        ui_print success "本地配置已移除"
+                                        return
+                                    fi ;; 
+                                *"返回"*) return ;; 
+                            esac
+                        done
+                    }
                     
-                    rm -f "$conf"
-                    ui_print success "本地配置已移除"
-                    return
-                fi ;; 
-            *"返回"*) return ;; 
-        esac
-    done
-}
-
-cf_stop_all() {
-    _cf_vars
-    ui_print info "正在停止所有 Cloudflare 进程..."
-    kill_process_safe "$CF_RUN_DIR/cf_quick.pid" "cloudflared"
-    for f in "$CF_RUN_DIR"/cf_*.pid; do
-        [ -f "$f" ] && kill_process_safe "$f" "cloudflared"
-    done
-    pkill -f "cloudflared"
-    ui_print success "全部停止。"
-    ui_pause
-}
+                    cf_stop_all() {
+                        _cf_vars
+                        ui_print info "正在停止所有 Cloudflare 进程..."
+                        
+                        # 停止 Termux 服务
+                        if [ "$OS_TYPE" == "TERMUX" ] && command -v sv &>/dev/null; then
+                            for s in "$PREFIX/var/service"/cf_tunnel_*; do
+                                [ ! -d "$s" ] && continue
+                                sv down "$(basename "$s")" 2>/dev/null
+                            done
+                        fi
+                    
+                        # 停止传统 PID 进程
+                        kill_process_safe "$CF_RUN_DIR/cf_quick.pid" "cloudflared"
+                        for f in "$CF_RUN_DIR"/cf_*.pid; do
+                            [ -f "$f" ] && kill_process_safe "$f" "cloudflared"
+                        done
+                        pkill -f "cloudflared"
+                        ui_print success "全部停止。"
+                        ui_pause
+                    }
 
 cf_menu() {
     while true; do

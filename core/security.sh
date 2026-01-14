@@ -142,9 +142,17 @@ clean_system_garbage() {
     
     ui_spinner "正在清理..." "
         source \"$TAVX_DIR/core/utils.sh\"
+        # 1. 清理传统日志 (Legacy & Linux)
         safe_rm \"$LOGS_DIR\"/*.log
-        rm -f \"$TMP_DIR\"/tavx_* 2>/dev/null
-        rm -f \"$TMP_DIR\"/*.log 2>/dev/null
+        
+        # 2. 清理服务归档日志 (Termux 专属)
+        if [ \"$OS_TYPE\" == \"TERMUX\" ]; then
+            # 使用 safe_rm 处理，虽然在 $PREFIX 下，但 safe_rm 允许删除子文件
+            safe_rm \"$PREFIX/var/service\"/*/log/@* 2>/dev/null
+        fi
+        
+        # 3. 清理临时文件
+        safe_rm \"$TMP_DIR\"/tavx_* \"$TMP_DIR\"/*.log \"$TMP_DIR\"/gcli_wheels 2>/dev/null
     "
     
     ui_print success "清理完成！"
@@ -199,11 +207,73 @@ configure_analytics() {
     ui_pause
 }
 
+manage_autorun_services() {
+    [ "$OS_TYPE" != "TERMUX" ] && { ui_print error "此功能仅支持 Termux 环境。"; ui_pause; return; }
+    
+    while true; do
+        ui_header "开机自启管理"
+        echo -e "${YELLOW}说明：${NC}被标记为 [X] 的服务将在打开 Termux 时自动启动。"
+        echo "----------------------------------------"
+        
+        local sv_base="$PREFIX/var/service"
+        local sv_list=()
+        local sv_paths=()
+        
+        if [ -d "$sv_base" ]; then
+            for s in "$sv_base"/*; do
+                [ ! -d "$s" ] && continue
+                # 仅管理 TAV-X 的服务
+                if [ -f "$s/.tavx_managed" ]; then
+                    local sname=$(basename "$s")
+                    local state="[X]"
+                    # 如果存在 down 文件，说明禁用了自启
+                    if [ -f "$s/down" ]; then state="[ ]"; fi
+                    
+                    sv_list+=("$state $sname")
+                    sv_paths+=("$s")
+                fi
+            done
+        fi
+        
+        if [ ${#sv_list[@]} -eq 0 ]; then
+            ui_print warn "暂无受管服务。"
+            ui_pause; return
+        fi
+        
+        sv_list+=("🔙 返回")
+        
+        local CHOICE=$(ui_menu "点击切换状态" "${sv_list[@]}")
+        if [[ "$CHOICE" == *"返回"* ]]; then return; fi
+        
+        local selected_name=$(echo "$CHOICE" | awk '{print $NF}')
+        local idx=-1
+        
+        for i in "${!sv_paths[@]}"; do
+            if [[ "$(basename "${sv_paths[$i]}")" == "$selected_name" ]]; then
+                idx=$i; break
+            fi
+        done
+        
+        if [ $idx -ge 0 ]; then
+            local s_path="${sv_paths[$idx]}"
+            if [ -f "$s_path/down" ]; then
+                rm -f "$s_path/down"
+                ui_print success "已启用自启: $selected_name"
+            else
+                touch "$s_path/down"
+                ui_print warn "已禁用自启: $selected_name"
+            fi
+            sleep 0.5
+        fi
+    done
+}
+
 system_settings_menu() {
     while true; do
         ui_header "系统设置"
         local OPTS=(
             "📥 下载源与代理配置"
+            "🚀 开机自启管理"
             "🐍 Python环境管理"
             "📱 ADB智能助手"
             "☁️  CloudflareToken"
@@ -215,6 +285,7 @@ system_settings_menu() {
         local CHOICE=$(ui_menu "请选择功能" "${OPTS[@]}")
         case "$CHOICE" in
             *"下载源"*) configure_download_network ;;
+            *"自启"*) manage_autorun_services ;;
             *"Python"*) 
                 source "$TAVX_DIR/core/python_utils.sh"
                 python_environment_manager_ui ;;

@@ -184,86 +184,102 @@ setup_nodesource() {
     }
     export -f setup_nodesource
     
+    install_motd_hook() {
+        [ "$OS_TYPE" != "TERMUX" ] && return
+        
+        local hook_file="$PREFIX/etc/profile.d/tavx_status.sh"
+        [ -f "$hook_file" ] && return # 已安装则跳过
+        
+        ui_print info "正在配置终端启动提示..."
+        cat > "$hook_file" <<'EOF'
+#!/bin/sh
+# TAV-X Auto-status check
+if [ -d "$PREFIX/var/service" ] && command -v sv >/dev/null; then
+    _tx_srvs=""
+    for s in "$PREFIX/var/service"/*; do
+        if [ -f "$s/.tavx_managed" ] && sv status "$(basename "$s")" 2>/dev/null | grep -q "^run:"; then
+            _tx_srvs="$_tx_srvs $(basename "$s")"
+        fi
+    done
+    [ -n "$_tx_srvs" ] && echo -e "\033[1;36m✨ TAV-X 后台服务运行中:$_tx_srvs\033[0m"
+fi
+EOF
+        chmod +x "$hook_file"
+    }
+    export -f install_motd_hook
+
     check_dependencies() {
-        if [ "$DEPS_CHECKED" == "true" ]; then return 0; fi
+        if [ "$DEPS_CHECKED" == "true" ]; then 
+            [ "$OS_TYPE" == "TERMUX" ] && install_motd_hook
+            return 0 
+        fi
     
         local MISSING_PKGS=""
-        
-        local HAS_NODE=false; check_node_version && HAS_NODE=true
-        local HAS_GIT=false; command -v git &> /dev/null && HAS_GIT=true
-        local HAS_YQ=false; command -v yq &> /dev/null && HAS_YQ=true
-        local HAS_GUM=false; command -v gum &> /dev/null && HAS_GUM=true
-        local HAS_TAR=false; command -v tar &> /dev/null && HAS_TAR=true
-        local HAS_LESS=false; command -v less &> /dev/null && HAS_LESS=true
-    
-        if $HAS_NODE && $HAS_GIT && $HAS_YQ && $HAS_GUM && $HAS_TAR && $HAS_LESS; then
-            export DEPS_CHECKED="true"
-            return 0
-        fi
-    
-        ui_header "环境初始化"
-        echo -e "${BLUE}[INFO]${NC} 正在检查全套组件 ($OS_TYPE)..."
-    
-        if ! $HAS_LESS; then
-            echo -e "${YELLOW}[WARN]${NC} 未找到 less (日志分页器)"
-            MISSING_PKGS="$MISSING_PKGS less"
-        fi
-        
-        if ! $HAS_YQ; then
-            echo -e "${YELLOW}[WARN]${NC} 未找到 yq (YAML工具)"
-            install_yq
-            command -v yq &>/dev/null && HAS_YQ=true
-        fi
-    
-        if ! $HAS_NODE; then 
-            echo -e "${YELLOW}[WARN]${NC} Node.js 未找到或版本过低 (<v20)"
-            if [ "$OS_TYPE" == "TERMUX" ]; then 
-                MISSING_PKGS="$MISSING_PKGS nodejs"
-            else 
-                echo -e "${YELLOW}检测到 Linux 环境，是否自动配置 NodeSource 源以安装最新 Node.js?${NC}"
-                if ui_confirm "这需要 root 权限 (sudo)且会修改系统源列表。"; then
-                    setup_nodesource
-                    if check_node_version; then HAS_NODE=true; else MISSING_PKGS="$MISSING_PKGS nodejs"; fi
-                else
-                     echo -e "${RED}[ERROR]${NC} 跳过 Node.js 配置。SillyTavern 可能无法启动。"
-                     MISSING_PKGS="$MISSING_PKGS nodejs npm"
-                fi
+        local ALL_FOUND=true
+        local NEEDS_UI=false
+
+        for dep in "${CORE_DEPENDENCIES[@]}"; do
+            local cmd="${dep%%|*}"
+            if [ "$cmd" == "node" ]; then
+                if ! check_node_version; then NEEDS_UI=true; break; fi
+            elif ! command -v "$cmd" &> /dev/null; then
+                NEEDS_UI=true; break
             fi
+        done
+
+        if [ "$NEEDS_UI" == "true" ]; then
+            ui_header "环境初始化"
+            echo -e "${BLUE}[INFO]${NC} 正在检查全套核心组件 ($OS_TYPE)..."
         fi
-    
-        if ! $HAS_GIT; then 
-            echo -e "${YELLOW}[WARN]${NC} 未找到 Git"
-            MISSING_PKGS="$MISSING_PKGS git"
-        fi
-        
-        if ! $HAS_TAR; then MISSING_PKGS="$MISSING_PKGS tar"; fi
-    
-        if [ "$OS_TYPE" == "TERMUX" ]; then
-            if ! $HAS_GUM; then MISSING_PKGS="$MISSING_PKGS gum"; fi
-        fi
+
+        for dep in "${CORE_DEPENDENCIES[@]}"; do
+            local cmd="${dep%%|*}"
+            local pkg_termux=$(echo "$dep" | cut -d'|' -f2)
+            local pkg_linux=$(echo "$dep" | cut -d'|' -f3)
+            
+            if [ "$cmd" == "node" ]; then
+                if ! check_node_version; then
+                    if [ "$OS_TYPE" == "TERMUX" ]; then MISSING_PKGS="$MISSING_PKGS $pkg_termux"
+                    else
+                        [ "$NEEDS_UI" == "false" ] && ui_header "环境初始化"
+                        echo -e "${YELLOW}Node.js 版本过低或未安装，正在配置 NodeSource...${NC}"
+                        setup_nodesource || ALL_FOUND=false
+                    fi
+                fi
+                continue
+            fi
+
+            if ! command -v "$cmd" &> /dev/null; then
+                if [ "$OS_TYPE" == "LINUX" ]; then
+                    if [ "$cmd" == "gum" ]; then install_gum_linux || ALL_FOUND=false; continue; fi
+                    if [ "$cmd" == "yq" ]; then install_yq || ALL_FOUND=false; continue; fi
+                fi
+
+                echo -e "${YELLOW}[WARN]${NC} 未找到依赖: $cmd"
+                [ "$OS_TYPE" == "TERMUX" ] && MISSING_PKGS="$MISSING_PKGS $pkg_termux" || MISSING_PKGS="$MISSING_PKGS $pkg_linux"
+            fi
+        done
     
         if [ -n "$MISSING_PKGS" ]; then
             ui_print info "正在修复缺失依赖: $MISSING_PKGS"
-            sys_install_pkg "$MISSING_PKGS"
+            if ! sys_install_pkg "$MISSING_PKGS"; then
+                ALL_FOUND=false
+            fi
         fi
         
-        if [ "$OS_TYPE" == "LINUX" ]; then
-            if ! command -v gum &>/dev/null; then install_gum_linux; fi
-        fi
-        
-        if command -v node &> /dev/null && \
-           command -v git &> /dev/null && \
-           command -v yq &> /dev/null && \
-           command -v gum &> /dev/null && \
-           command -v less &> /dev/null; then
-            
-            echo -e "${GREEN}[DONE]${NC} 环境全量修复完成！"
+        [ "$OS_TYPE" == "TERMUX" ] && install_motd_hook
+
+        if [ "$ALL_FOUND" == "true" ]; then
             export DEPS_CHECKED="true"
-            ui_pause
+            if [ "$NEEDS_UI" == "true" ]; then
+                ui_print success "环境全量修复完成！"
+                ui_pause
+            fi
+            return 0
         else
-            echo -e "${RED}[ERROR]${NC} 环境修复不完整！"
-            echo -e "${YELLOW}请尝试手动运行安装命令或检查网络。${NC}"
+            ui_print error "环境修复不完整，请检查报错信息。"
             ui_pause
+            return 1
         fi
     }
     export -f check_dependencies

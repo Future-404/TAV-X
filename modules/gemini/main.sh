@@ -37,7 +37,6 @@ gemini_install() {
     _gemini_vars
     ui_header "部署 Gemini 代理"
     
-    # 提前准备网络策略
     prepare_network_strategy
 
     if [ ! -d "$GE_DIR/.git" ]; then
@@ -87,22 +86,35 @@ gemini_start() {
     local p_env=""
     [ -n "$proxy" ] && p_env="http_proxy='$proxy' https_proxy='$proxy' all_proxy='$proxy'"
     
-    local CMD="cd '$GE_DIR' && source '$GE_VENV/bin/activate' && env $p_env setsid nohup python run.py > '$GE_LOG' 2>&1 & echo \$! > '$GE_PID'"
-    
-    if ui_spinner "启动进程..." "eval \"$CMD\"" ; then
-        sleep 2
-        if check_process_smart "$GE_PID" "python.*run.py"; then
-            ui_print success "服务已启动。"
-        else
-            ui_print error "启动失败，请检查日志。"
-            tail -n 5 "$GE_LOG"
+    local RUN_CMD="source '$GE_VENV/bin/activate' && env $p_env python run.py"
+
+    ui_print info "正在启动服务..."
+
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        tavx_service_register "gemini" "sh -c \"$RUN_CMD\"" "$GE_DIR"
+        tavx_service_control "up" "gemini"
+        ui_print success "服务启动命令已发送。"
+    else
+        local CMD="cd '$GE_DIR' && env $p_env setsid nohup python run.py > '$GE_LOG' 2>&1 & echo \$! > '$GE_PID'"
+        if ui_spinner "启动进程..." "eval \"$CMD\"" ; then
+            sleep 2
+            if check_process_smart "$GE_PID" "python.*run.py"; then
+                ui_print success "服务已启动。"
+            else
+                ui_print error "启动失败，请检查日志。"
+                tail -n 5 "$GE_LOG"
+            fi
         fi
     fi
 }
 
 gemini_stop() {
     _gemini_vars
-    kill_process_safe "$GE_PID" "python.*run.py"
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        tavx_service_control "down" "gemini"
+    else
+        kill_process_safe "$GE_PID" "python.*run.py"
+    fi
 }
 
 gemini_uninstall() {
@@ -157,15 +169,25 @@ gemini_menu() {
         _gemini_vars
         ui_header "♊ Gemini 智能代理"
         local state="stopped"; local text="未运行"; local info=()
-        if check_process_smart "$GE_PID" "python.*run.py"; then
+        local log_path="$GE_LOG"
+        [ "$OS_TYPE" == "TERMUX" ] && log_path="$PREFIX/var/service/gemini/log/current"
+
+        if [ "$OS_TYPE" == "TERMUX" ]; then
+            if sv status gemini 2>/dev/null | grep -q "^run:"; then
+                state="running"; text="运行中"
+            fi
+        elif check_process_smart "$GE_PID" "python.*run.py"; then
             state="running"; text="运行中"
+        fi
+
+        if [ "$state" == "running" ]; then
             local port=$(grep "^PORT=" "$GE_ENV_CONF" 2>/dev/null | cut -d= -f2)
             info+=( "地址: http://127.0.0.1:${port:-8888}/v1" )
         fi
         [ -f "$GE_CREDS" ] && info+=( "授权: ✅" ) || info+=( "授权: ❌" )
         
         ui_status_card "$state" "$text" "${info[@]}"
-        local CHOICE=$(ui_menu "操作菜单" "🚀 启动/重启" "🔑 Google认证" "⚙️  修改配置" "🛑 停止服务" "📜 查看日志" "⬆️  更新代码" "🗑️  卸载模块" "🔙 返回")
+        local CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🔑 Google认证" "⚙️  修改配置" "🛑 停止服务" "📜 查看日志" "⬆️  更新代码" "🗑️  卸载模块" "🔙 返回")
         case "$CHOICE" in
             *"启动"*) gemini_start; ui_pause ;;
             *"认证"*) authenticate_google ;;
@@ -178,7 +200,7 @@ gemini_menu() {
                 fi
                 ui_pause ;;
             *"停止"*) gemini_stop; ui_print success "已停止"; ui_pause ;;
-            *"日志"*) safe_log_monitor "$GE_LOG" ;;
+            *"日志"*) safe_log_monitor "$log_path" ;;
             *"更新"*) gemini_install ;;
             *"卸载"*) gemini_uninstall && [ $? -eq 2 ] && return ;;
             *"返回"*) return ;;

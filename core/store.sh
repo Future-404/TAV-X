@@ -1,5 +1,5 @@
 #!/bin/bash
-# TAV-X Core: App Store (Unified Library)
+# TAV-X Core: App Store
 
 source "$TAVX_DIR/core/env.sh"
 source "$TAVX_DIR/core/ui.sh"
