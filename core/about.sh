@@ -6,12 +6,27 @@ GROUP_QQ="616353694"
 CONTACT_EMAIL="future_404@outlook.com"
 PROJECT_URL="https://github.com/Future-404/TAV-X"
 SLOGAN="别让虚拟的温柔，偷走了你在现实里本该拥有的温暖。"
-UPDATE_SUMMARY="v3.0 TMIS 架构重构里程碑：
-  1. [重构] 核心去中心化，实现“内核+应用”插件化架构
-  2. [新增] 统一应用中心，支持本地扫描、远程获取、分级安装
-  3. [优化] 自动化日志黑匣子系统，支持任务失败自动 Dump 与历史归档
-  4. [规范] 统一全模块路径标准 (apps/, logs/, run/)，完美兼容旧版数据
-  5. [迁移] 全员模块转正：酒馆、ClewdR、Mihomo、GCLI、AutoGLM、Gemini"
+UPDATE_SUMMARY="v3.1.0 架构级重构升级：
+  1. [重构] 引入 termux-services (Runit)，实现常驻守护与崩溃自愈
+  2. [新增] 核心依赖清单化，环境初始化秒级响应
+  3. [新增] 命令行快捷指令支持 (st ps, st re, st log, st stop)
+  4. [新增] 开机自启管理菜单，支持一键切换服务自启状态
+  5. [优化] 移除日志冗余时间戳，适配终端 MOTD 启动提示"
+
+show_shortcuts_help() {
+    ui_header "快捷指令用法"
+    echo -e "${YELLOW}无需进入主菜单，直接在终端输入即可快速操作：${NC}"
+    echo ""
+    printf "  ${CYAN}%-15s${NC} %s\n" "st" "进入交互式管理面板"
+    printf "  ${CYAN}%-15s${NC} %s\n" "st ps" "查看当前运行中的服务"
+    printf "  ${CYAN}%-15s${NC} %s\n" "st re" "重启所有运行中的服务"
+    printf "  ${CYAN}%-15s${NC} %s\n" "st stop" "一键停止所有服务"
+    printf "  ${CYAN}%-15s${NC} %s\n" "st log" "查看可用日志的应用 ID"
+    printf "  ${CYAN}%-15s${NC} %s\n" "st log [ID]" "实时监控指定应用日志"
+    echo ""
+    echo -e "${BLUE}💡 提示:${NC} 日志监控界面按 ${YELLOW}q${NC} 键即可退出。"
+    ui_pause
+}
 
 show_about_page() {
     ui_header "帮助与支持"
@@ -63,20 +78,26 @@ show_about_page() {
     local ACTION=""
     
     if [ "$HAS_GUM" = true ]; then
-        ACTION=$(gum choose "🔙 返回主菜单" "🔥 加入 Q 群" "🐙 GitHub 项目主页")
+        ACTION=$(gum choose "🔙 返回主菜单" "⌨️ 快捷指令用法" "🔥 加入 Q 群" "🐙 GitHub 项目主页")
     else
         echo "1. 返回主菜单"
-        echo "2. 一键加入 Q 群"
-        echo "3. 打开 GitHub 项目主页"
+        echo "2. ⌨️  快捷指令用法"
+        echo "3. 一键加入 Q 群"
+        echo "4. 打开 GitHub 项目主页"
         read -p "请选择: " idx
         case "$idx" in
-            "2") ACTION="加入 Q 群" ;;
-            "3") ACTION="GitHub" ;;
+            "2") ACTION="快捷指令" ;;
+            "3") ACTION="加入 Q 群" ;;
+            "4") ACTION="GitHub" ;;
             *)   ACTION="返回" ;;
         esac
     fi
 
     case "$ACTION" in
+        *"快捷指令"*)
+            show_shortcuts_help
+            show_about_page
+            ;;
         *"Q 群"*)
             ui_print info "正在尝试唤起 QQ..."
             local qq_scheme="mqqapi://card/show_pslcard?src_type=internal&version=1&uin=${GROUP_QQ}&card_type=group&source=qrcode"
