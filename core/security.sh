@@ -222,11 +222,9 @@ manage_autorun_services() {
         if [ -d "$sv_base" ]; then
             for s in "$sv_base"/*; do
                 [ ! -d "$s" ] && continue
-                # 仅管理 TAV-X 的服务
                 if [ -f "$s/.tavx_managed" ]; then
                     local sname=$(basename "$s")
                     local state="[X]"
-                    # 如果存在 down 文件，说明禁用了自启
                     if [ -f "$s/down" ]; then state="[ ]"; fi
                     
                     sv_list+=("$state $sname")

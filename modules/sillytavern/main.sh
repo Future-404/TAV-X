@@ -12,6 +12,9 @@ source "$TAVX_DIR/core/env.sh"
 source "$TAVX_DIR/core/ui.sh"
 source "$TAVX_DIR/core/utils.sh"
 
+# Source Plugins
+[ -f "$(dirname "${BASH_SOURCE[0]}")/plugins.sh" ] && source "$(dirname "${BASH_SOURCE[0]}")/plugins.sh"
+
 _st_vars() {
     ST_APP_ID="sillytavern"
     ST_DIR=$(get_app_path "$ST_APP_ID")
@@ -19,7 +22,27 @@ _st_vars() {
     ST_LOG="$ST_DIR/server.log"
 }
 
-[ -f "$(dirname "${BASH_SOURCE[0]}")/plugins.sh" ] && source "$(dirname "${BASH_SOURCE[0]}")/plugins.sh"
+_st_get_port() {
+    _st_vars
+    if command -v yq &>/dev/null && [ -f "$ST_DIR/config.yaml" ]; then
+         local p=$(yq ".port" "$ST_DIR/config.yaml" 2>/dev/null)
+         [[ "$p" =~ ^[0-9]+$ ]] && echo "$p" || echo "8000"
+    else
+         echo "8000"
+    fi
+}
+
+st_config_menu() {
+    _st_vars
+    export ST_DIR
+    node "$TAVX_DIR/modules/sillytavern/config.js"
+}
+
+sillytavern_configure_recommended() {
+    _st_vars
+    export ST_DIR
+    node "$TAVX_DIR/modules/sillytavern/config.js" --recommended
+}
 
 sillytavern_install() {
     _st_vars
@@ -130,8 +153,8 @@ sillytavern_rollback() {
             *"切换通道"*) 
                 local TARGET="release"; [[ "$CHOICE" == *"Staging"* ]] && TARGET="staging"
                 local CMD="git config remote.origin.fetch \"+refs/heads/*:refs/remotes/origin/*\"; git fetch \"$TEMP_URL\" $TARGET --depth=1; git reset --hard FETCH_HEAD; git checkout $TARGET"
-                ui_stream_task "切换至 $TARGET..." "$CMD" && npm_install_smart "$ST_DIR" ;;
-            *"返回"*) return ;;
+                ui_stream_task "切换至 $TARGET..." "$CMD" && npm_install_smart "$ST_DIR" ;; 
+            *"返回"*) return ;; 
         esac
         ui_pause
     done
@@ -228,8 +251,7 @@ sillytavern_restore() {
     local MENU_ITEMS=(); local FILE_MAP=()
     for file in "${valid_files[@]}"; do
         local fname=$(basename "$file")
-        local fsize=$(du -h "$file" | awk '{print $1}')
-        MENU_ITEMS+=("📦 $fname ($fsize)")
+        MENU_ITEMS+=("$fname ($fsize)")
         FILE_MAP+=("$file")
     done
     MENU_ITEMS+=("🔙 返回")
@@ -268,196 +290,6 @@ sillytavern_restore() {
     ui_pause
 }
 
-sillytavern_configure_recommended() {
-    _st_vars
-    local BATCH_JSON='{ "extensions.enabled": true, "enableServerPlugins": true, "performance.useDiskCache": false }'
-    _st_config_set_batch "$BATCH_JSON"
-}
-
-sillytavern_enable_public_access() {
-    _st_vars
-    ui_header "公网访问配置"
-    echo -e "${YELLOW}此操作将执行以下变更：${NC}"
-    echo -e "  1. 允许 0.0.0.0 外部访问 (穿透可用)"
-    echo -e "  2. 自动开启[多用户系统]以保护数据安全"
-    echo -e "  3. 开启隐私登录模式"
-    echo ""
-    
-    if ! ui_confirm "确认立即开启吗？"; then return; fi
-    
-    local has_accounts=$(_st_config_get "enableUserAccounts")
-    local has_auth=$(_st_config_get "basicAuthMode")
-    
-    if [[ "$has_accounts" != "true" && "$has_auth" != "true" ]]; then
-        ui_print warn "检测到您尚未开启任何身份验证。为了公网安全，请立即设置一个管理员密码。"
-        local u=$(ui_input "设置管理员账号" "default-user" "false")
-        local p=$(ui_input "设置管理员密码" "" "true")
-        if [ -n "$p" ]; then
-            cd "$ST_DIR" || return
-            node recover.js "$u" "$p" >/dev/null 2>&1
-            ui_print success "管理员账号已创建：$u"
-        else
-            ui_print error "必须设置密码才能开启公网访问。操作已取消。"
-            ui_pause; return 1
-        fi
-    fi
-
-    ui_print info "正在应用安全网络配置..."
-    local BATCH_JSON='{ "listen": true, "whitelistMode": false, "enableUserAccounts": true, "enableDiscreetLogin": true, "basicAuthMode": false }'
-    
-    if _st_config_set_batch "$BATCH_JSON"; then
-        ui_print success "公网访问模式已开启！"
-        echo -e "${GREEN}✅ 安全防护已就绪：${NC}"
-        echo -e "   - 强制身份验证 [ON]"
-        echo -e "   - 账号隔离系统 [ON]"
-    else
-        ui_print error "配置应用失败。"
-    fi
-    ui_pause
-}
-
-sillytavern_configure_advanced() {
-    _st_vars
-    [ ! -f "$ST_DIR/config.yaml" ] && { ui_print error "配置文件不存在，请先安装酒馆。"; ui_pause; return; }
-    local CONFIG_MAP=( "SEPARATOR|--- 基础连接设置 ---" "listen|允许外部网络连接" "whitelistMode|白名单模式" "basicAuthMode|强制密码登录" "enableUserAccounts|多用户账号系统" "enableDiscreetLogin|谨慎登录模式" "SEPARATOR|--- 网络与安全进阶 ---" "disableCsrfProtection|禁用 CSRF 保护" "enableCorsProxy|启用 CORS 代理" "protocol.ipv6|启用 IPv6 协议支持" "ssl.enabled|启用 SSL/HTTPS" "hostWhitelist.enabled|Host 头白名单检查" "SEPARATOR|--- 性能与更新优化 ---" "performance.lazyLoadCharacters|懒加载角色卡 (启用极大提升启动速度)" "performance.useDiskCache|启用硬盘缓存 (termux建议关闭)" "extensions.enabled|加载扩展插件" "extensions.autoUpdate|自动更新扩展 (建议关闭)" "enableServerPlugins|加载服务端插件" "enableServerPluginsAutoUpdate|自动更新服务端插件" "SEPARATOR|--- 危险区域 ---" "RESET_CONFIG|⚠️ 恢复默认配置" )
-    while true; do
-        ui_header "酒馆配置管理"
-        echo -e "${CYAN}点击条目即可切换状态${NC}"; echo "----------------------------------------"
-        local MENU_OPTS=(); local KEY_LIST=()
-        for item in "${CONFIG_MAP[@]}"; do
-            local key="${item%%|*}"; local label="${item#*|}"
-            if [ "$key" == "SEPARATOR" ]; then MENU_OPTS+=("📂 $label"); KEY_LIST+=("SEPARATOR"); continue; fi
-            if [ "$key" == "RESET_CONFIG" ]; then MENU_OPTS+=("💥 $label"); KEY_LIST+=("RESET_CONFIG"); continue; fi
-            local val=$(_st_config_get "$key"); local icon="🔴"; local stat="[关闭]"
-            if [ "$val" == "true" ]; then icon="🟢"; stat="[开启]"; fi
-            if [[ "$key" == "whitelistMode" || "$key" == "performance.useDiskCache" ]]; then if [ "$val" == "true" ]; then icon="🟡"; fi; fi
-            MENU_OPTS+=("$icon $label $stat"); KEY_LIST+=("$key")
-        done
-        MENU_OPTS+=("🔙 返回上级")
-        local CHOICE_IDX
-        if [ "$HAS_GUM" = true ]; then
-            local SELECTED_TEXT=$(gum choose "${MENU_OPTS[@]}" --header "" --cursor.foreground 212)
-            for i in "${!MENU_OPTS[@]}"; do if [[ "${MENU_OPTS[$i]}" == "$SELECTED_TEXT" ]]; then CHOICE_IDX=$i; break; fi; done
-        else
-            local i=1; for opt in "${MENU_OPTS[@]}"; do echo "$i. $opt"; ((i++)); done
-            read -p "请输入序号: " input_idx; if [[ "$input_idx" =~ ^[0-9]+$ ]]; then CHOICE_IDX=$((input_idx - 1)); fi
-        fi
-        if [[ "${MENU_OPTS[$CHOICE_IDX]}" == *"返回"* ]]; then return; fi
-        if [ -n "$CHOICE_IDX" ] && [ "$CHOICE_IDX" -ge 0 ] && [ "$CHOICE_IDX" -lt "${#KEY_LIST[@]}" ]; then
-            local target_key="${KEY_LIST[$CHOICE_IDX]}"
-            if [ "$target_key" == "SEPARATOR" ]; then continue; fi
-            if [ "$target_key" == "RESET_CONFIG" ]; then
-                if ui_confirm "是否重置 config.yaml 至默认值？"; then 
-                    rm -f "$ST_DIR/config.yaml"
-                    ui_print success "配置已重置，正在自动重启服务以重新生成..."
-                    sillytavern_start
-                    return
-                fi
-                continue
-            fi
-            local current_val=$(_st_config_get "$target_key"); local new_val="true"
-            if [ "$current_val" == "true" ]; then new_val="false"; fi
-            if _st_config_set "$target_key" "$new_val"; then sleep 0.1; fi
-        fi
-    done
-}
-
-sillytavern_configure_memory() {
-    ui_header "运行内存配置"
-    local mem_info=$(free -m | grep "Mem:"); local total_mem=$(echo "$mem_info" | awk '{print $2}'); local avail_mem=$(echo "$mem_info" | awk '{print $7}')
-    [[ -z "$total_mem" ]] && total_mem=0; [[ -z "$avail_mem" ]] && avail_mem=0
-    local safe_max=$((total_mem - 2048)); if [ "$safe_max" -lt 1024 ]; then safe_max=1024; fi
-    local curr_set="默认 (Node.js Auto)"; if [ -f "$TAVX_DIR/config/memory.conf" ]; then curr_set="$(cat "$TAVX_DIR/config/memory.conf") MB"; fi
-    echo -e "物理内存: ${GREEN}${total_mem} MB${NC} | 可用: ${YELLOW}${avail_mem} MB${NC} | 当前: ${PURPLE}${curr_set}${NC}"
-    echo "----------------------------------------"
-    echo -e "请输入分配给酒馆的最大内存 (单位 MB)，输入 0 恢复默认。"
-    local input_mem=$(ui_input "请输入 (例如 4096)" "" "false")
-    if [[ ! "$input_mem" =~ ^[0-9]+$ ]]; then ui_print error "无效数字"; ui_pause; return; fi
-    if [ "$input_mem" -eq 0 ]; then rm -f "$TAVX_DIR/config/memory.conf"; ui_print success "已恢复默认策略。"; else echo "$input_mem" > "$TAVX_DIR/config/memory.conf"; ui_print success "已设置: ${input_mem} MB"; fi
-    ui_pause
-}
-
-sillytavern_configure_browser() {
-    local BROWSER_CONF="$TAVX_DIR/config/browser.conf"
-    while true; do
-        ui_header "浏览器启动方式"
-        local current_mode="ST"; if [ -f "$BROWSER_CONF" ]; then current_mode=$(cat "$BROWSER_CONF"); fi
-        local yaml_stat=$(_st_config_get "browserLaunch.enabled"); [ -z "$yaml_stat" ] && yaml_stat="未知"
-        echo -e "当前策略: $current_mode (Config: $yaml_stat)"; echo "----------------------------------------"
-        local OPTS=("🚀 脚本接管" "🍷 SillyTavern 原生" "🚫 禁止自动跳转" "🔙 返回")
-        local CHOICE=$(ui_menu "选择方式" "${OPTS[@]}")
-        case "$CHOICE" in
-            *"脚本"*) _st_config_set "browserLaunch.enabled" "false"; echo "SCRIPT" > "$BROWSER_CONF"; ui_print success "已切换：脚本接管"; ui_pause ;; 
-            *"原生"*) _st_config_set "browserLaunch.enabled" "true"; echo "ST" > "$BROWSER_CONF"; ui_print success "已切换：原生模式"; ui_pause ;; 
-            *"禁止"*) _st_config_set "browserLaunch.enabled" "false"; echo "NONE" > "$BROWSER_CONF"; ui_print success "已关闭自动跳转"; ui_pause ;; 
-            *"返回"*) return ;; 
-        esac
-    done
-}
-
-sillytavern_change_port() {
-    _st_vars
-    local cur=$(_st_get_port)
-    local new_p=$(ui_input_validated "设置新端口 (1024-65535)" "$cur" "numeric")
-    [ -z "$new_p" ] && return
-    
-    if [ "$new_p" -lt 1024 ]; then ui_print error "端口过低"; ui_pause; return; fi
-    if _st_config_set "port" "$new_p"; then
-        ui_print success "端口已修改为 $new_p，请重启酒馆。"
-        ui_pause
-    fi
-}
-
-sillytavern_reset_password() {
-    ui_header "重置密码"
-    [ ! -d "$ST_DIR" ] && { ui_print error "未安装酒馆"; ui_pause; return; }
-    cd "$ST_DIR" || return
-    echo -e "${YELLOW}当前用户列表:${NC}"
-    ls -F data/ | grep "/" | grep -v "^_" | sed 's|/||g' | sed 's/^/  - /'
-    echo ""
-    local u=$(ui_input "请输入要重置的用户名" "default-user" "false")
-    local p=$(ui_input "请输入新密码" "" "true")
-    
-    if [[ -n "$u" && -n "$p" ]]; then
-        echo ""
-        if node recover.js "$u" "$p"; then
-            ui_print success "密码已重置。"
-        else
-            ui_print error "重置失败，请确认用户名是否正确。"
-        fi
-    else
-        ui_print warn "操作已取消。"
-    fi
-    ui_pause
-}
-
-sillytavern_configure_proxy() {
-    while true; do
-        ui_header "API 代理配置"
-        local is_enabled=$(_st_config_get requestProxy.enabled)
-        local current_url=$(_st_config_get requestProxy.url)
-        [ -z "$current_url" ] && current_url="未设置"
-        if [ "$is_enabled" == "true" ]; then echo -e "状态: ${GREEN}已开启${NC} | 地址: ${CYAN}$current_url${NC}"; else echo -e "状态: ${RED}已关闭${NC}"; fi
-        echo "----------------------------------------"
-        local OPTS=("🔄 同步系统代理" "✏️ 手动输入" "🚫 关闭代理" "🔙 返回")
-        local CHOICE=$(ui_menu "选择操作" "${OPTS[@]}")
-        case "$CHOICE" in
-            *"同步"*) 
-                local dyn=$(get_active_proxy "interactive")
-                if [ -n "$dyn" ]; then 
-                    _st_config_set requestProxy.enabled true
-                    _st_config_set requestProxy.url "$dyn"
-                    ui_print success "已同步代理: $dyn"
-                else 
-                    ui_print warn "未发现可用代理，请手动配置。"
-                fi; ui_pause ;; 
-            *"手动"*) local i=$(ui_input "代理地址" "" "false"); if [[ "$i" =~ ^http.* ]]; then _st_config_set requestProxy.enabled true; _st_config_set requestProxy.url "$i"; ui_print success "已保存"; else ui_print error "格式错误"; fi; ui_pause ;; 
-            *"关闭"*) _st_config_set requestProxy.enabled false; ui_print success "已关闭"; ui_pause ;; 
-            *"返回"*) return ;; 
-        esac
-    done
-}
-
 sillytavern_menu() {
     _st_vars
     if [ ! -d "$ST_DIR" ]; then
@@ -487,34 +319,18 @@ sillytavern_menu() {
         
         local CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🛑 停止服务" "⚙️  应用配置" "🧩 插件管理" "⬇️  更新与版本" "💾 备份与恢复" "📜 查看日志" "🗑️  卸载模块" "🔙 返回")
         case "$CHOICE" in
-            *"启动"*) sillytavern_start; ui_pause ;;
-            *"停止"*) sillytavern_stop; ui_print success "已停止"; ui_pause ;;
-            *"配置"*) _st_config_submenu ;;
-            *"插件"*) app_plugin_menu ;;
-            *"更新"*) _st_update_submenu ;;
-            *"备份"*) _st_backup_submenu ;;
+            *"启动"*) sillytavern_start; ui_pause ;; 
+            *"停止"*) sillytavern_stop; ui_print success "已停止"; ui_pause ;; 
+            *"配置"*) st_config_menu ;; 
+            *"插件"*) app_plugin_menu ;; 
+            *"更新"*) _st_update_submenu ;; 
+            *"备份"*) _st_backup_submenu ;; 
             *"日志"*) 
                 local log_path="$ST_LOG"
                 [ "$OS_TYPE" == "TERMUX" ] && log_path="$PREFIX/var/service/sillytavern/log/current"
                 safe_log_monitor "$log_path" 
-                ;;
-            *"卸载"*) sillytavern_uninstall && [ $? -eq 2 ] && return ;;
-            *"返回"*) return ;;
-        esac
-    done
-}
-_st_config_submenu() {
-    while true; do
-        ui_header "酒馆配置管理"
-        local opt=$(ui_menu "选择项" "🌍 一键公网访问" "🔧 Config参数" "🧠 运行内存配置" "🌐 浏览器启动方式" "🔗 API 代理设置" "🔐 重置登录密码" "🔌 修改服务端口" "🔙 返回")
-        case "$opt" in
-            *"公网"*) sillytavern_enable_public_access ;; 
-            *"参数"*) sillytavern_configure_advanced ;; 
-            *"内存"*) sillytavern_configure_memory ;; 
-            *"浏览器"*) sillytavern_configure_browser ;; 
-            *"API"*) sillytavern_configure_proxy ;; 
-            *"密码"*) sillytavern_reset_password ;; 
-            *"端口"*) sillytavern_change_port ;; 
+                ;; 
+            *"卸载"*) sillytavern_uninstall && [ $? -eq 2 ] && return ;; 
             *"返回"*) return ;; 
         esac
     done
@@ -529,61 +345,3 @@ _st_backup_submenu() {
     local opt=$(ui_menu "备份管理" "📤 备份数据" "📥 恢复数据" "🔙 取消")
     case "$opt" in *"备份"*) sillytavern_backup ;; *"恢复"*) sillytavern_restore ;; esac
 }
-
-_st_get_port() {
-    _st_vars
-    local p=$(_st_config_get port)
-    [[ "$p" =~ ^[0-9]+$ ]] && echo "$p" || echo "8000"
-}
-
-_st_config_ensure_yq() {
-    if ! command -v yq &>/dev/null; then
-        source "$TAVX_DIR/core/deps.sh"
-        install_yq >/dev/null 2>&1
-    fi
-}
-
-_st_config_get() {
-    _st_vars
-    _st_config_ensure_yq
-    local key=".$1"
-    local file="$ST_DIR/config.yaml"
-    [ ! -f "$file" ] && return 1
-    
-    local val=$(yq "$key" "$file" 2>/dev/null)
-    
-    if [ "$val" == "null" ] || [ -z "$val" ]; then
-        return 1
-    else
-        echo "$val"
-        return 0
-    fi
-}
-
-_st_config_set() {
-    _st_vars
-    _st_config_ensure_yq
-    local key=".$1"
-    local val="$2"
-    local file="$ST_DIR/config.yaml"
-    [ ! -f "$file" ] && return 1
-    
-    if [[ "$val" == "true" || "$val" == "false" ]]; then
-        yq -i "$key = $val" "$file"
-    elif [[ "$val" =~ ^[0-9]+$ ]]; then
-        yq -i "$key = $val" "$file"
-    else
-        yq -i "$key = \"$val\"" "$file"
-    fi
-}
-
-_st_config_set_batch() {
-    _st_vars
-    _st_config_ensure_yq
-    local json="$1"
-    local file="$ST_DIR/config.yaml"
-    [ ! -f "$file" ] && return 1
-    
-    echo "$json" | yq -i '. * load("/dev/stdin")' "$file"
-}
-

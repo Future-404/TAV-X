@@ -188,7 +188,7 @@ setup_nodesource() {
         [ "$OS_TYPE" != "TERMUX" ] && return
         
         local hook_file="$PREFIX/etc/profile.d/tavx_status.sh"
-        [ -f "$hook_file" ] && return # 已安装则跳过
+        [ -f "$hook_file" ] && return
         
         ui_print info "正在配置终端启动提示..."
         cat > "$hook_file" <<'EOF'

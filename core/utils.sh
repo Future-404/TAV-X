@@ -315,7 +315,7 @@ select_mirror_interactive() {
         echo -e "${RED}⚠️  所有镜像源测速均超时。${NC}"
     fi
 
-    MENU_OPTIONS+=("🌐 官方源 (直连 GitHub)")
+    MENU_OPTIONS+=("🌐 官方源")
     URL_MAP+=("https://github.com/")
     
     rm -f "$tmp_race_file"
