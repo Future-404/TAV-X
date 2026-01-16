@@ -118,19 +118,6 @@ configure_download_network() {
     done
 }
 
-configure_cf_token() {
-    ui_header "Cloudflare Tunnel Token"
-    local token_file="$TAVX_DIR/config/cf_token"
-    local current_stat="${YELLOW}未配置${NC}"; if [ -s "$token_file" ]; then local t=$(cat "$token_file"); current_stat="${GREEN}已配置${NC} (${t:0:6}...)"; fi
-    echo -e "状态: $current_stat"; echo "----------------------------------------"
-    local OPTS=("✏️ 输入/更新 Token" "🗑️ 清除 Token" "🔙 返回")
-    local CHOICE=$(ui_menu "选择操作" "${OPTS[@]}")
-    case "$CHOICE" in
-        *"输入"*) local i=$(ui_input "请粘贴 Token" "" "false"); [ -n "$i" ] && echo "$i" > "$token_file" && ui_print success "已保存"; ui_pause ;;
-        *"清除"*) rm -f "$token_file"; ui_print success "已清除"; ui_pause ;; *"返回"*) return ;;
-    esac
-}
-
 clean_system_garbage() {
     ui_header "系统垃圾清理"
     echo -e "准备清理以下内容："
@@ -274,7 +261,6 @@ system_settings_menu() {
             "🚀 开机自启管理"
             "🐍 Python环境管理"
             "📱 ADB智能助手"
-            "☁️  CloudflareToken"
             "📊 匿名统计开关"
             "🧹 系统垃圾清理"
             "💥 一键彻底毁灭 (危险)"
@@ -290,7 +276,6 @@ system_settings_menu() {
             *"ADB"*)
                 source "$TAVX_DIR/core/adb_utils.sh"
                 adb_manager_ui ;;
-            *"Cloudflare"*) configure_cf_token ;;
             *"统计"*) configure_analytics ;;
             *"清理"*) clean_system_garbage ;;
             *"彻底毁灭"*) full_wipe ;;

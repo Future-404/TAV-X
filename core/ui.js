@@ -52,17 +52,14 @@ ui.print = (type, message) => {
 };
 
 ui.header = (subtitle = '') => {
-    process.stdout.write('\x1Bc'); // Clear screen
+    process.stdout.write('\x1Bc');
     console.log(`${C_PINK}${getAsciiLogo()}${nc}`);
     const ver = process.env.CURRENT_VERSION || '3.1.0';
-    const tagText = `Ver: ${ver} | by Future 404  `;
-    try {
-        const cols = process.stdout.columns || 40;
-        const pad = ' '.repeat(Math.max(0, cols - tagText.length));
-        console.log(`${C_DIM}${pad}${tagText}${nc}`);
-    } catch (e) {
-        console.log(`${C_DIM}${tagText}${nc}`);
-    }
+    const tagText = `Ver: ${ver} | by Future 404`;
+    const cols = 48; 
+    const padLen = Math.max(0, cols - tagText.length);
+    const pad = ' '.repeat(padLen);
+    console.log(`${C_DIM}${pad}${tagText}${nc}`);
 
     if (subtitle) {
         const prefix = `  🚀 `;

@@ -11,20 +11,40 @@ const ui = require('../../core/ui');
 
 const ST_DIR = env.getAppPath('sillytavern');
 const CONFIG_FILE = path.join(ST_DIR, 'config.yaml');
+const MEMORY_CONF = path.join(env.getAppPath('tav_x'), 'config', 'memory.conf');
 
-let YAML;
-try {
-    const stNodeModules = path.join(ST_DIR, 'node_modules');
-    if (fs.existsSync(stNodeModules)) {
-        module.paths.push(stNodeModules);
+// --- 帮助函数 ---
+// ... (保持现有代码不变)
+
+// 读取内存配置
+function getMemoryLimit() {
+    try {
+        if (fs.existsSync(MEMORY_CONF)) {
+            const val = fs.readFileSync(MEMORY_CONF, 'utf8').trim();
+            if (val && !isNaN(val)) return parseInt(val);
+        }
+    } catch (e) {}
+    return 0; // 0 表示默认/自动
+}
+
+// 写入内存配置
+function setMemoryLimit(val) {
+    try {
+        const confDir = path.dirname(MEMORY_CONF);
+        if (!fs.existsSync(confDir)) fs.mkdirSync(confDir, { recursive: true });
+        
+        if (val === 0 || val === '0') {
+            if (fs.existsSync(MEMORY_CONF)) fs.unlinkSync(MEMORY_CONF);
+        } else {
+            fs.writeFileSync(MEMORY_CONF, String(val));
+        }
+    } catch (e) {
+        ui.print('error', `保存内存配置失败: ${e.message}`);
     }
-    YAML = require('yaml');
-} catch (e) {
-    ui.print('error', '未找到 yaml 库，请确保 SillyTavern 已完成 npm install。');
-    process.exit(1);
 }
 
 function loadConfig() {
+// ...
     try {
         if (!fs.existsSync(CONFIG_FILE)) return {};
         const content = fs.readFileSync(CONFIG_FILE, 'utf8');
@@ -98,6 +118,8 @@ const schemas = {
         { key: 'enableCorsProxy', type: 'bool', label: 'CORS 代理', desc: '启用跨域资源共享代理' }
     ],
     performance: [
+        { key: 'system.nodeMemory', type: 'select', label: 'Node.js 内存上限', desc: '防止大型聊天导致内存溢出 (OOM)', 
+          options: ['0 (自动/默认)', '4096 (4GB)', '8192 (8GB)', '12288 (12GB)', 'custom (自定义)'] },
         { key: 'performance.lazyLoadCharacters', type: 'bool', label: '懒加载角色卡', desc: '极大提升启动速度' },
         { key: 'performance.useDiskCache', type: 'bool', label: '启用磁盘缓存', desc: 'Termux 建议关闭' },
         { key: 'thumbnails.enabled', type: 'bool', label: '生成缩略图', desc: '加快前端图片加载速度' },
@@ -140,7 +162,16 @@ function renderCategory(title, items) {
         ui.header(title);
         
         const menuOpts = items.map(item => {
-            const val = stConfigGet(item.key);
+            let val = '';
+            
+            // 特殊处理内存配置读取
+            if (item.key === 'system.nodeMemory') {
+                const mem = getMemoryLimit();
+                val = mem === 0 ? '自动/默认' : `${mem} MB`;
+            } else {
+                val = stConfigGet(item.key);
+            }
+
             let status = '';
             let icon = '⚪';
             
@@ -220,6 +251,26 @@ function renderCategory(title, items) {
             }
             ui.pause();
         } else if (item.type === 'select') {
+            // 特殊处理内存配置写入
+            if (item.key === 'system.nodeMemory') {
+                const choiceStr = ui.menu(`选择 ${item.label}`, item.options);
+                if (choiceStr) {
+                    let val = 0;
+                    if (choiceStr.includes('custom')) {
+                        const input = ui.input('请输入内存上限 (MB)', '4096');
+                        if (input && !isNaN(input)) val = parseInt(input);
+                    } else {
+                        val = parseInt(choiceStr.split(' ')[0]);
+                    }
+                    
+                    setMemoryLimit(val);
+                    ui.print('success', `${env.colors.green}内存配置已更新，重启生效${env.colors.nc}`);
+                }
+                ui.pause();
+                continue;
+            }
+
+            // 处理下拉选择类型
             const choiceStr = ui.menu(`选择 ${item.label}`, item.options);
             if (choiceStr) {
                 const firstPart = choiceStr.split(' ')[0];
@@ -357,11 +408,11 @@ function mainMenu() {
     }
 
     while (true) {
-        ui.header('SillyTavern 配置管理 (NodeJS)');
+        ui.header('SillyTavern 配置管理');
         
         const opts = [
-            '🚀 一键应用 Termux 推荐配置',
-            '🌍 一键开启公网访问 (含密码设置)',
+            '🚀 一键应用Termux推荐配置',
+            '🌍 一键开启公网访问',
             '🌐 网络与安全设置',
             '⚡ 性能与插件优化',
             '🖥️  界面与系统设置',

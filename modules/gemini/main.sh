@@ -1,209 +1,107 @@
 #!/bin/bash
 # [METADATA]
 # MODULE_ID: gemini
-# MODULE_NAME: Gemini 智能代理
-# MODULE_ENTRY: gemini_menu
+# MODULE_NAME: Gemini CLI 官方版
+# MODULE_ENTRY: gemini_off_menu
 # [END_METADATA]
 
 source "$TAVX_DIR/core/env.sh"
 source "$TAVX_DIR/core/ui.sh"
 source "$TAVX_DIR/core/utils.sh"
-source "$TAVX_DIR/core/python_utils.sh"
 
-_gemini_vars() {
-    GE_APP_ID="gemini"
-    GE_DIR=$(get_app_path "$GE_APP_ID")
-    GE_VENV="$GE_DIR/venv"
-    GE_LOG="$LOGS_DIR/gemini.log"
-    GE_PID="$RUN_DIR/gemini.pid"
-    GE_ENV_CONF="$CONFIG_DIR/gemini.env"
-    GE_CREDS="$GE_DIR/oauth_creds.json"
-    GE_REPO="https://github.com/gzzhongqi/geminicli2api"
-    mkdir -p "$GE_DIR"
-}
-
-_gemini_check_google() {
-    ui_print info "检测 Google 连通性..."
-    local proxy=$(get_active_proxy)
-    local cmd="curl -I -s --max-time 5 https://www.google.com"
-    [ -n "$proxy" ] && cmd="$cmd --proxy $proxy"
-    
-    if $cmd >/dev/null 2>&1; then return 0; fi
-    ui_print error "无法连接 Google！Gemini 服务必须通过代理工作。"
-    return 1
-}
-
-gemini_install() {
-    _gemini_vars
-    ui_header "部署 Gemini 代理"
-    
-    prepare_network_strategy
-
-    if [ ! -d "$GE_DIR/.git" ]; then
-        if ! git_clone_smart "" "$GE_REPO" "$GE_DIR"; then
-            ui_print error "源码下载失败。"
+_go_check_env() {
+    if ! command -v node &>/dev/null; then
+        ui_print info "未找到 Node.js，正在尝试安装..."
+        if [ "$OS_TYPE" == "TERMUX" ]; then
+            pkg install nodejs -y
+        else
+            ui_print error "请手动安装 Node.js 后再试。"
             return 1
         fi
-    else
-        ui_print info "同步最新代码..."
-        (cd "$GE_DIR" && git pull)
     fi
-    
-    if ui_stream_task "创建虚拟环境..." "source \"\$TAVX_DIR/core/python_utils.sh\"; create_venv_smart '$GE_VENV'"; then
-        ui_print info "正在安装项目依赖..."
-        local INSTALL_CMD="source \"\$TAVX_DIR/core/python_utils.sh\"; install_requirements_smart '$GE_VENV' '$GE_DIR/requirements.txt' 'standard'"
-        
-        if ! ui_stream_task "安装 Python 依赖..." "$INSTALL_CMD"; then
-            ui_print error "依赖安装失败。"
-            return 1
-        fi
-    else
-        ui_print error "虚拟环境创建失败。"
-        return 1
+    if ! command -v pnpm &>/dev/null; then
+        ui_print info "正在安装 pnpm..."
+        npm install -g pnpm || return 1
     fi
-    
-    if [ ! -f "$GE_ENV_CONF" ]; then
-        echo -e "HOST=0.0.0.0\nPORT=8888\nGEMINI_AUTH_PASSWORD=password" > "$GE_ENV_CONF"
-    fi
-    ui_print success "安装完成。"
+    return 0
 }
 
-gemini_start() {
-    _gemini_vars
-    [ ! -d "$GE_DIR" ] && { gemini_install || return 1; }
-    _gemini_check_google || return 1
+gemini_off_install() {
+    ui_header "部署 Gemini CLI 官方版"
     
-    gemini_stop
-    local port=$(grep "^PORT=" "$GE_ENV_CONF" | cut -d= -f2); [ -z "$port" ] && port=8888
-    ln -sf "$GE_ENV_CONF" "$GE_DIR/.env"
+    if ! ui_confirm "确定要安装/更新 Gemini CLI 吗？"; then return; fi
     
-    if [ ! -f "$GE_CREDS" ]; then
-        ui_print error "未找到凭据。请先授权。"
-        ui_pause; return 1
-    fi
-    
-    local proxy=$(get_active_proxy)
-    local p_env=""
-    [ -n "$proxy" ] && p_env="http_proxy='$proxy' https_proxy='$proxy' all_proxy='$proxy'"
-    
-    local RUN_CMD="source '$GE_VENV/bin/activate' && env $p_env python run.py"
+    _go_check_env || return 1
 
-    ui_print info "正在启动服务..."
-
-    if [ "$OS_TYPE" == "TERMUX" ]; then
-        tavx_service_register "gemini" "sh -c \"$RUN_CMD\"" "$GE_DIR"
-        tavx_service_control "up" "gemini"
-        ui_print success "服务启动命令已发送。"
+    ui_print info "正在通过 pnpm 全局安装 @google/gemini-cli..."
+    if pnpm add -g @google/gemini-cli; then
+        ui_print success "安装完成！"
+        ui_print info "提示：您可以直接输入 'gemini' 启动官方原版。"
+        ui_print info "      或者输入 'st gemini' 启动带智能网络的增强版。"
     else
-        local CMD="cd '$GE_DIR' && env $p_env setsid nohup python run.py > '$GE_LOG' 2>&1 & echo \$! > '$GE_PID'"
-        if ui_spinner "启动进程..." "eval \"$CMD\"" ; then
-            sleep 2
-            if check_process_smart "$GE_PID" "python.*run.py"; then
-                ui_print success "服务已启动。"
-            else
-                ui_print error "启动失败，请检查日志。"
-                tail -n 5 "$GE_LOG"
-            fi
-        fi
+        ui_print error "安装失败，请检查网络。"
     fi
+    ui_pause
 }
 
-gemini_stop() {
-    _gemini_vars
-    if [ "$OS_TYPE" == "TERMUX" ]; then
-        tavx_service_control "down" "gemini"
-    else
-        kill_process_safe "$GE_PID" "python.*run.py"
+gemini_off_start() {
+    if ! command -v gemini &>/dev/null; then
+        ui_print error "未检测到 gemini 命令，请先安装。"
+        ui_pause
+        return
     fi
+    
+    ui_header "启动 Gemini CLI 指南"
+    echo -e "${CYAN}Gemini CLI 官方版已安装。您可以按以下方式启动：${NC}\n"
+    
+    echo -e "${YELLOW}1. 官方原版 (直连)${NC}"
+    echo -e "   直接在任何终端输入: ${GREEN}gemini${NC}"
+    echo -e "   ${GRAY}(注意：国内网络环境可能无法直接连接)${NC}\n"
+    
+    echo -e "${YELLOW}2. TAV-X 加速版 (推荐)${NC}"
+    echo -e "   在任何终端输入: ${GREEN}st gemini${NC}"
+    echo -e "   ${GRAY}(会自动应用智能网络策略，确保连通性)${NC}\n"
+    
+    echo -e "------------------------------------------------"
+    echo -e "${PINK}提示：首次运行时，程序会引导您进行认证 (支持 Google 登录或 API Key)。${NC}"
+    echo -e "------------------------------------------------"
+    
+    ui_pause
 }
 
-gemini_uninstall() {
-    _gemini_vars
+gemini_off_uninstall() {
     if verify_kill_switch; then
-        gemini_stop
-        ui_spinner "清理文件中..." "safe_rm '$GE_DIR' '$GE_ENV_CONF' '$GE_PID' '$GE_LOG'"
+        ui_print info "正在卸载 @google/gemini-cli..."
+        pnpm remove -g @google/gemini-cli
         ui_print success "已卸载。"
         return 2
     fi
 }
 
-authenticate_google() {
-    _gemini_vars
-    [ ! -d "$GE_DIR" ] && { gemini_install || return 1; }
-    _gemini_check_google || return 1
-    
-    if [ -f "$GE_CREDS" ]; then
-        if ! ui_confirm "已存在凭据，是否重新认证？"; then return; fi
-        safe_rm "$GE_CREDS"
-    fi
-    
-    gemini_stop
-    local proxy=$(get_active_proxy); local p_env=""
-    [ -n "$proxy" ] && p_env="http_proxy='$proxy' https_proxy='$proxy'"
-    
-    local AUTH_LOG="$TMP_DIR/gemini_auth.log"
-    local CMD="source '$GE_VENV/bin/activate' && env -u GEMINI_CREDENTIALS GEMINI_AUTH_PASSWORD='init' PYTHONUNBUFFERED=1 $p_env python -u run.py > '$AUTH_LOG' 2>&1 & echo \$! > '$GE_PID'"
-    eval "$CMD"
-    
-    ui_print info "等待认证链接..."
-    local url=""
-    for i in {1..15}; do
-        if grep -q "https://accounts.google.com" "$AUTH_LOG"; then
-            url=$(grep -o "https://accounts.google.com[^ ]*" "$AUTH_LOG" | head -n 1 | tr -d '\r\n')
-            break
-        fi
-        sleep 1
-    done
-    
-    if [ -n "$url" ]; then
-        open_browser "$url"
-        ui_print success "浏览器已打开，登录后请回来启动服务。"
+gemini_off_menu() {
+    if [[ "${FUNCNAME[1]}" == "app_drawer_menu" || "${FUNCNAME[1]}" == "while" ]]; then
+        while true; do
+            ui_header "Gemini CLI 官方版"
+            local status="未安装"
+            command -v gemini &>/dev/null && status="已就绪"
+            ui_status_card "info" "状态: $status" "包名: @google/gemini-cli" "运行指令: gemini"
+            
+            local CHOICE=$(ui_menu "功能菜单" "🚀 安装/更新" "💬 启动指南" "🗑️  卸载模块" "🔙 返回")
+            case "$CHOICE" in
+                *"安装"*) gemini_off_install ;;
+                *"启动"*) gemini_off_start ;;
+                *"卸载"*) gemini_off_uninstall && [ $? -eq 2 ] && return ;;
+                *"返回"*) return ;;
+            esac
+        done
     else
-        ui_print error "获取链接超时。"
+        if ! command -v gemini &>/dev/null; then
+            ui_print error "未检测到 gemini 命令，请先运行 'st' 进入菜单安装。"
+            return 1
+        fi
+        ui_print info "正在应用智能网络策略并启动 Gemini..."
+        prepare_network_strategy
+        curl -s -I -m 2 https://generativelanguage.googleapis.com >/dev/null 2>&1
+        exec gemini "$@"
     fi
-    ui_pause
-}
-
-gemini_menu() {
-    while true; do
-        _gemini_vars
-        ui_header "♊ Gemini 智能代理"
-        local state="stopped"; local text="未运行"; local info=()
-        local log_path="$GE_LOG"
-        [ "$OS_TYPE" == "TERMUX" ] && log_path="$PREFIX/var/service/gemini/log/current"
-
-        if [ "$OS_TYPE" == "TERMUX" ]; then
-            if sv status gemini 2>/dev/null | grep -q "^run:"; then
-                state="running"; text="运行中"
-            fi
-        elif check_process_smart "$GE_PID" "python.*run.py"; then
-            state="running"; text="运行中"
-        fi
-
-        if [ "$state" == "running" ]; then
-            local port=$(grep "^PORT=" "$GE_ENV_CONF" 2>/dev/null | cut -d= -f2)
-            info+=( "地址: http://127.0.0.1:${port:-8888}/v1" )
-        fi
-        [ -f "$GE_CREDS" ] && info+=( "授权: ✅" ) || info+=( "授权: ❌" )
-        
-        ui_status_card "$state" "$text" "${info[@]}"
-        local CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🔑 Google认证" "⚙️  修改配置" "🛑 停止服务" "📜 查看日志" "⬆️  更新代码" "🗑️  卸载模块" "🔙 返回")
-        case "$CHOICE" in
-            *"启动"*) gemini_start; ui_pause ;;
-            *"认证"*) authenticate_google ;;
-            *"配置"*) 
-                local p=$(grep "^PORT=" "$GE_ENV_CONF" | cut -d= -f2)
-                local new_p=$(ui_input "新端口" "${p:-8888}" "false")
-                if [ -n "$new_p" ]; then
-                    write_env_safe "$GE_ENV_CONF" "PORT" "$new_p"
-                    ui_print success "已保存"
-                fi
-                ui_pause ;;
-            *"停止"*) gemini_stop; ui_print success "已停止"; ui_pause ;;
-            *"日志"*) safe_log_monitor "$log_path" ;;
-            *"更新"*) gemini_install ;;
-            *"卸载"*) gemini_uninstall && [ $? -eq 2 ] && return ;;
-            *"返回"*) return ;;
-        esac
-    done
 }
