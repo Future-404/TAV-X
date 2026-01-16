@@ -17,6 +17,22 @@ scan_and_load_modules
 check_for_updates
 send_analytics
 
+# Handle direct module execution from CLI args
+if [ -n "$1" ]; then
+    for i in "${!REGISTERED_MODULE_IDS[@]}"; do
+        if [ "${REGISTERED_MODULE_IDS[$i]}" == "$1" ]; then
+            ENTRY_FUNC="${REGISTERED_MODULE_ENTRIES[$i]}"
+            shift
+            if command -v "$ENTRY_FUNC" &>/dev/null; then
+                $ENTRY_FUNC "$@"
+                exit $?
+            fi
+        fi
+    done
+    ui_print error "未找到模块: $1"
+    exit 1
+fi
+
 app_drawer_menu() {
     while true; do
         if [ ${#REGISTERED_MODULE_NAMES[@]} -eq 0 ]; then
