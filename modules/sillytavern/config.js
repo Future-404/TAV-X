@@ -1,6 +1,7 @@
 const { execSync, spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
 const env = require('../../core/env');
 const ui = require('../../core/ui');
@@ -12,6 +13,23 @@ const ui = require('../../core/ui');
 const ST_DIR = env.getAppPath('sillytavern');
 const CONFIG_FILE = path.join(ST_DIR, 'config.yaml');
 const MEMORY_CONF = path.join(env.getAppPath('tav_x'), 'config', 'memory.conf');
+
+// 尝试从 SillyTavern 目录加载 YAML 库
+let YAML;
+try {
+    YAML = require(path.join(ST_DIR, 'node_modules', 'yaml'));
+} catch (e) {
+    try {
+        // Fallback: 尝试加载 js-yaml (部分旧版本 ST 可能使用)
+        YAML = require(path.join(ST_DIR, 'node_modules', 'js-yaml'));
+        // 适配 js-yaml 接口差异
+        if (!YAML.parse) YAML.parse = YAML.load;
+        if (!YAML.stringify) YAML.stringify = YAML.dump;
+    } catch (ex) {
+        ui.print('error', '致命错误: 无法加载 YAML 解析库。请确保 SillyTavern 已正确安装依赖 (npm install)。');
+        process.exit(1);
+    }
+}
 
 // --- 帮助函数 ---
 // ... (保持现有代码不变)
@@ -253,6 +271,10 @@ function renderCategory(title, items) {
         } else if (item.type === 'select') {
             // 特殊处理内存配置写入
             if (item.key === 'system.nodeMemory') {
+                const totalMem = (os.totalmem() / 1024 / 1024 / 1024).toFixed(1);
+                const freeMem = (os.freemem() / 1024 / 1024 / 1024).toFixed(1);
+                console.log(`${env.colors.gray}  当前设备内存: ${totalMem} GB (可用: ${freeMem} GB)${env.colors.nc}\n`);
+                
                 const choiceStr = ui.menu(`选择 ${item.label}`, item.options);
                 if (choiceStr) {
                     let val = 0;
