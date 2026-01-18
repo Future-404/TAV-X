@@ -17,7 +17,6 @@ scan_and_load_modules
 check_for_updates
 send_analytics
 
-# Handle direct module execution from CLI args
 if [ -n "$1" ]; then
     for i in "${!REGISTERED_MODULE_IDS[@]}"; do
         if [ "${REGISTERED_MODULE_IDS[$i]}" == "$1" ]; then

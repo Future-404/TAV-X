@@ -207,7 +207,7 @@ app_store_menu() {
 _refresh_store_index() {
     ui_print info "正在连接云端列表..."
     sleep 0.5
-    ui_print success "列表已更新 (模拟)"
+    ui_print success "列表已更新"
 }
 
 _app_store_action() {
