@@ -3,6 +3,8 @@
 # MODULE_ID: clewd
 # MODULE_NAME: ClewdR 管理
 # MODULE_ENTRY: clewd_menu
+# APP_AUTHOR: Xerxes-2
+# APP_PROJECT_URL: https://github.com/Xerxes-2/clewdr
 # [END_METADATA]
 
 source "$TAVX_DIR/core/env.sh"
@@ -158,7 +160,7 @@ clewd_menu() {
         fi
         
         ui_status_card "$state" "$text" "${info[@]}"
-        local CHOICE=$(ui_menu "请选择操作" "🚀 启动服务" "🔑 查看密码" "📜 查看日志" "🛑 停止服务" "📥 更新重装" "🗑️  卸载模块" "🔙 返回")
+        local CHOICE=$(ui_menu "请选择操作" "🚀 启动服务" "🔑 查看密码" "📜 查看日志" "🛑 停止服务" "📥 更新重装" "🗑️  卸载模块" "ℹ️ 关于模块" "🔙 返回")
         case "$CHOICE" in
             *"启动"*) clewd_start; ui_pause ;; 
             *"密码"*) 
@@ -173,6 +175,7 @@ clewd_menu() {
             *"停止"*) clewd_stop; ui_print success "已停止"; ui_pause ;; 
             *"更新"*) clewd_install ;; 
             *"卸载"*) clewd_uninstall && [ $? -eq 2 ] && return ;; 
+            *"关于"*) show_module_about_info "${BASH_SOURCE[0]}" ;;
             *"返回"*) return ;; 
         esac
     done

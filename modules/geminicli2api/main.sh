@@ -3,6 +3,8 @@
 # MODULE_ID: geminicli2api
 # MODULE_NAME: Gemini 智能代理
 # MODULE_ENTRY: geminicli2api_menu
+# APP_AUTHOR: gzzhongqi
+# APP_PROJECT_URL: https://github.com/gzzhongqi/geminicli2api
 # [END_METADATA]
 
 source "$TAVX_DIR/core/env.sh"
@@ -202,7 +204,7 @@ geminicli2api_menu() {
         [ -f "$GE_CREDS" ] && info+=( "授权: ✅" ) || info+=( "授权: ❌" )
         
         ui_status_card "$state" "$text" "${info[@]}"
-        local CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🔑 Google认证" "⚙️  修改配置" "🛑 停止服务" "📜 查看日志" "⬆️  更新代码" "🗑️  卸载模块" "🔙 返回")
+        local CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🔑 Google认证" "⚙️  修改配置" "🛑 停止服务" "📜 查看日志" "⬆️  更新代码" "🗑️  卸载模块" "ℹ️ 关于模块" "🔙 返回")
         case "$CHOICE" in
             *"启动"*) geminicli2api_start; ui_pause ;;
             *"认证"*) authenticate_google ;;
@@ -218,6 +220,7 @@ geminicli2api_menu() {
             *"日志"*) safe_log_monitor "$log_path" ;;
             *"更新"*) geminicli2api_install ;;
             *"卸载"*) geminicli2api_uninstall && [ $? -eq 2 ] && return ;;
+            *"关于"*) show_module_about_info "${BASH_SOURCE[0]}" ;;
             *"返回"*) return ;;
         esac
     done

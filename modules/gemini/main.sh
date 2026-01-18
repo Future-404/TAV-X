@@ -3,6 +3,8 @@
 # MODULE_ID: gemini
 # MODULE_NAME: Gemini CLI 官方版
 # MODULE_ENTRY: gemini_off_menu
+# APP_AUTHOR: Google
+# APP_PROJECT_URL: https://github.com/google/gemini-cli
 # [END_METADATA]
 
 source "$TAVX_DIR/core/env.sh"
@@ -86,11 +88,12 @@ gemini_off_menu() {
             command -v gemini &>/dev/null && status="已就绪"
             ui_status_card "info" "状态: $status" "包名: @google/gemini-cli" "运行指令: gemini"
             
-            local CHOICE=$(ui_menu "功能菜单" "🚀 安装/更新" "💬 启动指南" "🗑️  卸载模块" "🔙 返回")
+            local CHOICE=$(ui_menu "功能菜单" "🚀 安装/更新" "💬 启动指南" "🗑️  卸载模块" "ℹ️ 关于模块" "🔙 返回")
             case "$CHOICE" in
                 *"安装"*) gemini_off_install ;;
                 *"启动"*) gemini_off_start ;;
                 *"卸载"*) gemini_off_uninstall && [ $? -eq 2 ] && return ;;
+                *"关于"*) show_module_about_info "${BASH_SOURCE[0]}" ;;
                 *"返回"*) return ;;
             esac
         done

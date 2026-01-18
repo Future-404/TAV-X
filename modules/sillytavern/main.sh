@@ -6,6 +6,8 @@
 # APP_CATEGORY="Frontend"
 # APP_VERSION="Standard"
 # APP_DESC="下一代 LLM 沉浸式前端界面"
+# APP_AUTHOR: SillyTavern
+# APP_PROJECT_URL: https://github.com/SillyTavern/SillyTavern
 # [END_METADATA]
 
 source "$TAVX_DIR/core/env.sh"
@@ -316,7 +318,7 @@ sillytavern_menu() {
         ui_header "SillyTavern 管理面板"
         ui_status_card "$state" "$text" "${info[@]}"
         
-        local CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🛑 停止服务" "⚙️  应用配置" "🧩 插件管理" "⬇️  更新与版本" "💾 备份与恢复" "📜 查看日志" "🗑️  卸载模块" "🔙 返回")
+        local CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🛑 停止服务" "⚙️  应用配置" "🧩 插件管理" "⬇️  更新与版本" "💾 备份与恢复" "📜 查看日志" "🗑️  卸载模块" "ℹ️ 关于模块" "🔙 返回")
         case "$CHOICE" in
             *"启动"*) sillytavern_start; ui_pause ;; 
             *"停止"*) sillytavern_stop; ui_print success "已停止"; ui_pause ;; 
@@ -330,6 +332,7 @@ sillytavern_menu() {
                 safe_log_monitor "$log_path" 
                 ;; 
             *"卸载"*) sillytavern_uninstall && [ $? -eq 2 ] && return ;; 
+            *"关于"*) show_module_about_info "${BASH_SOURCE[0]}" ;;
             *"返回"*) return ;; 
         esac
     done

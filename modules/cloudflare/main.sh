@@ -3,6 +3,8 @@
 # MODULE_ID: cloudflare
 # MODULE_NAME: Cloudflare 隧道
 # MODULE_ENTRY: cf_menu
+# APP_AUTHOR: cloudflare
+# APP_PROJECT_URL: https://github.com/cloudflare/cloudflared
 # [END_METADATA]
 
 source "$TAVX_DIR/core/env.sh"
@@ -614,7 +616,8 @@ cf_menu() {
             "🧹 扫描并清理孤儿 DNS" \
             "🛑 停止所有服务" \
             "🗑️  卸载/重置模块" \
-            "🔙 返回" 
+            "ℹ️ 关于模块" \
+            "🔙 返回"
         )
         
         [ -z "$C" ] && return
@@ -640,6 +643,7 @@ cf_menu() {
                     fi
                     return 2
                 fi ;; 
+            *"关于"*) show_module_about_info "${BASH_SOURCE[0]}" ;;
             *"返回"*) return ;; 
         esac
     done

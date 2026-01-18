@@ -1,8 +1,10 @@
 #!/bin/bash
 # [METADATA]
 # MODULE_ID: aistudio
-# MODULE_NAME: AIStudio 代理
+# MODULE_NAME: build插件
 # MODULE_ENTRY: aistudio_menu
+# APP_AUTHOR: starowo
+# APP_PROJECT_URL: https://github.com/starowo/AIStudioBuildProxy
 # [END_METADATA]
 
 source "$TAVX_DIR/core/env.sh"
@@ -73,10 +75,11 @@ aistudio_menu() {
         fi
         ui_status_card "$state" "$text" "${info[@]}"
         
-        local CHOICE=$(ui_menu "操作菜单" "📥 安装/更新插件" "🗑️  卸载插件" "🔙 返回")
+        local CHOICE=$(ui_menu "操作菜单" "📥 安装/更新插件" "🗑️  卸载插件" "ℹ️ 关于模块" "🔙 返回")
         case "$CHOICE" in
             *"安装"*) aistudio_install ;;
             *"卸载"*) aistudio_uninstall && [ $? -eq 2 ] && return ;;
+            *"关于"*) show_module_about_info "${BASH_SOURCE[0]}" ;;
             *"返回"*) return ;;
         esac
         ui_pause

@@ -165,7 +165,7 @@ get_active_proxy() {
     local found_proxies=()
     for entry in "${GLOBAL_PROXY_PORTS[@]}"; do
         local port=${entry%%:*}
-        local proto=${entry#*:} 
+        local proto=${entry#*:}
         if timeout 0.1 bash -c "</dev/tcp/127.0.0.1/$port" 2>/dev/null; then
             local p_url="http://127.0.0.1:$port"
             [[ "$proto" == "socks5" ]] && p_url="socks5://127.0.0.1:$port"
@@ -212,9 +212,10 @@ check_github_speed() {
     local TEST_URL="https://raw.githubusercontent.com/Future-404/TAV-X/main/core/env.sh"
     echo -e "${CYAN}正在测试 GitHub 直连速度 (阈值: 800KB/s)...${NC}"
     
-    local speed=$(curl -s -L -m 5 -w "%{speed_download}\n" -o /dev/null "$TEST_URL" 2>/dev/null)
-    speed=$(echo "$speed" | tr -d '\r\n ' | cut -d. -f1)
-    [ -z "$speed" ] || [[ ! "$speed" =~ ^[0-9]+$ ]] && speed=0
+    local speed=$(curl -s -L -m 5 -w "% {speed_download}
+" -o /dev/null "$TEST_URL" 2>/dev/null)
+speed=$(echo "$speed" | tr -d '\r\n ' | cut -d. -f1)
+[ -z "$speed" ] || [[ ! "$speed" =~ ^[0-9]+$ ]] && speed=0
     
     local speed_kb=$((speed / 1024))
     
@@ -335,7 +336,7 @@ select_mirror_interactive() {
 
     echo ""
     ui_print success "已选定: $SELECTED_MIRROR"
-    export SELECTED_MIRROR
+    exportSELECTED_MIRROR
     return 0
 }
 
@@ -717,7 +718,7 @@ get_sys_resources_info() {
     local mem_pct=0
     [ -n "$mem_total" ] && [ "$mem_total" -gt 0 ] && mem_pct=$(( mem_used * 100 / mem_total ))
     
-    echo "${mem_pct}%"
+    echo "${mem_pct} %"
 }
 
 export -f get_sys_resources_info
@@ -873,3 +874,55 @@ stop_all_services_routine() {
 }
 export -f stop_all_services_routine
 
+show_module_about_info() {
+    local module_file="$1"
+    if [ ! -f "$module_file" ]; then
+        ui_print error "无法找到模块信息文件。"
+        ui_pause
+        return
+    fi
+
+    local name=$(grep "# MODULE_NAME:" "$module_file" | head -n 1 | cut -d: -f2- | xargs)
+    local author=$(grep "# APP_AUTHOR:" "$module_file" | head -n 1 | cut -d: -f2- | xargs)
+    local url=$(grep "# APP_PROJECT_URL:" "$module_file" | head -n 1 | cut -d: -f2- | xargs)
+    local desc=$(grep "# APP_DESC:" "$module_file" | head -n 1 | cut -d: -f2- | xargs)
+
+    ui_header "关于: ${name:-未知模块}"
+
+    if [ -z "$author" ] && [ -z "$url" ]; then
+        ui_print warn "该模块未提供作者或项目信息。"
+        ui_pause
+        return
+    fi
+    
+    if [ "$HAS_GUM" = true ]; then
+        echo ""
+        [ -n "$desc" ] && gum style --foreground 250 --padding "0 2" "• $desc" && echo ""
+        local label_style="gum style --foreground 99 --width 10"
+        local value_style="gum style --foreground 255"
+        [ -n "$author" ] && echo -e "  $($(echo "作者:") | $label_style)  $($value_style "$author")"
+        [ -n "$url" ] && echo -e "  $($(echo "项目:") | $label_style)  $($value_style "$url")"
+        echo ""
+        if [ -n "$url" ]; then
+            if gum confirm "在浏览器中打开项目地址？"; then
+                open_browser "$url"
+            fi
+        else
+            ui_pause
+        fi
+    else
+        echo ""
+        [ -n "$desc" ] && echo -e "${YELLOW}描述:${NC}  $desc\n"
+        [ -n "$author" ] && echo -e "${YELLOW}作者:${NC}  ${CYAN}$author${NC}"
+        [ -n "$url" ] && echo -e "${YELLOW}项目:${NC}  ${BLUE}$url${NC}"
+        echo ""
+        if [ -n "$url" ]; then
+            if ui_confirm "在浏览器中打开项目地址？"; then
+                open_browser "$url"
+            fi
+        else
+            ui_pause
+        fi
+    fi
+}
+export -f show_module_about_info
