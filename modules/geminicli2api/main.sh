@@ -2,7 +2,7 @@
 # [METADATA]
 # MODULE_ID: geminicli2api
 # MODULE_NAME: Gemini 智能代理
-# MODULE_ENTRY: gemini_menu
+# MODULE_ENTRY: geminicli2api_menu
 # [END_METADATA]
 
 source "$TAVX_DIR/core/env.sh"
