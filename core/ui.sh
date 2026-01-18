@@ -4,8 +4,13 @@
 _TAVX_UI_LOADED=true
 
 HAS_GUM=false
-if command -v gum &> /dev/null; then HAS_GUM=true; fi
+GUM_BIN=""
+if command -v gum &> /dev/null; then 
+    HAS_GUM=true
+    GUM_BIN="$(command -v gum)"
+fi
 export HAS_GUM
+export GUM_BIN
 
 export NC='\033[0m'
 export RED='\033[0;31m'
@@ -42,14 +47,14 @@ ui_header() {
     
     clear
     if [ "$HAS_GUM" = true ]; then
-        local logo=$(gum style --foreground $C_PINK "$(get_ascii_logo)")
-        local v_tag=$(gum style --foreground $C_DIM --align right "Ver: $ver | by Future 404  ")
+        local logo=$("$GUM_BIN" style --foreground $C_PINK "$(get_ascii_logo)")
+        local v_tag=$("$GUM_BIN" style --foreground $C_DIM --align right "Ver: $ver | by Future 404  ")
         echo "$logo"
         echo "$v_tag"
         
         if [ -n "$subtitle" ]; then
-            local prefix=$(gum style --foreground $C_PURPLE --bold "  🚀 ")
-            local divider=$(gum style --foreground $C_DIM "  ───────────────────────────────────────")
+            local prefix=$("$GUM_BIN" style --foreground $C_PURPLE --bold "  🚀 ")
+            local divider=$("$GUM_BIN" style --foreground $C_DIM "  ───────────────────────────────────────")
             echo -e "${prefix}${subtitle}"
             echo "$divider"
         fi
@@ -99,7 +104,7 @@ export -f write_log
 ui_menu() {
     local header="$1"; shift
     if [ "$HAS_GUM" = true ]; then
-        gum choose --header="" --cursor="👉 " --cursor.foreground "$C_PINK" --selected.foreground "$C_PINK" -- "$@"
+        "$GUM_BIN" choose --header="" --cursor="👉 " --cursor.foreground "$C_PINK" --selected.foreground "$C_PINK" -- "$@"
     else
         echo -e "\n${CYAN}[ $header ]${NC}" >&2
         local i=1
@@ -132,7 +137,7 @@ ui_input() {
         local args=(--placeholder "$prompt" --width 40 --cursor.foreground $C_PINK)
         [ -n "$default" ] && args+=(--value "$default")
         [ "$is_pass" = "true" ] && args+=(--password)
-        gum input "${args[@]}"
+        "$GUM_BIN" input "${args[@]}"
     else
         local flag=""; [ "$is_pass" = "true" ] && flag="-s"
         echo -n -e "  ${CYAN}➜${NC} $prompt" >&2
@@ -184,7 +189,7 @@ export -f ui_input_validated
 ui_confirm() {
     local prompt="${1:-确定要执行此操作吗？}"
     if [ "$HAS_GUM" = true ]; then
-        gum confirm "$prompt" --affirmative "是" --negative "否" --selected.background $C_PINK
+        "$GUM_BIN" confirm "$prompt" --affirmative "是" --negative "否" --selected.background $C_PINK
     else
         echo -e -n "${YELLOW}⚠ $prompt (y/n): ${NC}" >&2
         read -r c; [[ "$c" == "y" || "$c" == "Y" ]]
@@ -227,7 +232,7 @@ ui_stream_task() {
         if [ "$HAS_GUM" = true ]; then
             local display_line="${clean_line:0:$term_width}"
             [ "${#clean_line}" -gt "$term_width" ] && display_line="${display_line}..."
-            gum style --foreground "$C_DIM" "  │ $display_line"
+            "$GUM_BIN" style --foreground "$C_DIM" "  │ $display_line"
         else
             echo -e "  \033[0;90m│\033[0m ${clean_line:0:$term_width}"
         fi
@@ -263,7 +268,7 @@ ui_status_card() {
 
     if [ "$HAS_GUM" = true ]; then
         local parts=()
-        parts+=("$(gum style --foreground "$gum_color" --bold "$icon $main_text")")
+        parts+=("$("$GUM_BIN" style --foreground "$gum_color" --bold "$icon $main_text")")
         
         if [ ${#infos[@]} -gt 0 ]; then
             parts+=("")
@@ -271,15 +276,15 @@ ui_status_card() {
                 if [[ "$line" == *": "* ]]; then
                     local k="${line%%: *}"
                     local v="${line#*: }"
-                    parts+=("$(gum style --foreground $C_PURPLE "$k"): $v")
+                    parts+=("$("$GUM_BIN" style --foreground $C_PURPLE "$k"): $v")
                 else
                     parts+=("$line")
                 fi
             done
         fi
         
-        local joined=$(gum join --vertical --align left "${parts[@]}")
-        gum style --border normal --border-foreground $C_DIM --padding "0 1" --margin "0 0 1 0" --width 45 "$joined"
+        local joined=$("$GUM_BIN" join --vertical --align left "${parts[@]}")
+        "$GUM_BIN" style --border normal --border-foreground $C_DIM --padding "0 1" --margin "0 0 1 0" --width 45 "$joined"
     else
         local color_code=""
         case "$type" in
@@ -313,10 +318,10 @@ ui_print() {
 
     if [ "$HAS_GUM" = true ]; then
         case $type in
-            success) gum style --foreground $C_GREEN "  ✔ $msg" ;; 
-            error)   gum style --foreground $C_RED   "  ✘ $msg" ;; 
-            warn)    gum style --foreground $C_YELLOW "  ⚠ $msg" ;; 
-            *)       gum style --foreground $C_PURPLE "  ℹ $msg" ;; 
+            success) "$GUM_BIN" style --foreground $C_GREEN "  ✔ $msg" ;; 
+            error)   "$GUM_BIN" style --foreground $C_RED   "  ✘ $msg" ;; 
+            warn)    "$GUM_BIN" style --foreground $C_YELLOW "  ⚠ $msg" ;; 
+            *)       "$GUM_BIN" style --foreground $C_PURPLE "  ℹ $msg" ;; 
         esac
     else 
         case $type in
@@ -333,7 +338,7 @@ ui_pause() {
     local prompt="${1:-按任意键继续...}"
     echo ""
     if [ "$HAS_GUM" = true ]; then
-        gum style --foreground $C_DIM "  $prompt"
+        "$GUM_BIN" style --foreground $C_DIM "  $prompt"
         read -n 1 -s -r
     else
         read -n 1 -s -r -p "  $prompt"

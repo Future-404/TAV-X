@@ -607,7 +607,7 @@ verify_kill_switch() {
     echo -e "为了确认是您本人操作，请准确输入以下文字："
     echo ""
     if [ "$HAS_GUM" = true ]; then
-        gum style --border double --border-foreground 196 --padding "0 1" --foreground 220 "$TARGET_PHRASE"
+        "$GUM_BIN" style --border double --border-foreground 196 --padding "0 1" --foreground 220 "$TARGET_PHRASE"
     else
         echo ">>> $TARGET_PHRASE"
     fi
@@ -897,14 +897,14 @@ show_module_about_info() {
     
     if [ "$HAS_GUM" = true ]; then
         echo ""
-        [ -n "$desc" ] && gum style --foreground 250 --padding "0 2" "• $desc" && echo ""
-        local label_style="gum style --foreground 99 --width 10"
-        local value_style="gum style --foreground 255"
+        [ -n "$desc" ] && "$GUM_BIN" style --foreground 250 --padding "0 2" "• $desc" && echo ""
+        local label_style="$GUM_BIN style --foreground 99 --width 10"
+        local value_style="$GUM_BIN style --foreground 255"
         [ -n "$author" ] && echo -e "  $($(echo "作者:") | $label_style)  $($value_style "$author")"
         [ -n "$url" ] && echo -e "  $($(echo "项目:") | $label_style)  $($value_style "$url")"
         echo ""
         if [ -n "$url" ]; then
-            if gum confirm "在浏览器中打开项目地址？"; then
+            if "$GUM_BIN" confirm "在浏览器中打开项目地址？"; then
                 open_browser "$url"
             fi
         else

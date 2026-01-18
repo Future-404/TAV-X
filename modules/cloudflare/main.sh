@@ -77,7 +77,7 @@ cf_import_cert() {
     
     local selected_file=""
     if [ "$HAS_GUM" = true ]; then
-        selected_file=$(gum file --cursor.foreground="$C_PINK" "$HOME")
+        selected_file=$("$GUM_BIN" file --cursor.foreground="$C_PINK" "$HOME")
     else
         selected_file=$(ui_input "请输入文件绝对路径" "" "false")
     fi

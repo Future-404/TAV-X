@@ -97,7 +97,7 @@ manage_shortcuts_menu() {
     ui_header "⭐ 主页快捷方式"
     echo -e "  ${CYAN}勾选要固定在主菜单顶部的应用 (🟢=已安装 🟡=未安装)${NC}"
     if [ "$HAS_GUM" = true ]; then
-        gum style --foreground "$C_DIM" "  按 <空格> 勾选，按 <回车> 提交保存"
+        "$GUM_BIN" style --foreground "$C_DIM" "  按 <空格> 勾选，按 <回车> 提交保存"
         echo ""
     else
         echo "----------------------------------------"
@@ -117,7 +117,7 @@ manage_shortcuts_menu() {
         done
         
         export GUM_CHOOSE_SELECTED=$(IFS=,; echo "${selected_labels[*]}")
-        local choices=$(gum choose --no-limit --header="" --cursor="👉 " --cursor.foreground="$C_PINK" --selected.foreground="$C_PINK" -- "${display_names[@]}")
+        local choices=$("$GUM_BIN" choose --no-limit --header="" --cursor="👉 " --cursor.foreground="$C_PINK" --selected.foreground="$C_PINK" -- "${display_names[@]}")
         unset GUM_CHOOSE_SELECTED
         
         new_selection=()
