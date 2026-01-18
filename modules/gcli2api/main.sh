@@ -1,7 +1,7 @@
 #!/bin/bash
 # [METADATA]
 # MODULE_ID: gcli2api
-# MODULE_NAME: GCLI 转 API
+# MODULE_NAME: GCLI2API (作者: su-kaka)
 # MODULE_ENTRY: gcli2api_menu
 # APP_AUTHOR: su-kaka
 # APP_PROJECT_URL: https://github.com/su-kaka/gcli2api
@@ -60,7 +60,7 @@ gcli2api_install() {
     fi
     
     local INSTALL_CMD="source \"\$TAVX_DIR/core/python_utils.sh\"; install_requirements_smart '$GCLI_VENV' '$TARGET_REQ' 'standard'"
-    if ! ui_stream_task "正在安装 Pip 依赖 (可能较慢)..." "$INSTALL_CMD"; then
+    if ! ui_stream_task "正在安装 Pip 依赖...." "$INSTALL_CMD"; then
         ui_print error "依赖安装失败。"
         return 1
     fi
@@ -80,7 +80,7 @@ gcli2api_start() {
     gcli2api_stop
     pkill -9 -f "python.*web.py" 2>/dev/null
     
-    local RUN_CMD="source '$GCLI_VENV/bin/activate' && export PORT='$GCLI_PORT' PASSWORD='$GCLI_PWD' HOST='$GCLI_HOST' && python web.py"
+    local RUN_CMD=". '$GCLI_VENV/bin/activate' && export PORT='$GCLI_PORT' PASSWORD='$GCLI_PWD' HOST='$GCLI_HOST' && python web.py"
 
     ui_print info "正在启动服务..."
 

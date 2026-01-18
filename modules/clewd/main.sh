@@ -1,7 +1,7 @@
 #!/bin/bash
 # [METADATA]
 # MODULE_ID: clewd
-# MODULE_NAME: ClewdR 管理
+# MODULE_NAME: ClewdR 管理 (作者: Xerxes-2)
 # MODULE_ENTRY: clewd_menu
 # APP_AUTHOR: Xerxes-2
 # APP_PROJECT_URL: https://github.com/Xerxes-2/clewdr

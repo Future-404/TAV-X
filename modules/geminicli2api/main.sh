@@ -1,7 +1,7 @@
 #!/bin/bash
 # [METADATA]
 # MODULE_ID: geminicli2api
-# MODULE_NAME: Gemini 智能代理
+# MODULE_NAME: Geminicli2api (作者: gzzhongqi)
 # MODULE_ENTRY: geminicli2api_menu
 # APP_AUTHOR: gzzhongqi
 # APP_PROJECT_URL: https://github.com/gzzhongqi/geminicli2api
@@ -72,7 +72,9 @@ geminicli2api_install() {
 
 geminicli2api_start() {
     _geminicli2api_vars
-    [ ! -d "$GE_DIR" ] && { geminicli2api_install || return 1; }
+    if [ ! -d "$GE_DIR" ] || [ ! -f "$GE_ENV_CONF" ]; then
+        geminicli2api_install || return 1
+    fi
     _geminicli2api_check_google || return 1
     
     geminicli2api_stop
@@ -86,15 +88,17 @@ geminicli2api_start() {
     
     local proxy=$(get_active_proxy)
     local p_env=""
-    [ -n "$proxy" ] && p_env="http_proxy='$proxy' https_proxy='$proxy' all_proxy='$proxy'"
+    [ -n "$proxy" ] && p_env="http_proxy=$proxy https_proxy=$proxy all_proxy=$proxy"
     
-    local RUN_CMD="source '$GE_VENV/bin/activate' && env $p_env python run.py"
+    local RUN_CMD="env $p_env '$GE_VENV/bin/python' run.py"
 
     ui_print info "正在启动服务..."
 
     if [ "$OS_TYPE" == "TERMUX" ]; then
-        tavx_service_register "geminicli2api" "sh -c \"$RUN_CMD\"" "$GE_DIR"
+        tavx_service_register "geminicli2api" "$RUN_CMD" "$GE_DIR"
+        sv enable geminicli2api
         tavx_service_control "up" "geminicli2api"
+        sleep 2
         ui_print success "服务启动命令已发送。"
     else
         local CMD="cd '$GE_DIR' && env $p_env setsid nohup python run.py > '$GE_LOG' 2>&1 & echo \$! > '$GE_PID'"
@@ -113,7 +117,9 @@ geminicli2api_start() {
 geminicli2api_stop() {
     _geminicli2api_vars
     if [ "$OS_TYPE" == "TERMUX" ]; then
-        tavx_service_control "down" "geminicli2api"
+        if [ -d "$PREFIX/var/service/geminicli2api" ]; then
+            tavx_service_control "down" "geminicli2api"
+        fi
     else
         kill_process_safe "$GE_PID" "python.*run.py"
     fi
@@ -131,7 +137,9 @@ geminicli2api_uninstall() {
 
 authenticate_google() {
     _geminicli2api_vars
-    [ ! -d "$GE_DIR" ] && { geminicli2api_install || return 1; }
+    if [ ! -d "$GE_DIR" ] || [ ! -f "$GE_ENV_CONF" ]; then
+        geminicli2api_install || return 1
+    fi
     _geminicli2api_check_google || return 1
     
     if [ -f "$GE_CREDS" ]; then
@@ -144,7 +152,7 @@ authenticate_google() {
     [ -n "$proxy" ] && p_env="http_proxy='$proxy' https_proxy='$proxy'"
     
     local AUTH_LOG="$TMP_DIR/gemini_auth.log"
-    local CMD="source '$GE_VENV/bin/activate' && env -u GEMINI_CREDENTIALS GEMINI_AUTH_PASSWORD='init' PYTHONUNBUFFERED=1 $p_env python -u run.py > '$AUTH_LOG' 2>&1 & echo \$! > '$GE_PID'"
+    local CMD="cd '$GE_DIR' && source '$GE_VENV/bin/activate' && env -u GEMINI_CREDENTIALS GEMINI_AUTH_PASSWORD='init' PYTHONUNBUFFERED=1 $p_env python -u run.py > '$AUTH_LOG' 2>&1 & echo \$! > '$GE_PID'"
     eval "$CMD"
     
     ui_print info "等待认证链接..."
@@ -167,15 +175,12 @@ authenticate_google() {
 }
 
 geminicli2api_menu() {
-    # 自动迁移旧版数据逻辑
     local old_app_path="$APPS_DIR/gemini"
     local new_app_path="$APPS_DIR/geminicli2api"
     if [ -d "$old_app_path" ] && [ ! -d "$new_app_path" ]; then
-        # 检查是否包含 run.py (旧版特征文件)
         if [ -f "$old_app_path/run.py" ]; then
             ui_print info "检测到旧版 Gemini 数据，正在迁移至新目录..."
             mv "$old_app_path" "$new_app_path"
-            # 迁移配置文件
             [ -f "$CONFIG_DIR/gemini.env" ] && mv "$CONFIG_DIR/gemini.env" "$CONFIG_DIR/geminicli2api.env"
             ui_print success "迁移完成！"
             sleep 1

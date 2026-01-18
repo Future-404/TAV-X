@@ -35,8 +35,15 @@ gemini_off_install() {
     
     _go_check_env || return 1
 
+    ui_print info "正在应用智能网络策略..."
+    prepare_network_strategy "NPM"
+
     ui_print info "正在通过 pnpm 全局安装 @google/gemini-cli..."
     if pnpm add -g @google/gemini-cli; then
+        local app_path=$(get_app_path "gemini")
+        mkdir -p "$app_path"
+        touch "$app_path/.installed"
+
         ui_print success "安装完成！"
         ui_print info "提示：您可以直接输入 'gemini' 启动官方原版。"
         ui_print info "      或者输入 'st gemini' 启动带智能网络的增强版。"
@@ -75,6 +82,10 @@ gemini_off_uninstall() {
     if verify_kill_switch; then
         ui_print info "正在卸载 @google/gemini-cli..."
         pnpm remove -g @google/gemini-cli
+
+        local app_path=$(get_app_path "gemini")
+        safe_rm "$app_path"
+
         ui_print success "已卸载。"
         return 2
     fi

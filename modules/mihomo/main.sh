@@ -210,7 +210,7 @@ mihomo_menu() {
         
         ui_status_card "$state" "$text" "${info[@]}"
         
-        local CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🛑 停止服务" "🔗 设置订阅" "🔧 高级配置 (Patch)" "🔑 设置密钥" "📊 打开面板" "📜 查看日志" "⚙️  更新核心" "🗑️  卸载模块" "ℹ️ 关于模块" "🔙 返回")
+        local CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🛑 停止服务" "🔗 设置订阅" "🔧 高级配置" "🔑 设置密钥" "📊 打开面板" "📜 查看日志" "⚙️  更新核心" "🗑️  卸载模块" "ℹ️ 关于模块" "🔙 返回")
         case "$CHOICE" in
             *"启动"*) mihomo_start; ui_pause ;; 
             *"停止"*) mihomo_stop; ui_print success "已停止"; ui_pause ;; 
