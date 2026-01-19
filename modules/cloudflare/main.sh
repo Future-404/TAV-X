@@ -3,6 +3,7 @@
 # MODULE_ID: cloudflare
 # MODULE_NAME: Cloudflare 隧道
 # MODULE_ENTRY: cf_menu
+# APP_CATEGORY: 网络与代理
 # APP_AUTHOR: cloudflare
 # APP_PROJECT_URL: https://github.com/cloudflare/cloudflared
 # APP_DESC: Cloudflare Tunnel(cloudflared)允许您通过Cloudflare的边缘网络安全地将本地服务暴露到公网，无需配置防火墙规则或公网IP。支持自动管理DNS记录、HTTPS证书以及高性能的全球加速。

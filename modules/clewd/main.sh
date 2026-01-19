@@ -3,6 +3,7 @@
 # MODULE_ID: clewd
 # MODULE_NAME: ClewdR 管理
 # MODULE_ENTRY: clewd_menu
+# APP_CATEGORY: AI模型接口
 # APP_AUTHOR: Xerxes-2
 # APP_PROJECT_URL: https://github.com/Xerxes-2/clewdr
 # APP_DESC: ClewdR是一个用于Claude（Claude.ai、Claude Code的Rust代理程序。它能保持较低的资源占用，提供OpenAI风格的API接口，并附带一个小型React管理界面，用于管理Cookie和设置。

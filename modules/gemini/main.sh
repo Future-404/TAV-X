@@ -3,6 +3,7 @@
 # MODULE_ID: gemini
 # MODULE_NAME: Gemini CLI官方版
 # MODULE_ENTRY: gemini_menu
+# APP_CATEGORY: 命令行工具
 # APP_AUTHOR: Google
 # APP_PROJECT_URL: https://github.com/google/gemini-cli
 # APP_DESC: Google 官方提供的Gemini命令行工具，支持在终端直接调用Gemini系列模型。TAV-X为其提供了自动化安装及智能网络加速支持。

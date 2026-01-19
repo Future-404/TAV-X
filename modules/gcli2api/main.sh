@@ -3,6 +3,7 @@
 # MODULE_ID: gcli2api
 # MODULE_NAME: GCLI2API
 # MODULE_ENTRY: gcli2api_menu
+# APP_CATEGORY: AI模型接口
 # APP_AUTHOR: su-kaka
 # APP_PROJECT_URL: https://github.com/su-kaka/gcli2api
 # APP_DESC: 将 GeminiCLI 和 Antigravity 转换为 OpenAI 、GEMINI 和 Claude API 兼容接口

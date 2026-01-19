@@ -3,6 +3,7 @@
 # MODULE_ID: aistudio
 # MODULE_NAME: build插件
 # MODULE_ENTRY: aistudio_menu
+# APP_CATEGORY: AI模型接口
 # APP_AUTHOR: starowo
 # APP_PROJECT_URL: https://github.com/starowo/AIStudioBuildProxy
 # APP_DESC: AIStudioBuildProxy 是一款专为SillyTavern开发的插件，通过模拟 GoogleAIStudio 构建环境的内部接口，实现对 Gemini 系列模型的免费调用。

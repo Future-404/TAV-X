@@ -3,6 +3,7 @@
 # MODULE_ID: geminicli2api
 # MODULE_NAME: Geminicli2api
 # MODULE_ENTRY: geminicli2api_menu
+# APP_CATEGORY: AI模型接口
 # APP_AUTHOR: gzzhongqi
 # APP_PROJECT_URL: https://github.com/gzzhongqi/geminicli2api
 # APP_DESC: 基于 FastAPI 的代理转换服务，能够将GeminiCLI封装为兼容OpenAI和原生Gemini的API接口。让您通过熟悉的协议标准，无缝调用Google提供的免费Gemini模型配额。

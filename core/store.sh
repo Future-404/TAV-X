@@ -9,22 +9,45 @@ INDEX_FILE="$TAVX_DIR/config/store.csv"
 
 STORE_IDS=()
 STORE_NAMES=()
+STORE_CATS=()
 STORE_DESCS=()
 STORE_URLS=()
 STORE_BRANCHES=()
 
+_get_category_icon() {
+    case "$1" in
+        *"AI"*) echo "🧠 " ;;
+        *"前端"*) echo "🖥️  " ;;
+        *"网络"*) echo "🌐 " ;;
+        *"代理"*) echo "🌐 " ;;
+        *"插件"*) echo "🧩 " ;;
+        *"命令"*) echo "🛠️  " ;;
+        *"工具"*) echo "🛠️  " ;;
+        *) echo "📂 " ;;
+    esac
+}
 _load_store_data() {
     STORE_IDS=()
     STORE_NAMES=()
+    STORE_CATS=()
     STORE_DESCS=()
     STORE_URLS=()
     STORE_BRANCHES=()
     
     if [ -f "$INDEX_FILE" ]; then
-        while IFS=, read -r id name desc url branch; do
+        while IFS=, read -r id name cat desc url branch || [ -n "$id" ]; do
+            id=$(echo "$id" | tr -d '\r' | xargs)
             [[ "$id" =~ ^#.*$ || -z "$id" ]] && continue
+            
+            name=$(echo "$name" | tr -d '\r' | xargs)
+            cat=$(echo "$cat" | tr -d '\r' | xargs)
+            desc=$(echo "$desc" | tr -d '\r' | xargs)
+            url=$(echo "$url" | tr -d '\r' | xargs)
+            branch=$(echo "$branch" | tr -d '\r' | xargs)
+            
             STORE_IDS+=("$id")
             STORE_NAMES+=("$name")
+            STORE_CATS+=("${cat:-未分类}")
             STORE_DESCS+=("$desc")
             STORE_URLS+=("$url")
             STORE_BRANCHES+=("$branch")
@@ -36,15 +59,21 @@ _load_store_data() {
         local id=$(basename "$mod_dir")
         local main_sh="$mod_dir/main.sh"
         [ ! -f "$main_sh" ] && continue
+        
         local exists=false
         for existing_id in "${STORE_IDS[@]}"; do
             if [ "$existing_id" == "$id" ]; then exists=true; break; fi
         done
+        
         if [ "$exists" = false ]; then
             local meta_name=$(grep "MODULE_NAME:" "$main_sh" | cut -d: -f2- | xargs)
+            local meta_cat=$(grep "APP_CATEGORY:" "$main_sh" | cut -d: -f2- | xargs)
             [ -z "$meta_name" ] && meta_name="$id"
+            [ -z "$meta_cat" ] && meta_cat="本地模块"
+            
             STORE_IDS+=("$id")
             STORE_NAMES+=("$meta_name")
+            STORE_CATS+=("$meta_cat")
             STORE_DESCS+=("本地已安装模块")
             STORE_URLS+=("local")
             STORE_BRANCHES+=("-")
@@ -104,7 +133,6 @@ manage_shortcuts_menu() {
     fi
     
     local new_selection=()
-    
     if [ "$HAS_GUM" = true ]; then
         local selected_labels=()
         for cur in "${current_shortcuts[@]}"; do
@@ -115,12 +143,10 @@ manage_shortcuts_menu() {
                 fi
             done
         done
-        
         export GUM_CHOOSE_SELECTED=$(IFS=,; echo "${selected_labels[*]}")
         local choices=$("$GUM_BIN" choose --no-limit --header="" --cursor="👉 " --cursor.foreground="$C_PINK" --selected.foreground="$C_PINK" -- "${display_names[@]}")
         unset GUM_CHOOSE_SELECTED
         
-        new_selection=()
         IFS=$'\n' read -rd '' -a choices_arr <<< "$choices"
         for choice in "${choices_arr[@]}"; do
             [ -z "$choice" ] && continue
@@ -137,69 +163,116 @@ manage_shortcuts_menu() {
              local name="${display_names[$i]}"
              local is_pinned="false"
              for cur in "${current_shortcuts[@]}"; do [[ "$cur" == "$id" ]] && is_pinned="true"; done
-             
              local mark="[ ]"; [ "$is_pinned" == "true" ] && mark="[x]"
-             if ui_confirm "$mark 显示 $name ?"; then
-                 new_selection+=("$id")
-             fi
+             if ui_confirm "$mark 显示 $name ?"; then new_selection+=("$id"); fi
         done
     fi
-    
     printf "%s\n" "${new_selection[@]}" > "$SHORTCUT_FILE"
     ui_print success "快捷方式已更新！"
     ui_pause
 }
 
 app_store_menu() {
+    local current_view="home"
+    local selected_category=""
+    
     while true; do
         _load_store_data
-        ui_header "🛒 应用中心"
         
-        local MENU_OPTS=()
-        MENU_OPTS+=("⭐ 管理主页快捷方式")
-        MENU_OPTS+=("------------------------")
-        
-        for i in "${!STORE_IDS[@]}"; do
-            local id="${STORE_IDS[$i]}"
-            local name="${STORE_NAMES[$i]}"
-            local status="🌐"
-            local mod_path="$TAVX_DIR/modules/$id"
-            local app_path=$(get_app_path "$id")
-            if [ -d "$mod_path" ] && [ -f "$mod_path/main.sh" ]; then
-                if [ -d "$app_path" ] && [ -n "$(ls -A "$app_path" 2>/dev/null)" ]; then
-                    status="🟢"
-                else
-                    status="🟡"
-                fi
+        if [ "$current_view" == "home" ]; then
+            ui_header "🛒 应用中心"
+            local unique_cats=()
+            local raw_cats=$(printf "%s\n" "${STORE_CATS[@]}" | grep -v "其他分类" | sort | uniq)
+            if printf "%s\n" "${STORE_CATS[@]}" | grep -q "其他分类"; then
+                raw_cats=$(printf "%s\n其他分类" "$raw_cats")
+            fi
+            IFS=$'\n' read -rd '' -a unique_cats <<< "$raw_cats"
+            
+            local MENU_OPTS=()
+            MENU_OPTS+=("⭐ 管理主页快捷方式")
+            MENU_OPTS+=("------------------------")
+            
+            for cat in "${unique_cats[@]}"; do
+                [ -z "$cat" ] && continue
+                local icon=$(_get_category_icon "$cat")
+                MENU_OPTS+=("$icon$cat")
+            done
+            
+            MENU_OPTS+=("📦 查看全部应用")
+            MENU_OPTS+=("🔄 刷新列表")
+            MENU_OPTS+=("🔙 返回主菜单")
+            
+            local CHOICE=$(ui_menu "请选择分类" "${MENU_OPTS[@]}")
+            
+            if [[ "$CHOICE" == *"快捷方式"* ]]; then manage_shortcuts_menu; continue; fi
+            if [[ "$CHOICE" == *"全部应用"* ]]; then current_view="list"; selected_category="ALL"; continue; fi
+            if [[ "$CHOICE" == *"刷新"* ]]; then _refresh_store_index; continue; fi
+            if [[ "$CHOICE" == *"返回主菜单"* ]]; then return; fi
+            if [[ "$CHOICE" == *"----"* ]]; then continue; fi
+            
+            local clean_cat=$(echo "$CHOICE" | sed -E 's/^[^ ]+[[:space:]]*//')
+            if [ -n "$clean_cat" ]; then
+                selected_category="$clean_cat"
+                current_view="list"
             fi
             
-            MENU_OPTS+=("$status $name")
-        done
-        
-        MENU_OPTS+=("🔄 刷新列表")
-        MENU_OPTS+=("🔙 返回主菜单")
-        
-        local CHOICE=$(ui_menu "全部应用" "${MENU_OPTS[@]}")
-        
-        if [[ "$CHOICE" == *"快捷方式"* ]]; then manage_shortcuts_menu; continue; fi
-        if [[ "$CHOICE" == *"----"* ]]; then continue; fi
-        if [[ "$CHOICE" == *"返回"* ]]; then return; fi
-        if [[ "$CHOICE" == *"刷新"* ]]; then _refresh_store_index; continue; fi
-        
-        local selected_idx=-1
-        local offset=2
-        
-        for i in "${!MENU_OPTS[@]}"; do
-            if [ $i -lt $offset ]; then continue; fi
-            local clean_opt="${MENU_OPTS[$i]}"
-            if [[ "$CHOICE" == *"$clean_opt"* ]] || [[ "$CHOICE" == "$clean_opt" ]]; then
-                selected_idx=$((i - offset))
-                break
+        elif [ "$current_view" == "list" ]; then
+            local header_title="📂 分类: $selected_category"
+            [ "$selected_category" == "ALL" ] && header_title="📦 全部应用"
+            
+            ui_header "$header_title"
+            
+            local MENU_OPTS=()
+            local MAPPING_INDICES=()
+            
+            for i in "${!STORE_IDS[@]}"; do
+                local cat="${STORE_CATS[$i]}"
+                if [ "$selected_category" != "ALL" ] && [ "$cat" != "$selected_category" ]; then
+                    continue
+                fi
+                
+                local id="${STORE_IDS[$i]}"
+                local name="${STORE_NAMES[$i]}"
+                local status="🌍"
+                local mod_path="$TAVX_DIR/modules/$id"
+                local app_path=$(get_app_path "$id")
+                
+                if [ -d "$mod_path" ] && [ -f "$mod_path/main.sh" ]; then
+                    if [ -d "$app_path" ] && [ -n "$(ls -A "$app_path" 2>/dev/null)" ]; then
+                        status="🟢"
+                    else
+                        status="🟡"
+                    fi
+                fi
+                
+                MENU_OPTS+=("$status $name")
+                MAPPING_INDICES+=("$i")
+            done
+            
+            if [ ${#MENU_OPTS[@]} -eq 0 ]; then
+                ui_print warn "该分类下暂无应用。"
+                ui_pause
+                current_view="home"
+                continue
             fi
-        done
-        
-        if [ $selected_idx -ge 0 ] && [ $selected_idx -lt ${#STORE_IDS[@]} ]; then
-            _app_store_action $selected_idx
+            
+            MENU_OPTS+=("🔙 返回上一级")
+            
+            local CHOICE=$(ui_menu "应用列表" "${MENU_OPTS[@]}")
+            
+            if [[ "$CHOICE" == *"返回"* ]]; then current_view="home"; continue; fi
+            
+            local selected_idx=-1
+            for k in "${!MENU_OPTS[@]}"; do
+                if [[ "${MENU_OPTS[$k]}" == "$CHOICE" ]]; then
+                    selected_idx=${MAPPING_INDICES[$k]}
+                    break
+                fi
+            done
+            
+            if [ $selected_idx -ge 0 ]; then
+                _app_store_action $selected_idx
+            fi
         fi
     done
 }
@@ -215,7 +288,7 @@ _app_store_action() {
     local id="${STORE_IDS[$idx]}"
     
     if [ -z "$id" ]; then
-        ui_print error "内部错误: 无效的应用 ID (Index: $idx)"
+        ui_print error "内部错误: 无效的应用 ID"
         return
     fi
     
@@ -223,6 +296,8 @@ _app_store_action() {
     local desc="${STORE_DESCS[$idx]}"
     local url="${STORE_URLS[$idx]}"
     local branch="${STORE_BRANCHES[$idx]}"
+    local cat="${STORE_CATS[$idx]}"
+    
     local mod_path="$TAVX_DIR/modules/$id"
     local app_path=$(get_app_path "$id")
     
@@ -236,13 +311,14 @@ _app_store_action() {
     fi
     
     ui_header "应用详情: $name"
+    echo -e "📂 分类: ${CYAN}$cat${NC}"
     echo -e "📝 描述: $desc"
     echo -e "🔗 仓库: $url"
     echo "----------------------------------------"
     
     case "$state" in
         "remote")
-            echo -e "状态: ${BLUE}🌐 云端${NC}"
+            echo -e "状态: ${BLUE}🌍 云端${NC}"
             if ui_menu "选择操作" "📥 获取模块脚本" "🔙 返回" | grep -q "获取"; then
                 prepare_network_strategy "Module Fetch"
                 local final_url=$(get_dynamic_repo_url "$url")
@@ -261,13 +337,13 @@ _app_store_action() {
                     safe_rm "$mod_path"
                 fi
             fi
-            ;;
+            ;; 
             
         "pending")
             echo -e "状态: ${YELLOW}🟡 待部署${NC}"
             local ACT=$(ui_menu "选择操作" "📦 安装应用本体" "🗑️ 删除模块脚本" "🔙 返回")
             case "$ACT" in
-                *"安装"*) _trigger_app_install "$id" ;;
+                *"安装"*) _trigger_app_install "$id" ;; 
                 *"删除"*) 
                     if ui_confirm "删除模块脚本？"; then
                         safe_rm "$mod_path"
@@ -275,17 +351,17 @@ _app_store_action() {
                         scan_and_load_modules
                         ui_print success "已删除。"
                     fi 
-                    ;;
+                    ;; 
             esac
-            ;;
+            ;; 
             
         "installed")
             echo -e "状态: ${GREEN}🟢 已就绪${NC}"
             local ACT=$(ui_menu "选择操作" "🚀 管理/启动" "🔄 更新模块脚本" "🔙 返回")
             case "$ACT" in
-                *"管理"*)
+                *"管理"*) 
                     if [ -f "$mod_path/main.sh" ]; then
-                        local entry=$(grep "MODULE_ENTRY:" "$mod_path/main.sh" | cut -d: -f2 | xargs)
+                        local entry=$(grep "MODULE_ENTRY:" "$mod_path/main.sh" | cut -d: -f2- | xargs)
                         if [ -n "$entry" ]; then
                             source "$mod_path/main.sh"
                             $entry
@@ -293,13 +369,13 @@ _app_store_action() {
                             ui_print error "无法识别入口函数。"
                         fi
                     fi
-                    ;;
-                *"更新"*)
+                    ;; 
+                *"更新"*) 
                     ui_stream_task "更新脚本..." "cd '$mod_path' && git pull"
                     ui_print success "脚本已更新。"
-                    ;;
+                    ;; 
             esac
-            ;;
+            ;; 
     esac
 }
 
@@ -327,5 +403,4 @@ _trigger_app_install() {
     else
         ui_print error "模块脚本丢失。"
     fi
-    ui_pause
 }

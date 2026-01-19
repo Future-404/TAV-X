@@ -3,7 +3,7 @@
 # MODULE_ID: sillytavern
 # MODULE_NAME: SillyTavern 酒馆
 # MODULE_ENTRY: sillytavern_menu
-# APP_CATEGORY="Frontend"
+# APP_CATEGORY: 前端交互
 # APP_VERSION="Standard"
 # APP_DESC: SillyTavern（简称 ST）是一个本地安装的用户界面，支持与文本生成 LLM、图像生成引擎和 TTS 语音模型交互。它始于 2023 年 2 月作为 TavernAI 的分支，现已拥有超 200 名贡献者，是资深 AI 爱好者领先的交互软件。
 # APP_AUTHOR: SillyTavern
