@@ -2,7 +2,7 @@
 # [METADATA]
 # MODULE_ID: gemini
 # MODULE_NAME: Gemini CLI 官方版
-# MODULE_ENTRY: gemini_off_menu
+# MODULE_ENTRY: gemini_menu
 # APP_AUTHOR: Google
 # APP_PROJECT_URL: https://github.com/google/gemini-cli
 # [END_METADATA]
@@ -24,11 +24,22 @@ _go_check_env() {
     if ! command -v pnpm &>/dev/null; then
         ui_print info "正在安装 pnpm..."
         npm install -g pnpm || return 1
+        
+        ui_print info "初始化 pnpm 环境..."
+        pnpm setup >/dev/null 2>&1
+        [ -f "$HOME/.bashrc" ] && source "$HOME/.bashrc"
+        
+        # Ensure it works in current session
+        export PNPM_HOME="$HOME/.local/share/pnpm"
+        case ":$PATH:" in
+            *":$PNPM_HOME:"*) ;;
+            *) export PATH="$PNPM_HOME:$PATH" ;;
+        esac
     fi
     return 0
 }
 
-gemini_off_install() {
+gemini_install() {
     ui_header "部署 Gemini CLI 官方版"
     
     if ! ui_confirm "确定要安装/更新 Gemini CLI 吗？"; then return; fi
@@ -53,7 +64,7 @@ gemini_off_install() {
     ui_pause
 }
 
-gemini_off_start() {
+gemini_start() {
     if ! command -v gemini &>/dev/null; then
         ui_print error "未检测到 gemini 命令，请先安装。"
         ui_pause
@@ -78,7 +89,7 @@ gemini_off_start() {
     ui_pause
 }
 
-gemini_off_uninstall() {
+gemini_uninstall() {
     if verify_kill_switch; then
         ui_print info "正在卸载 @google/gemini-cli..."
         pnpm remove -g @google/gemini-cli
@@ -91,7 +102,7 @@ gemini_off_uninstall() {
     fi
 }
 
-gemini_off_menu() {
+gemini_menu() {
     if [[ "${FUNCNAME[1]}" == "app_drawer_menu" || "${FUNCNAME[1]}" == "while" ]]; then
         while true; do
             ui_header "Gemini CLI 官方版"
@@ -101,9 +112,9 @@ gemini_off_menu() {
             
             local CHOICE=$(ui_menu "功能菜单" "🚀 安装/更新" "💬 启动指南" "🗑️  卸载模块" "ℹ️ 关于模块" "🔙 返回")
             case "$CHOICE" in
-                *"安装"*) gemini_off_install ;;
-                *"启动"*) gemini_off_start ;;
-                *"卸载"*) gemini_off_uninstall && [ $? -eq 2 ] && return ;;
+                *"安装"*) gemini_install ;;
+                *"启动"*) gemini_start ;;
+                *"卸载"*) gemini_uninstall && [ $? -eq 2 ] && return ;;
                 *"关于"*) show_module_about_info "${BASH_SOURCE[0]}" ;;
                 *"返回"*) return ;;
             esac

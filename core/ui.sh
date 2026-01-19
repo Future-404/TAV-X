@@ -6,9 +6,16 @@ _TAVX_UI_LOADED=true
 HAS_GUM=false
 GUM_BIN=""
 if command -v gum &> /dev/null; then 
-    HAS_GUM=true
-    GUM_BIN="$(command -v gum)"
+    if [[ "$TERMUX_VERSION" == *"googleplay"* ]] || gum --version 2>&1 | grep -q "unexpected argument"; then
+        echo -e "\033[0;33m[警告] 环境不兼容，已自动降级至文本模式。\033[0m" >&2
+        HAS_GUM=false
+    elif gum style "test" &> /dev/null; then
+        HAS_GUM=true
+        GUM_BIN="gum"
+    fi
 fi
+export HAS_GUM
+export GUM_BIN
 export HAS_GUM
 export GUM_BIN
 
@@ -59,8 +66,11 @@ ui_header() {
             echo "$divider"
         fi
     else
+        # Fallback for text mode with colors
+        local PINK='\033[38;5;212m'
+        echo -e "${PINK}"
         get_ascii_logo
-        echo -e "Ver: ${CYAN}$ver${NC} | by Future 404"
+        echo -e "${NC}Ver: ${CYAN}$ver${NC} | by Future 404"
         echo "----------------------------------------"
         if [ -n "$subtitle" ]; then
             echo -e "${PURPLE}🚀 $subtitle${NC}"
