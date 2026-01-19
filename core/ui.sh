@@ -14,6 +14,15 @@ if command -v gum &> /dev/null; then
         GUM_BIN="gum"
     fi
 fi
+
+# Apply user preference
+if [ -f "$TAVX_DIR/config/settings.env" ]; then
+    UI_MODE_PREF=$(grep "^UI_MODE=" "$TAVX_DIR/config/settings.env" | cut -d= -f2 | tr -d '"' | tr -d "'")
+    if [ "$UI_MODE_PREF" == "text" ]; then
+        HAS_GUM=false
+    fi
+fi
+
 export HAS_GUM
 export GUM_BIN
 export HAS_GUM

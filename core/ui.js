@@ -29,12 +29,11 @@ function getAsciiLogo() {
                 T A V   X`;
 }
 
-// Helper for synchronous input reading without dependencies
 function readLineSync() {
     const BUF_SIZE = 1024;
     const buf = Buffer.alloc(BUF_SIZE);
     let line = '';
-    let fd = 0; // Default to stdin
+    let fd = 0;
     let usingTty = false;
 
     try {
@@ -48,7 +47,6 @@ function readLineSync() {
         while (true) {
             const bytesRead = fs.readSync(fd, buf, 0, BUF_SIZE);
             if (bytesRead === 0) {
-                // EOF: 输入流已关闭，无法继续交互，必须退出
                 console.log('\n[Error] 输入流已断开 (EOF)。');
                 process.exit(0); 
             }
@@ -60,7 +58,6 @@ function readLineSync() {
             }
         }
     } catch (e) { 
-        // 任何读取错误都应终止，防止死循环
         process.exit(1);
     } finally {
         if (usingTty) {
@@ -98,12 +95,10 @@ ui.print = (type, message) => {
 };
 
 ui.header = (subtitle = '') => {
-    // Clear screen best effort
     process.stdout.write('\x1Bc'); 
     
     if (hasGum) {
         try {
-            // Try gum colored logo
              const res = spawnSync('gum', ['style', '--foreground', '212', getAsciiLogo()], { encoding: 'utf8' });
              if (res.status === 0) {
                  console.log(res.stdout);
@@ -119,10 +114,9 @@ ui.header = (subtitle = '') => {
                  console.log('');
                  return;
              }
-        } catch (e) {} // ignore
+        } catch (e) {}
     }
 
-    // Text Mode Header
     console.log(`${C_PINK}${getAsciiLogo()}${nc}`);
     const ver = process.env.CURRENT_VERSION || '3.x';
     const tagText = `Ver: ${ver} | by Future 404`;
@@ -146,7 +140,6 @@ ui.menu = (title, options) => {
         } catch (e) { /* Fallback */ }
     }
 
-    // Text Mode Menu
     if (title) console.log(`\n${C_CYAN}[ ${title} ]${nc}`);
     options.forEach((opt, i) => console.log(`  ${yellow}${i + 1}.${nc} ${opt}`));
     
@@ -173,7 +166,6 @@ ui.input = (prompt, defaultValue = '', isPassword = false) => {
         } catch (e) { /* Fallback */ }
     }
 
-    // Text Mode Input
     process.stdout.write(`  ${cyan}➜${nc} ${prompt}`);
     if (defaultValue) process.stdout.write(` [${yellow}${defaultValue}${nc}]`);
     process.stdout.write(': ');
@@ -190,7 +182,6 @@ ui.confirm = (prompt) => {
         } catch (e) { /* Fallback */ }
     }
 
-    // Text Mode Confirm
     process.stdout.write(`  ${yellow}⚠ ${prompt} (y/n): ${nc}`);
     const val = readLineSync().toLowerCase();
     return val === 'y' || val === 'yes';
@@ -203,15 +194,13 @@ ui.pause = () => {
             spawnSync('gum', ['style', '--foreground', '240', '  按任意键继续...'], { stdio: 'inherit' });
             execSync('read -n 1 -s -r', { shell: '/bin/bash', stdio: 'inherit' });
             return;
-        } catch (e) {} // ignore
+        } catch (e) {}
     }
 
     process.stdout.write(`${gray}  按任意键继续...${nc}`);
     try { 
-        // 简单读取一个字符，无需回车（如果在 Bash 下可用 read -n）
-        // 在 Node 中比较麻烦，这里简单用 readLineSync 等待回车
         readLineSync(); 
-    } catch(e) {} // ignore
+    } catch(e) {}
 };
 
 module.exports = ui;

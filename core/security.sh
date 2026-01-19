@@ -253,12 +253,49 @@ manage_autorun_services() {
     done
 }
 
+change_ui_mode() {
+    ui_header "界面模式切换"
+    echo -e "当前模式: $([ "$HAS_GUM" = true ] && echo "图形化" || echo "纯文本")"
+    echo ""
+    echo -e "${YELLOW}说明：${NC}"
+    echo -e "  图形化模式：更美观，支持方向键选择，但在部分终端可能乱码。"
+    echo -e "  纯文本模式：兼容性最好，使用数字键选择。"
+    echo ""
+
+    local CHOICE=$(ui_menu "请选择模式" "🎨 图形化模式" "📝 纯文本模式" "🔙 返回")
+    
+    local NEW_MODE=""
+    case "$CHOICE" in
+        *"图形化"*) NEW_MODE="gum" ;;
+        *"纯文本"*) NEW_MODE="text" ;;
+        *"返回"*) return ;;
+    esac
+    
+    if [ -n "$NEW_MODE" ]; then
+        local CONFIG_ENV="$TAVX_DIR/config/settings.env"
+        if [ "$NEW_MODE" == "gum" ] && ! command -v gum &>/dev/null; then
+            ui_print error "未检测到 gum 组件，无法启用图形化模式。"
+            return
+        fi
+        if [ ! -f "$CONFIG_ENV" ]; then touch "$CONFIG_ENV"; fi
+        if grep -q "^UI_MODE=" "$CONFIG_ENV"; then
+            sed -i "s/^UI_MODE=.*/UI_MODE=$NEW_MODE/" "$CONFIG_ENV"
+        else
+            echo "UI_MODE=$NEW_MODE" >> "$CONFIG_ENV"
+        fi
+        
+        ui_print success "设置已保存！重启脚本后生效。"
+        ui_pause
+    fi
+}
+
 system_settings_menu() {
     while true; do
         ui_header "系统设置"
         local OPTS=(
             "📥 下载源与代理配置"
             "🚀 开机自启管理"
+            "🎨 界面模式切换"
             "🐍 Python环境管理"
             "📱 ADB智能助手"
             "📊 匿名统计开关"
@@ -270,6 +307,7 @@ system_settings_menu() {
         case "$CHOICE" in
             *"下载源"*) configure_download_network ;;
             *"自启"*) manage_autorun_services ;;
+            *"界面"*) change_ui_mode ;;
             *"Python"*) 
                 source "$TAVX_DIR/core/python_utils.sh"
                 python_environment_manager_ui ;;

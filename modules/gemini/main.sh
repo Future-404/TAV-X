@@ -1,7 +1,7 @@
 #!/bin/bash
 # [METADATA]
 # MODULE_ID: gemini
-# MODULE_NAME: Gemini CLI 官方版
+# MODULE_NAME: Gemini CLI官方版
 # MODULE_ENTRY: gemini_menu
 # APP_AUTHOR: Google
 # APP_PROJECT_URL: https://github.com/google/gemini-cli
@@ -29,7 +29,6 @@ _go_check_env() {
         pnpm setup >/dev/null 2>&1
         [ -f "$HOME/.bashrc" ] && source "$HOME/.bashrc"
         
-        # Ensure it works in current session
         export PNPM_HOME="$HOME/.local/share/pnpm"
         case ":$PATH:" in
             *":$PNPM_HOME:"*) ;;
@@ -58,6 +57,7 @@ gemini_install() {
         ui_print success "安装完成！"
         ui_print info "提示：您可以直接输入 'gemini' 启动官方原版。"
         ui_print info "      或者输入 'st gemini' 启动带智能网络的增强版。"
+        ui_print info "注意：若终端未识别 'gemini' 命令，请执行 'source ~/.bashrc' 或重启终端。"
     else
         ui_print error "安装失败，请检查网络。"
     fi
