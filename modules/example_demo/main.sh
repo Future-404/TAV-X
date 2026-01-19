@@ -28,7 +28,6 @@ example_demo_install() {
     echo "This is a demo app." > "$app_dir/readme.txt"
     
     ui_print success "安装完成！"
-    ui_pause
 }
 
 # 2. 启动生命周期 (可选)
