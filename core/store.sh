@@ -162,7 +162,7 @@ app_store_menu() {
         for i in "${!STORE_IDS[@]}"; do
             local id="${STORE_IDS[$i]}"
             local name="${STORE_NAMES[$i]}"
-            local status="☁️"
+            local status="🌐"
             local mod_path="$TAVX_DIR/modules/$id"
             local app_path=$(get_app_path "$id")
             if [ -d "$mod_path" ] && [ -f "$mod_path/main.sh" ]; then
@@ -242,7 +242,7 @@ _app_store_action() {
     
     case "$state" in
         "remote")
-            echo -e "状态: ${BLUE}☁️ 云端${NC}"
+            echo -e "状态: ${BLUE}🌐 云端${NC}"
             if ui_menu "选择操作" "📥 获取模块脚本" "🔙 返回" | grep -q "获取"; then
                 prepare_network_strategy "Module Fetch"
                 local final_url=$(get_dynamic_repo_url "$url")
