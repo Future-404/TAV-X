@@ -38,6 +38,24 @@ example_demo_start() {
     ui_pause
 }
 
+# 4. 卸载生命周期 (可选)
+# 标准卸载流程，清理所有相关文件
+example_demo_uninstall() {
+    ui_header "卸载示例模块"
+    
+    # verify_kill_switch 是核心提供的安全确认函数（需要输入随机验证码）
+    if verify_kill_switch; then
+        local app_dir=$(get_app_path "example_demo")
+        
+        # 使用 safe_rm 安全删除目录
+        ui_spinner "正在清理数据..." "source \"\$TAVX_DIR/core/utils.sh\"; safe_rm '$app_dir'"
+        
+        ui_print success "已卸载。"
+        # 返回 2 告诉上级菜单退出当前模块并刷新列表
+        return 2
+    fi
+}
+
 # 3. 菜单入口 (必需)
 # 对应元数据中的 MODULE_ENTRY，是模块的主界面
 example_demo_menu() {
@@ -45,7 +63,7 @@ example_demo_menu() {
         ui_header "示例模块面板"
         
         # 使用 ui_menu 创建交互菜单
-        local choice=$(ui_menu "功能演示" "✨ 测试打印" "❓ 测试确认框" "📝 测试输入框" "🔙 返回主菜单")
+        local choice=$(ui_menu "功能演示" "✨ 测试打印" "❓ 测试确认框" "📝 测试输入框" "🗑️  测试卸载" "🔙 返回主菜单")
         
         case "$choice" in
             *"测试打印"*)
@@ -68,6 +86,9 @@ example_demo_menu() {
                 local name=$(ui_input "请输入你的昵称" "Guest" "false")
                 ui_print success "你好，$name！"
                 ui_pause
+                ;;
+            *"测试卸载"*)
+                example_demo_uninstall && [ $? -eq 2 ] && return
                 ;;
             *"返回"*)
                 return
