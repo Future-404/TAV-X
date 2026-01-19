@@ -5,6 +5,7 @@
 # MODULE_ENTRY: mihomo_menu
 # APP_AUTHOR: MetaCubeX
 # APP_PROJECT_URL: https://github.com/MetaCubeX/mihomo
+# APP_DESC: Mihomo (原 Clash.Meta) 是一个基于 Go 语言开发的轻量级代理核心，兼容 Clash 配置格式。它支持多种代理协议和高级规则匹配，是目前性能最强、功能最丰富的 Clash 内核分支。
 # [END_METADATA]
 
 source "$TAVX_DIR/core/env.sh"

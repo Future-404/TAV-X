@@ -41,7 +41,7 @@ _load_store_data() {
             if [ "$existing_id" == "$id" ]; then exists=true; break; fi
         done
         if [ "$exists" = false ]; then
-            local meta_name=$(grep "MODULE_NAME:" "$main_sh" | cut -d: -f2 | xargs)
+            local meta_name=$(grep "MODULE_NAME:" "$main_sh" | cut -d: -f2- | xargs)
             [ -z "$meta_name" ] && meta_name="$id"
             STORE_IDS+=("$id")
             STORE_NAMES+=("$meta_name")
@@ -62,7 +62,7 @@ manage_shortcuts_menu() {
         local main_sh="$mod_dir/main.sh"
         [ ! -f "$main_sh" ] && continue
         
-        local name=$(grep "MODULE_NAME:" "$main_sh" | cut -d ':' -f 2 | xargs)
+        local name=$(grep "MODULE_NAME:" "$main_sh" | cut -d ':' -f 2- | xargs)
         [ -z "$name" ] && name="$id"
         
         local status="🟡"

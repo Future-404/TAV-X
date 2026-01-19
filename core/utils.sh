@@ -900,8 +900,8 @@ show_module_about_info() {
         [ -n "$desc" ] && "$GUM_BIN" style --foreground 250 --padding "0 2" "• $desc" && echo ""
         local label_style="$GUM_BIN style --foreground 99 --width 10"
         local value_style="$GUM_BIN style --foreground 255"
-        [ -n "$author" ] && echo -e "  $($(echo "作者:") | $label_style)  $($value_style "$author")"
-        [ -n "$url" ] && echo -e "  $($(echo "项目:") | $label_style)  $($value_style "$url")"
+        [ -n "$author" ] && echo -e "  $(echo "作者:" | $label_style)  $($value_style "$author")"
+        [ -n "$url" ] && echo -e "  $(echo "项目:" | $label_style)  $($value_style "$url")"
         echo ""
         if [ -n "$url" ]; then
             if "$GUM_BIN" confirm "在浏览器中打开项目地址？"; then
