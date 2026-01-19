@@ -77,7 +77,7 @@ aistudio_menu() {
         fi
         ui_status_card "$state" "$text" "${info[@]}"
         
-        local CHOICE=$(ui_menu "操作菜单" "📥 安装/更新插件" "🗑️  卸载插件" "ℹ️ 关于模块" "🔙 返回")
+        local CHOICE=$(ui_menu "操作菜单" "📥 安装/更新插件" "🗑️  卸载插件" "🧭 关于模块" "🔙 返回")
         case "$CHOICE" in
             *"安装"*) aistudio_install ;;
             *"卸载"*) aistudio_uninstall && [ $? -eq 2 ] && return ;;

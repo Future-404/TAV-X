@@ -148,7 +148,7 @@ gcli2api_menu() {
         
         ui_status_card "$state" "$text" "${info[@]}"
         
-        local CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🛑 停止服务" "⚙️  修改配置" "📜 查看日志" "⬆️  更新重装" "🗑️  卸载模块" "ℹ️ 关于模块" "🔙 返回")
+        local CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🛑 停止服务" "⚙️  修改配置" "📜 查看日志" "⬆️  更新重装" "🗑️  卸载模块" "🧭 关于模块" "🔙 返回")
         case "$CHOICE" in
             *"启动"*) gcli2api_start; ui_pause ;; 
             *"停止"*) gcli2api_stop; ui_print success "已停止"; ui_pause ;; 

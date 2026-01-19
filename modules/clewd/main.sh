@@ -162,7 +162,7 @@ clewd_menu() {
         fi
         
         ui_status_card "$state" "$text" "${info[@]}"
-        local CHOICE=$(ui_menu "请选择操作" "🚀 启动服务" "🔑 查看密码" "📜 查看日志" "🛑 停止服务" "📥 更新重装" "🗑️  卸载模块" "ℹ️ 关于模块" "🔙 返回")
+        local CHOICE=$(ui_menu "请选择操作" "🚀 启动服务" "🔑 查看密码" "📜 查看日志" "🛑 停止服务" "📥 更新重装" "🗑️  卸载模块" "🧭 关于模块" "🔙 返回")
         case "$CHOICE" in
             *"启动"*) clewd_start; ui_pause ;; 
             *"密码"*) 

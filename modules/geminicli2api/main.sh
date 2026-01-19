@@ -211,7 +211,7 @@ geminicli2api_menu() {
         [ -f "$GE_CREDS" ] && info+=( "授权: ✅" ) || info+=( "授权: ❌" )
         
         ui_status_card "$state" "$text" "${info[@]}"
-        local CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🔑 Google认证" "⚙️  修改配置" "🛑 停止服务" "📜 查看日志" "⬆️  更新代码" "🗑️  卸载模块" "ℹ️ 关于模块" "🔙 返回")
+        local CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🔑 Google认证" "⚙️  修改配置" "🛑 停止服务" "📜 查看日志" "⬆️  更新代码" "🗑️  卸载模块" "🧭 关于模块" "🔙 返回")
         case "$CHOICE" in
             *"启动"*) geminicli2api_start; ui_pause ;;
             *"认证"*) authenticate_google ;;

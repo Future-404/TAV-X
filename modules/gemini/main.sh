@@ -112,7 +112,7 @@ gemini_menu() {
             command -v gemini &>/dev/null && status="已就绪"
             ui_status_card "info" "状态: $status" "包名: @google/gemini-cli" "运行指令: gemini"
             
-            local CHOICE=$(ui_menu "功能菜单" "🚀 安装/更新" "💬 启动指南" "🗑️  卸载模块" "ℹ️ 关于模块" "🔙 返回")
+            local CHOICE=$(ui_menu "功能菜单" "🚀 安装/更新" "💬 启动指南" "🗑️  卸载模块" "🧭 关于模块" "🔙 返回")
             case "$CHOICE" in
                 *"安装"*) gemini_install ;;
                 *"启动"*) gemini_start ;;
