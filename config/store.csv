@@ -3,3 +3,4 @@
 # 示例：远程模块
 # clewd,ClewdR,Claude代理,https://github.com/Future-404/tavx-mod-clewd.git,main
 # gemini,Gemini Proxy,谷歌代理,https://github.com/Future-404/tavx-mod-gemini.git,main
+example_demo,示例模块 (Demo),基于 TAV-X 框架的最小化开发示例及 API 调用演示,https://github.com/Future-404/tavx-module-demo.git,main
