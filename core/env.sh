@@ -43,7 +43,7 @@ mkdir -p "$CONFIG_DIR" "$LOGS_DIR" "$RUN_DIR" "$APPS_DIR" "$TAVX_BIN"
 
 [[ ":$PATH:" != *":$TAVX_BIN:"* ]] && export PATH="$TAVX_BIN:$PATH"
 
-export CURRENT_VERSION="3.2.6"
+export CURRENT_VERSION="3.2.7"
 export NETWORK_CONFIG="$CONFIG_DIR/network.conf"
 
 export CORE_DEPENDENCIES=(
