@@ -15,16 +15,7 @@ STORE_URLS=()
 STORE_BRANCHES=()
 
 _get_category_icon() {
-    case "$1" in
-        *"AI"*) echo "🧠 " ;;
-        *"前端"*) echo "🖥️  " ;;
-        *"网络"*) echo "🌐 " ;;
-        *"代理"*) echo "🌐 " ;;
-        *"插件"*) echo "🧩 " ;;
-        *"命令"*) echo "🛠️  " ;;
-        *"工具"*) echo "🛠️  " ;;
-        *) echo "📂 " ;;
-    esac
+    echo "📂 "
 }
 _load_store_data() {
     STORE_IDS=()
