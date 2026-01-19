@@ -21,6 +21,12 @@ example_demo_install() {
     # 模拟一个耗时任务
     ui_spinner "正在配置环境..." "sleep 2"
     
+    # 关键步骤：创建应用目录以标记为“已安装”
+    local app_dir=$(get_app_path "example_demo")
+    mkdir -p "$app_dir"
+    touch "$app_dir/readme.txt"
+    echo "This is a demo app." > "$app_dir/readme.txt"
+    
     ui_print success "安装完成！"
     ui_pause
 }
