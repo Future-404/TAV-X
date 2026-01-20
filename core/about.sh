@@ -85,7 +85,7 @@ show_about_page() {
         echo "2. ⌨️  快捷指令用法"
         echo "3. 一键加入 Q 群"
         echo "4. 打开 GitHub 项目主页"
-        read -p "请选择: " idx
+        read -r -p "请选择: " idx
         case "$idx" in
             "2") ACTION="快捷指令" ;;
             "3") ACTION="加入 Q 群" ;;

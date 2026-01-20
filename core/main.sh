@@ -46,7 +46,8 @@ app_drawer_menu() {
             local name="${REGISTERED_MODULE_NAMES[$i]}"
             local id="${REGISTERED_MODULE_IDS[$i]}"
             
-            local app_path=$(get_app_path "$id")
+            local app_path
+            app_path=$(get_app_path "$id")
             if [ ! -d "$app_path" ] || [ -z "$(ls -A "$app_path" 2>/dev/null)" ]; then
                 continue 
             fi
@@ -68,7 +69,8 @@ app_drawer_menu() {
         
         APP_MENU_OPTS+=("🔙 返回主菜单")
 
-        local CHOICE=$(ui_menu "我的应用" "${APP_MENU_OPTS[@]}")
+        local CHOICE
+        CHOICE=$(ui_menu "我的应用" "${APP_MENU_OPTS[@]}")
         if [[ "$CHOICE" == *"返回"* ]]; then return; fi
         
         local found=false
@@ -115,7 +117,13 @@ while true; do
     SHORTCUT_IDS=()
     
     if [ -f "$TAVX_DIR/config/shortcuts.list" ]; then
-        shortcuts=($(cat "$TAVX_DIR/config/shortcuts.list"))
+        if [ "${BASH_VERSINFO:-0}" -ge 4 ]; then
+            mapfile -t shortcuts < "$TAVX_DIR/config/shortcuts.list"
+        else
+            # shellcheck disable=SC2207
+            shortcuts=($(cat "$TAVX_DIR/config/shortcuts.list"))
+        fi
+
         if [ ${#shortcuts[@]} -gt 0 ]; then
             for sid in "${shortcuts[@]}"; do
                 idx=-1
@@ -123,7 +131,7 @@ while true; do
                     if [ "${REGISTERED_MODULE_IDS[$i]}" == "$sid" ]; then idx=$i; break; fi
                 done
                 
-                if [ $idx -ge 0 ]; then
+                if [ "$idx" -ge 0 ]; then
                     name="${REGISTERED_MODULE_NAMES[$idx]}"
                     icon="⚪"
                     if is_app_running "$sid"; then
@@ -157,7 +165,7 @@ while true; do
                 if [ "${REGISTERED_MODULE_IDS[$j]}" == "$sid" ]; then idx=$j; break; fi
             done
             
-            if [ $idx -ge 0 ]; then
+            if [ "$idx" -ge 0 ]; then
                 name="${REGISTERED_MODULE_NAMES[$idx]}"
                 if [[ "$CHOICE" == *"$name" ]]; then
                     entry="${REGISTERED_MODULE_ENTRIES[$idx]}"
@@ -174,22 +182,22 @@ while true; do
     fi
 
     case "$CHOICE" in
-        *"我的应用"*) app_drawer_menu ;;
-        *"应用商城"*) app_store_menu ;;
-        *"检查脚本更新"*) perform_self_update ;;
-        *"迁移旧版数据"*) migrate_legacy_apps ;;
-        *"系统设置"*) system_settings_menu ;;
-        *"帮助与支持"*) show_about_page ;;
+        *"我的应用"*) app_drawer_menu ;; 
+        *"应用商城"*) app_store_menu ;; 
+        *"检查脚本更新"*) perform_self_update ;; 
+        *"迁移旧版数据"*) migrate_legacy_apps ;; 
+        *"系统设置"*) system_settings_menu ;; 
+        *"帮助与支持"*) show_about_page ;; 
         *"退出程序"*) 
             EXIT_OPT=$(ui_menu "请选择退出方式" "🏃 保持后台运行" "🛑 结束所有服务并退出" "🔙 取消")
             case "$EXIT_OPT" in
-                *"保持后台"*)
+                *"保持后台"*) 
                     write_log "EXIT" "User exited (Keeping services)"
                     ui_print info "程序已最小化，服务继续在后台运行。"
                     ui_restore_terminal
                     exit 0
-                    ;;
-                *"结束所有"*)
+                    ;; 
+                *"结束所有"*) 
                     echo ""
                     if ui_confirm "确定要关闭所有服务吗？"; then
                         write_log "EXIT" "User requested stop all"
@@ -198,11 +206,11 @@ while true; do
                         ui_restore_terminal
                         exit 0
                     fi
-                    ;;
+                    ;; 
             esac
-            ;;
+            ;; 
         *) 
             continue 
-            ;;
+            ;; 
     esac
 done

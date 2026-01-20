@@ -12,7 +12,9 @@
 source "$TAVX_DIR/core/env.sh"
 source "$TAVX_DIR/core/ui.sh"
 source "$TAVX_DIR/core/utils.sh"
+# shellcheck disable=SC1091
 [ -f "$TAVX_DIR/modules/cloudflare/api_utils.sh" ] && source "$TAVX_DIR/modules/cloudflare/api_utils.sh"
+
 _cf_vars() {
     CF_APP_ID="cloudflare"
     CF_DIR=$(get_app_path "$CF_APP_ID")
@@ -53,13 +55,15 @@ cloudflare_install() {
     else
         if [ -f "$CF_BIN" ]; then return 0; fi
         ui_header "安装 Cloudflared (Linux)"
-        local arch=$(uname -m)
+        local arch
+        arch=$(uname -m)
         local dl="amd64"
         [[ "$arch" == "aarch64" || "$arch" == "arm64" ]] && dl="arm64"
         [[ "$arch" == "arm" || "$arch" == "armv7l" ]] && dl="arm"
         
         local url="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$dl"
-        local cmd="source \"\$TAVX_DIR/core/utils.sh\"; download_file_smart '\''$url'\' '$CF_BIN'"
+        local cmd
+        cmd="source \"$TAVX_DIR/core/utils.sh\"; download_file_smart '$url' '$CF_BIN'"
         if ui_stream_task "正在下载核心组件..." "$cmd"; then
             chmod +x "$CF_BIN"
             ui_print success "安装完成。"
@@ -112,7 +116,8 @@ cf_login() {
     echo -e "3. 脚本会自动扫描下载目录，无需手动移动。"
     echo ""
     
-    local ACTION=$(ui_menu "请选择授权方式" "🚀 启动浏览器授权 (推荐)" "📂 手动导入 cert.pem" "🔙 返回")
+    local ACTION
+    ACTION=$(ui_menu "请选择授权方式" "🚀 启动浏览器授权 (推荐)" "📂 手动导入 cert.pem" "🔙 返回")
     case "$ACTION" in
         *"手动"*) cf_import_cert; return $? ;;
         *"返回"*) return 0 ;;
@@ -128,7 +133,7 @@ cf_login() {
     local login_log="$TMP_DIR/cf_login.log"
     rm -f "$login_log"
     
-    "$CF_BIN" tunnel login > "$login_log" 2>&1 &
+    "$CF_BIN" tunnel login > "$login_log" 2>&1 & 
     local login_pid=$!
     
     ui_print info "等待获取授权链接..."
@@ -145,7 +150,8 @@ cf_login() {
         fi
         
         if [ "$url_found" = false ] && grep -q "https://" "$login_log"; then
-            local login_url=$(grep -oE "https://[a-zA-Z0-9./?=_-]+" "$login_log" | head -n 1)
+            local login_url
+            login_url=$(grep -oE "https://[a-zA-Z0-9./?=_-]+" "$login_log" | head -n 1)
             if [ -n "$login_url" ]; then
                 ui_print success "找到授权链接，正在打开浏览器..."
                 open_browser "$login_url"
@@ -169,7 +175,8 @@ cf_login() {
         
         local latest_file=""
         for pattern in "${scan_paths[@]}"; do
-            local found=$(ls -t $pattern 2>/dev/null | head -n 1)
+            local found
+            found=$(find "$(dirname "$pattern")" -maxdepth 1 -name "$(basename "$pattern")" -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n 1 | cut -d' ' -f2-)
             if [ -n "$found" ]; then
                 if [ -z "$latest_file" ] || [ "$found" -nt "$latest_file" ]; then
                     latest_file="$found"
@@ -191,7 +198,7 @@ cf_login() {
         ui_print error "自动获取失败。"
         if ui_confirm "是否手动选择已下载的 cert.pem 文件？"; then
             cf_import_cert
-            return $?
+            return $? 
         fi
         return 1
     fi
@@ -206,7 +213,8 @@ cf_quick_tunnel() {
     fi
     
     ui_header "⚡ 快速暴露 (Quick Tunnel)"
-    local port=$(ui_input "输入本地端口" "8000" "false")
+    local port
+    port=$(ui_input "输入本地端口" "8000" "false")
     
     local pid_file="$CF_RUN_DIR/cf_quick.pid"
     kill_process_safe "$pid_file" "cloudflared"
@@ -218,6 +226,7 @@ cf_quick_tunnel() {
     echo $! > "$pid_file"
     
     local url=""
+    # shellcheck disable=SC2034
     for i in {1..15}; do
         sleep 1
         url=$(grep -o "https://.*\.trycloudflare.com" "$log_file" | head -n 1)
@@ -247,13 +256,15 @@ cf_add_ingress() {
     fi
     
     ui_header "添加域名映射"
-    local domain=$(ui_input "要绑定的域名" "" "false")
+    local domain
+    domain=$(ui_input "要绑定的域名" "" "false")
     [ -z "$domain" ] && return
     
-    local service=$(ui_input "本地服务地址" "http://localhost:8000" "false")
+    local service
+    service=$(ui_input "本地服务地址" "http://localhost:8000" "false")
     [ -z "$service" ] && return
     
-    if ui_stream_task "配置 DNS 路由..." "\"$CF_BIN\" tunnel route dns \"$name\" \"$domain\""; then
+    if ui_stream_task "配置 DNS 路由..." "\"$CF_BIN\" tunnel route dns \"$name\" \"$domain\" "; then
         ui_print success "DNS 记录已添加。"
     else
         ui_print error "DNS 绑定失败，请检查域名权限。"
@@ -274,14 +285,21 @@ cf_del_ingress() {
         return 1
     fi
     
-    local hosts=($(yq '.ingress[] | select(has("hostname")) | .hostname' "$conf"))
+    local hosts=()
+    if [ "${BASH_VERSINFO:-0}" -ge 4 ]; then
+        mapfile -t hosts < <(yq '.ingress[] | select(has("hostname")) | .hostname' "$conf")
+    else
+        # shellcheck disable=SC2207
+        hosts=($(yq '.ingress[] | select(has("hostname")) | .hostname' "$conf") )
+    fi
     
     if [ ${#hosts[@]} -eq 0 ]; then
         ui_print warn "当前没有配置任何域名映射。"
         ui_pause; return
     fi
     
-    local target=$(ui_menu "选择要移除的域名" "${hosts[@]}" "🔙 取消")
+    local target
+    target=$(ui_menu "选择要移除的域名" "${hosts[@]}" "🔙 取消")
     [ "$target" == "🔙 取消" ] && return
     
     yq -i "del(.ingress[] | select(.hostname == \"$target\"))" "$conf"
@@ -303,19 +321,28 @@ cf_edit_ingress() {
         return 1
     fi
     
-    local hosts=($(yq '.ingress[] | select(has("hostname")) | .hostname' "$conf"))
+    local hosts=()
+    if [ "${BASH_VERSINFO:-0}" -ge 4 ]; then
+        mapfile -t hosts < <(yq '.ingress[] | select(has("hostname")) | .hostname' "$conf")
+    else
+        # shellcheck disable=SC2207
+        hosts=($(yq '.ingress[] | select(has("hostname")) | .hostname' "$conf") )
+    fi
     
     if [ ${#hosts[@]} -eq 0 ]; then
         ui_print warn "当前没有可修改的映射规则。"
         return
     fi
     
-    local target=$(ui_menu "选择要修改的域名" "${hosts[@]}" "🔙 取消")
+    local target
+    target=$(ui_menu "选择要修改的域名" "${hosts[@]}" "🔙 取消")
     [ "$target" == "🔙 取消" ] && return
-    local old_svc=$(yq ".ingress[] | select(.hostname == \"$target\") | .service" "$conf")
+    local old_svc
+    old_svc=$(yq ".ingress[] | select(.hostname == \"$target\") | .service" "$conf")
     
     ui_header "修改映射: $target"
-    local new_svc=$(ui_input "新本地服务地址" "$old_svc" "false")
+    local new_svc
+    new_svc=$(ui_input "新本地服务地址" "$old_svc" "false")
     
     if [ -n "$new_svc" ] && [ "$new_svc" != "$old_svc" ]; then
         yq -i "(.ingress[] | select(.hostname == \"$target\")).service = \"$new_svc\"" "$conf"
@@ -341,17 +368,20 @@ cf_create_named_tunnel() {
     fi
     
     ui_header "创建固定隧道"
-    local name=$(ui_input_validated "给隧道起个名字 (如 my-web)" "" "alphanumeric")
+    local name
+    name=$(ui_input_validated "给隧道起个名字 (如 my-web)" "" "alphanumeric")
     [ -z "$name" ] && return
     
-    if ui_stream_task "注册隧道: $name" "\"$CF_BIN\" tunnel create \"$name\""; then
+    if ui_stream_task "注册隧道: $name" "\"$CF_BIN\" tunnel create \"$name\" "; then
         ui_print success "隧道 ID 已生成。"
     else
         ui_print error "创建失败。"; ui_pause; return 1
     fi
     
-    local json_file=$(ls -t "$CF_USER_DATA"/*.json | head -n 1)
-    local uuid=$(basename "$json_file" .json)
+    local json_file
+    json_file=$(find "$CF_USER_DATA" -maxdepth 1 -name "*.json" -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n 1 | cut -d' ' -f2-)
+    local uuid
+    uuid=$(basename "$json_file" .json)
     local conf_file="$CF_DIR/${name}.yml"
     
     cat > "$conf_file" <<EOF
@@ -420,7 +450,8 @@ cf_manage_tunnels() {
         local files=()
         for f in "$CF_DIR"/*.yml; do
             [ ! -f "$f" ] && continue
-            local t_name=$(basename "$f" .yml)
+            local t_name
+            t_name=$(basename "$f" .yml)
             local pid_f="$CF_RUN_DIR/cf_${t_name}.pid"
             local svc_name="cf_tunnel_${t_name}"
             local status="🔴"
@@ -433,7 +464,8 @@ cf_manage_tunnels() {
             
             local desc=""
             if command -v yq &>/dev/null; then
-                local host=$(yq '.ingress[0].hostname' "$f" 2>/dev/null)
+                local host
+                host=$(yq '.ingress[0].hostname' "$f" 2>/dev/null)
                 if [ -n "$host" ] && [ "$host" != "null" ]; then
                     desc=" ($host)"
                 fi
@@ -450,14 +482,16 @@ cf_manage_tunnels() {
         
         opts+=("➕ 创建新隧道" "🔙 返回")
         
-        local C=$(ui_menu "选择隧道" "${opts[@]}")
+        local C
+        C=$(ui_menu "选择隧道" "${opts[@]}")
         case "$C" in
-            *"创建"*) cf_create_named_tunnel ;;
-            *"返回"*) return ;;
+            *"创建"*) cf_create_named_tunnel ;; 
+            *"返回"*) return ;; 
             *)
-                local sel_name=$(echo "$C" | awk '{print $2}')
+                local sel_name
+                sel_name=$(echo "$C" | awk '{print $2}')
                 _tunnel_action_menu "$sel_name"
-                ;;
+                ;; 
         esac
     done
 }
@@ -482,7 +516,13 @@ _tunnel_action_menu() {
         echo -e "状态: $state"
         
         if command -v yq &>/dev/null; then
-             local hosts=($(yq '.ingress[] | select(has("hostname")) | .hostname' "$conf"))
+             local hosts=()
+             if [ "${BASH_VERSINFO:-0}" -ge 4 ]; then
+                 mapfile -t hosts < <(yq '.ingress[] | select(has("hostname")) | .hostname' "$conf")
+             else
+                 # shellcheck disable=SC2207
+                 hosts=($(yq '.ingress[] | select(has("hostname")) | .hostname' "$conf") )
+             fi
              echo -e "映射数: ${#hosts[@]}"
              for h in "${hosts[@]}"; do
                  echo -e "  - ${CYAN}$h${NC}"
@@ -499,38 +539,39 @@ _tunnel_action_menu() {
         
         menu_opts+=("📝 编辑配置" "📜 查看日志" "🗑️  删除隧道" "🔙 返回")
         
-        local ACT=$(ui_menu "动作" "${menu_opts[@]}")
+        local ACT
+        ACT=$(ui_menu "动作" "${menu_opts[@]}")
         case "$ACT" in
-            *"启动"*) _start_named_tunnel "$name" "$conf" ;;
+            *"启动"*) _start_named_tunnel "$name" "$conf" ;; 
             *"停止"*) 
                 if [ "$OS_TYPE" == "TERMUX" ]; then
                     tavx_service_control "down" "$svc_name"
                 else
                     kill_process_safe "$pid_f" "cloudflared"
                 fi
-                ui_print success "已停止"; ui_pause ;;
+                ui_print success "已停止"; ui_pause ;; 
             *"添加"*) 
                 cf_add_ingress "$name" "$conf"
                 if [[ "$state" == *"运行中"* ]]; then
                     ui_print info "配置已变更，正在重启隧道..."
                     _start_named_tunnel "$name" "$conf"
-                fi ;;
-            *"修改映射"*)
+                fi ;; 
+            *"修改映射"*) 
                 if cf_edit_ingress "$name" "$conf"; then
                     if [[ "$state" == *"运行中"* ]]; then
                         ui_print info "配置已变更，正在重启隧道..."
                         _start_named_tunnel "$name" "$conf"
                     fi
-                fi ;;
+                fi ;; 
             *"删除域名"*) 
                 cf_del_ingress "$name" "$conf" 
                 if [[ "$state" == *"运行中"* ]]; then
                     ui_print info "配置已变更，正在重启隧道..."
                     _start_named_tunnel "$name" "$conf"
-                fi ;;
+                fi ;; 
             *"编辑"*) 
-                if command -v nano &>/dev/null; then nano "$conf"; else vi "$conf"; fi ;;
-            *"日志"*) safe_log_monitor "$log_path" ;;
+                if command -v nano &>/dev/null; then nano "$conf"; else vi "$conf"; fi ;; 
+            *"日志"*) safe_log_monitor "$log_path" ;; 
             *"删除隧道"*) 
                 if verify_kill_switch; then
                     ui_print info "正在停止本地服务..."
@@ -543,8 +584,15 @@ _tunnel_action_menu() {
                     fi
 
                     if command -v yq &>/dev/null; then
-                        local uuid=$(yq '.tunnel' "$conf" 2>/dev/null)
-                        local hosts=($(yq '.ingress[] | select(has("hostname")) | .hostname' "$conf"))
+                        local uuid
+                        uuid=$(yq '.tunnel' "$conf" 2>/dev/null)
+                        local hosts=()
+                        if [ "${BASH_VERSINFO:-0}" -ge 4 ]; then
+                            mapfile -t hosts < <(yq '.ingress[] | select(has("hostname")) | .hostname' "$conf")
+                        else
+                            # shellcheck disable=SC2207
+                            hosts=($(yq '.ingress[] | select(has("hostname")) | .hostname' "$conf") )
+                        fi
                         
                         if [ -n "$uuid" ] && [ "$uuid" != "null" ]; then
                             ui_print info "正在移除云端隧道..."
@@ -558,40 +606,40 @@ _tunnel_action_menu() {
                                 cf_api_delete_dns "$h"
                              fi
                         done
-                                            else
-                                            ui_print warn "未检测到 yq，跳过云端资源智能清理。"
-                                        fi
-                                        
-                                        rm -f "$conf"
-                                        ui_print success "本地配置已移除"
-                                        return
-                                    fi ;; 
-                                *"返回"*) return ;; 
-                            esac
-                        done
-                    }
+                    else
+                        ui_print warn "未检测到 yq，跳过云端资源智能清理。"
+                    fi
                     
-                    cf_stop_all() {
-                        _cf_vars
-                        ui_print info "正在停止所有 Cloudflare 进程..."
-                        
-                        # 停止 Termux 服务
-                        if [ "$OS_TYPE" == "TERMUX" ] && command -v sv &>/dev/null; then
-                            for s in "$PREFIX/var/service"/cf_tunnel_*; do
-                                [ ! -d "$s" ] && continue
-                                sv down "$(basename "$s")" 2>/dev/null
-                            done
-                        fi
-                    
-                        # 停止传统 PID 进程
-                        kill_process_safe "$CF_RUN_DIR/cf_quick.pid" "cloudflared"
-                        for f in "$CF_RUN_DIR"/cf_*.pid; do
-                            [ -f "$f" ] && kill_process_safe "$f" "cloudflared"
-                        done
-                        pkill -f "cloudflared"
-                        ui_print success "全部停止。"
-                        ui_pause
-                    }
+                    rm -f "$conf"
+                    ui_print success "本地配置已移除"
+                    return
+                fi ;; 
+            *"返回"*) return ;; 
+        esac
+    done
+}
+
+cf_stop_all() {
+    _cf_vars
+    ui_print info "正在停止所有 Cloudflare 进程..."
+    
+    # 停止 Termux 服务
+    if [ "$OS_TYPE" == "TERMUX" ] && command -v sv &>/dev/null; then
+        for s in "$PREFIX/var/service"/cf_tunnel_*; do
+            [ ! -d "$s" ] && continue
+            sv down "$(basename "$s")" 2>/dev/null
+        done
+    fi
+
+    # 停止传统 PID 进程
+    kill_process_safe "$CF_RUN_DIR/cf_quick.pid" "cloudflared"
+    for f in "$CF_RUN_DIR"/cf_*.pid; do
+        [ -f "$f" ] && kill_process_safe "$f" "cloudflared"
+    done
+    pkill -f "cloudflared"
+    ui_print success "全部停止。"
+    ui_pause
+}
 
 cf_menu() {
     while true; do
@@ -610,7 +658,8 @@ cf_menu() {
         
         ui_status_card "info" "概览" "${info[@]}"
         
-        local C=$(ui_menu "主菜单" \
+        local C
+        C=$(ui_menu "主菜单" \
             "🚀 启动/管理固定隧道" \
             "⚡ 临时快速暴露" \
             "🔐 Tunnel 登录授权 (必选)" \
@@ -645,7 +694,7 @@ cf_menu() {
                     fi
                     return 2
                 fi ;; 
-            *"关于"*) show_module_about_info "${BASH_SOURCE[0]}" ;;
+            *"关于"*) show_module_about_info "${BASH_SOURCE[0]}" ;; 
             *"返回"*) return ;; 
         esac
     done

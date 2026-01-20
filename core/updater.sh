@@ -11,9 +11,12 @@ check_for_updates() {
     [ ! -d "$TAVX_DIR/.git" ] && return
     (
         cd "$TAVX_DIR" || exit
-        local check_url=$(get_dynamic_repo_url "Future-404/TAV-X.git")
-        local REMOTE_HASH=$(git ls-remote "$check_url" HEAD | awk '{print $1}')
-        local LOCAL_HASH=$(git rev-parse HEAD)
+        local check_url
+        check_url=$(get_dynamic_repo_url "Future-404/TAV-X.git")
+        local REMOTE_HASH
+        REMOTE_HASH=$(git ls-remote "$check_url" HEAD | awk '{print $1}')
+        local LOCAL_HASH
+        LOCAL_HASH=$(git rev-parse HEAD)
         
         if [ -n "$REMOTE_HASH" ] && [ "$LOCAL_HASH" != "$REMOTE_HASH" ]; then
             echo "true" > "$TAVX_DIR/.update_available"
@@ -34,7 +37,8 @@ perform_self_update() {
     if ! ui_confirm "确定要立即更新脚本核心吗？"; then return; fi
 
     prepare_network_strategy
-    local TEMP_URL=$(get_dynamic_repo_url "Future-404/TAV-X.git")
+    local TEMP_URL
+    TEMP_URL=$(get_dynamic_repo_url "Future-404/TAV-X.git")
     local UPD_CMD="cd \"$TAVX_DIR\"; git fetch \"$TEMP_URL\" main; git reset --hard FETCH_HEAD"
     
     if ui_spinner "同步脚本核心..." "$UPD_CMD"; then

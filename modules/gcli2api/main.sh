@@ -29,6 +29,7 @@ _gcli2api_load_config() {
     GCLI_PORT="7861"
     GCLI_PWD="pwd"
     GCLI_HOST="0.0.0.0"
+    # shellcheck source=/dev/null
     [ -f "$GCLI_CONF" ] && source "$GCLI_CONF"
 }
 
@@ -41,7 +42,7 @@ gcli2api_install() {
     prepare_network_strategy
     
     if [ ! -d "$GCLI_DIR/.git" ]; then
-        if ! ui_stream_task "从 GitHub 克隆仓库..." "source \"\$TAVX_DIR/core/utils.sh\"; git_clone_smart '-b master' '$GCLI_REPO' '$GCLI_DIR'"; then
+        if ! ui_stream_task "从 GitHub 克隆仓库..." "source \"$TAVX_DIR/core/utils.sh\"; git_clone_smart '-b master' '$GCLI_REPO' '$GCLI_DIR'"; then
             ui_print error "克隆失败。"
             return 1
         fi
@@ -50,7 +51,7 @@ gcli2api_install() {
         (cd "$GCLI_DIR" && git pull)
     fi
     
-    if ! ui_spinner "创建虚拟环境..." "source \"\$TAVX_DIR/core/python_utils.sh\"; create_venv_smart '$GCLI_VENV'"; then
+    if ! ui_spinner "创建虚拟环境..." "source \"$TAVX_DIR/core/python_utils.sh\"; create_venv_smart '$GCLI_VENV'"; then
         ui_print error "虚拟环境创建失败。"
         return 1
     fi
@@ -61,7 +62,7 @@ gcli2api_install() {
         TARGET_REQ="$GCLI_DIR/requirements-termux.txt"
     fi
     
-    local INSTALL_CMD="source \"\$TAVX_DIR/core/python_utils.sh\"; install_requirements_smart '$GCLI_VENV' '$TARGET_REQ' 'standard'"
+    local INSTALL_CMD="source \"$TAVX_DIR/core/python_utils.sh\"; install_requirements_smart '$GCLI_VENV' '$TARGET_REQ' 'standard'"
     if ! ui_stream_task "正在安装 Pip 依赖...." "$INSTALL_CMD"; then
         ui_print error "依赖安装失败。"
         return 1
@@ -91,11 +92,12 @@ gcli2api_start() {
         tavx_service_control "up" "gcli2api"
         ui_print success "服务启动命令已发送。"
     else
-        local CMD="(cd '$GCLI_DIR' && $RUN_CMD >> '$GCLI_LOG' 2>&1 </dev/null & echo \$! > '$GCLI_PID')"
+        local CMD="(cd '$GCLI_DIR' && $RUN_CMD >> '$GCLI_LOG' 2>&1 </dev/null & echo \\$! > '$GCLI_PID')"
         eval "$CMD"
         sleep 2
         
-        local real_pid=$(pgrep -f "python.*web.py" | grep -v "grep" | head -n 1)
+        local real_pid
+        real_pid=$(pgrep -f "python.*web.py" | grep -v "grep" | head -n 1)
         
         if [ -n "$real_pid" ]; then
             echo "$real_pid" > "$GCLI_PID"
@@ -148,7 +150,8 @@ gcli2api_menu() {
         
         ui_status_card "$state" "$text" "${info[@]}"
         
-        local CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🛑 停止服务" "⚙️  修改配置" "📜 查看日志" "⬆️  更新重装" "🗑️  卸载模块" "🧭 关于模块" "🔙 返回")
+        local CHOICE
+        CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🛑 停止服务" "⚙️  修改配置" "📜 查看日志" "⬆️  更新重装" "🗑️  卸载模块" "🧭 关于模块" "🔙 返回")
         case "$CHOICE" in
             *"启动"*) gcli2api_start; ui_pause ;; 
             *"停止"*) gcli2api_stop; ui_print success "已停止"; ui_pause ;; 
@@ -164,7 +167,7 @@ gcli2api_menu() {
             *"日志"*) safe_log_monitor "$log_path" ;; 
             *"更新"*) gcli2api_install ;; 
             *"卸载"*) gcli2api_uninstall && [ $? -eq 2 ] && return ;; 
-            *"关于"*) show_module_about_info "${BASH_SOURCE[0]}" ;;
+            *"关于"*) show_module_about_info "${BASH_SOURCE[0]}" ;; 
             *"返回"*) return ;; 
         esac
     done

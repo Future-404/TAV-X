@@ -26,7 +26,8 @@ _st_vars() {
 _st_get_port() {
     _st_vars
     if command -v yq &>/dev/null && [ -f "$ST_DIR/config.yaml" ]; then
-         local p=$(yq ".port" "$ST_DIR/config.yaml" 2>/dev/null)
+         local p
+         p=$(yq ".port" "$ST_DIR/config.yaml" 2>/dev/null)
          [[ "$p" =~ ^[0-9]+$ ]] && echo "$p" || echo "8000"
     else
          echo "8000"
@@ -84,14 +85,16 @@ sillytavern_update() {
     
     cd "$ST_DIR" || return
     if ! git symbolic-ref -q HEAD >/dev/null; then
-        local current_tag=$(git describe --tags --exact-match 2>/dev/null || git rev-parse --short HEAD)
+        local current_tag
+        current_tag=$(git describe --tags --exact-match 2>/dev/null || git rev-parse --short HEAD)
         ui_print warn "当前处于版本锁定状态 ($current_tag)"
         echo -e "${YELLOW}请先 [解除锁定] 后再尝试更新。${NC}"; ui_pause; return
     fi
     
     prepare_network_strategy
     
-    local TEMP_URL=$(get_dynamic_repo_url "SillyTavern/SillyTavern")
+    local TEMP_URL
+    TEMP_URL=$(get_dynamic_repo_url "SillyTavern/SillyTavern")
     local UPDATE_CMD="cd \"$ST_DIR\"; git pull --autostash \"$TEMP_URL\""
     
     if ui_stream_task "正在同步最新代码..." "$UPDATE_CMD"; then
@@ -112,14 +115,17 @@ sillytavern_rollback() {
         local CURRENT_DESC=""
         local IS_DETACHED=false
         if git symbolic-ref -q HEAD >/dev/null; then
-            local branch=$(git rev-parse --abbrev-ref HEAD)
+            local branch
+            branch=$(git rev-parse --abbrev-ref HEAD)
             CURRENT_DESC="${GREEN}分支: $branch (最新)${NC}"
         else
             IS_DETACHED=true
-            local tag=$(git describe --tags --exact-match 2>/dev/null || git rev-parse --short HEAD)
+            local tag
+            tag=$(git describe --tags --exact-match 2>/dev/null || git rev-parse --short HEAD)
             CURRENT_DESC="${YELLOW}🔒 已锁定: $tag${NC}"
         fi
         
+        # shellcheck disable=SC2153
         local TAG_CACHE="$TMP_DIR/.st_tag_cache"
         echo -e "当前状态: $CURRENT_DESC"
         echo "----------------------------------------"
@@ -128,13 +134,15 @@ sillytavern_rollback() {
         [ "$IS_DETACHED" = true ] && MENU_ITEMS+=("🔓 解除锁定 (切换最新版)")
         MENU_ITEMS+=("⏳ 回退至历史版本" "🔀 切换通道: Release" "🔀 切换通道: Staging" "🔙 返回")
         
-        local CHOICE=$(ui_menu "选择操作" "${MENU_ITEMS[@]}")
+        local CHOICE
+        CHOICE=$(ui_menu "选择操作" "${MENU_ITEMS[@]}")
         
         if [[ "$CHOICE" != *"返回"* ]]; then
              prepare_network_strategy
         fi
 
-        local TEMP_URL=$(get_dynamic_repo_url "SillyTavern/SillyTavern")
+        local TEMP_URL
+        TEMP_URL=$(get_dynamic_repo_url "SillyTavern/SillyTavern")
         
         case "$CHOICE" in
             *"解除锁定"*) 
@@ -145,8 +153,14 @@ sillytavern_rollback() {
             *"历史版本"*) 
                 ui_stream_task "拉取版本列表中..." "git fetch \"$TEMP_URL\" --tags"
                 git tag --sort=-v:refname | head -n 10 > "$TAG_CACHE"
-                mapfile -t TAG_LIST < "$TAG_CACHE"
-                local TAG_CHOICE=$(ui_menu "选择版本" "${TAG_LIST[@]}" "🔙 取消")
+                if [ "${BASH_VERSINFO:-0}" -ge 4 ]; then
+                    mapfile -t TAG_LIST < "$TAG_CACHE"
+                else
+                    IFS=$'\n' read -d '' -r -a TAG_LIST < "$TAG_CACHE"
+                fi
+                
+                local TAG_CHOICE
+                TAG_CHOICE=$(ui_menu "选择版本" "${TAG_LIST[@]}" "🔙 取消")
                 if [[ "$TAG_CHOICE" != *"取消"* ]]; then
                     local CMD="git fetch \"$TEMP_URL\" tag \"$TAG_CHOICE\" --depth=1; git reset --hard FETCH_HEAD; git checkout \"$TAG_CHOICE\""
                     ui_stream_task "回退到 $TAG_CHOICE..." "$CMD" && npm_install_smart "$ST_DIR"
@@ -168,7 +182,8 @@ sillytavern_start() {
     local mem_conf="$CONFIG_DIR/memory.conf"
     local mem_args=""
     if [ -f "$mem_conf" ]; then
-        local m=$(cat "$mem_conf")
+        local m
+        m=$(cat "$mem_conf")
         [[ "$m" =~ ^[0-9]+$ ]] && mem_args="--max-old-space-size=$m"
     fi
     
@@ -180,7 +195,7 @@ sillytavern_start() {
         cd "$ST_DIR" || return 1
         sillytavern_stop
         rm -f "$ST_LOG"
-        local START_CMD="setsid nohup node $mem_args server.js > '$ST_LOG' 2>&1 & echo \$! > '$ST_PID_FILE'"
+        local START_CMD="setsid nohup node $mem_args server.js > '$ST_LOG' 2>&1 & echo \!\! > '$ST_PID_FILE'"
         ui_spinner "启动酒馆服务..." "eval \"$START_CMD\""
     fi
 }
@@ -213,11 +228,11 @@ sillytavern_backup() {
     _st_vars
     ui_header "数据备份"
     [ ! -d "$ST_DIR" ] && { ui_print error "请先安装酒馆！"; ui_pause; return; }
-    local dump_dir=$(ensure_backup_dir)
-    if [ $? -ne 0 ]; then ui_pause; return; fi
+    if ! dump_dir=$(ensure_backup_dir); then ui_pause; return; fi
     
     cd "$ST_DIR" || return
-    local TIMESTAMP=$(date "+%Y%m%d_%H%M%S")
+    local TIMESTAMP
+    TIMESTAMP=$(date "+%Y%m%d_%H%M%S")
     local BACKUP_FILE="$dump_dir/TAVX_Backup_SillyTavern_${TIMESTAMP}.tar.gz"
     
     local TARGETS="data"
@@ -238,12 +253,9 @@ sillytavern_backup() {
 }
 
 sillytavern_restore() {
-    _st_vars
-    ui_header "数据恢复"
-    [ ! -d "$ST_DIR" ] && { ui_print error "请先安装酒馆！"; ui_pause; return; }
-    local dump_dir=$(ensure_backup_dir)
-    if [ $? -ne 0 ]; then ui_pause; return; fi
+    if ! dump_dir=$(ensure_backup_dir); then ui_pause; return; fi
     
+    # shellcheck disable=SC2206
     local files=($dump_dir/TAVX_Backup_*.tar.gz "$dump_dir/ST_Data_*.tar.gz"); local valid_files=()
     for f in "${files[@]}"; do [ -e "$f" ] && valid_files+=("$f"); done
     
@@ -251,13 +263,17 @@ sillytavern_restore() {
     
     local MENU_ITEMS=(); local FILE_MAP=()
     for file in "${valid_files[@]}"; do
-        local fname=$(basename "$file")
+        local fname
+        fname=$(basename "$file")
+        local fsize
+        fsize=$(du -h "$file" | awk '{print $1}')
         MENU_ITEMS+=("$fname ($fsize)")
         FILE_MAP+=("$file")
     done
     MENU_ITEMS+=("🔙 返回")
     
-    local CHOICE=$(ui_menu "选择备份文件" "${MENU_ITEMS[@]}")
+    local CHOICE
+    CHOICE=$(ui_menu "选择备份文件" "${MENU_ITEMS[@]}")
     if [[ "$CHOICE" == *"返回"* ]]; then return; fi
     
     local selected_file=""
@@ -301,7 +317,8 @@ sillytavern_menu() {
     
     while true; do
         _st_vars
-        local port=$(_st_get_port)
+        local port
+        port=$(_st_get_port)
         local state="stopped"; local text="已停止"; local info=()
         
         if [ "$OS_TYPE" == "TERMUX" ]; then
@@ -318,7 +335,8 @@ sillytavern_menu() {
         ui_header "SillyTavern 管理面板"
         ui_status_card "$state" "$text" "${info[@]}"
         
-        local CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🛑 停止服务" "⚙️  应用配置" "🧩 插件管理" "⬇️  更新与版本" "💾 备份与恢复" "📜 查看日志" "🗑️  卸载模块" "🧭 关于模块" "🔙 返回")
+        local CHOICE
+        CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🛑 停止服务" "⚙️  应用配置" "🧩 插件管理" "⬇️  更新与版本" "💾 备份与恢复" "📜 查看日志" "🗑️  卸载模块" "🧭 关于模块" "🔙 返回")
         case "$CHOICE" in
             *"启动"*) sillytavern_start; ui_pause ;; 
             *"停止"*) sillytavern_stop; ui_print success "已停止"; ui_pause ;; 
@@ -332,18 +350,20 @@ sillytavern_menu() {
                 safe_log_monitor "$log_path" 
                 ;; 
             *"卸载"*) sillytavern_uninstall && [ $? -eq 2 ] && return ;; 
-            *"关于"*) show_module_about_info "${BASH_SOURCE[0]}" ;;
+            *"关于"*) show_module_about_info "${BASH_SOURCE[0]}" ;; 
             *"返回"*) return ;; 
         esac
     done
 }
 
 _st_update_submenu() {
-    local opt=$(ui_menu "更新管理" "🆕 检查并更新" "⏳ 版本时光机" "🔙 取消")
+    local opt
+    opt=$(ui_menu "更新管理" "🆕 检查并更新" "⏳ 版本时光机" "🔙 取消")
     case "$opt" in *"检查"*) sillytavern_update ;; *"时光机"*) sillytavern_rollback ;; esac
 }
 
 _st_backup_submenu() {
-    local opt=$(ui_menu "备份管理" "📤 备份数据" "📥 恢复数据" "🔙 取消")
+    local opt
+    opt=$(ui_menu "备份管理" "📤 备份数据" "📥 恢复数据" "🔙 取消")
     case "$opt" in *"备份"*) sillytavern_backup ;; *"恢复"*) sillytavern_restore ;; esac
 }

@@ -13,12 +13,14 @@ _cf_api_call() {
     
     _cf_api_vars
     if [ ! -f "$CF_API_TOKEN_FILE" ]; then return 1; fi
-    local token=$(cat "$CF_API_TOKEN_FILE")
+    local token
+    token=$(cat "$CF_API_TOKEN_FILE")
     
     local args=("-s" "-X" "$method" "-H" "Authorization: Bearer $token" "-H" "Content-Type: application/json")
     [ -n "$data" ] && args+=("-d" "$data")
     
-    local response=$(curl "${args[@]}" "https://api.cloudflare.com/client/v4$endpoint")
+    local response
+    response=$(curl "${args[@]}" "https://api.cloudflare.com/client/v4$endpoint")
     
     if echo "$response" | grep -q '"success":true'; then
         echo "$response"
@@ -52,7 +54,8 @@ cf_configure_api_token() {
         if ! ui_confirm "是否重新设置？"; then return; fi
     fi
     
-    local token=$(ui_input "粘贴 API Token" "" "true")
+    local token
+    token=$(ui_input "粘贴 API Token" "" "true")
     if [ -n "$token" ]; then
         echo "$token" > "$CF_API_TOKEN_FILE"
         if cf_verify_token; then
@@ -111,7 +114,8 @@ cf_api_delete_dns() {
         return 1
     fi
     
-    local record_id=$(echo "$dns_json" | grep -oE '"id":"[a-f0-9]+"' | head -n 1 | cut -d'"' -f4)
+    local record_id
+    record_id=$(echo "$dns_json" | grep -oE '"id":"[a-f0-9]+"' | head -n 1 | cut -d'"' -f4)
     
     if [ -z "$record_id" ]; then
         ui_print warn "未找到该域名的 DNS 记录，可能已删除。"
@@ -152,7 +156,7 @@ cf_scan_orphan_dns() {
 
     ui_print info "正在获取本地活跃 Tunnel 列表..."
     local alive_tunnels
-alive_tunnels=$(cloudflared tunnel list 2>/dev/null | awk 'NR>1 {print $1}')
+    alive_tunnels=$(cloudflared tunnel list 2>/dev/null | awk 'NR>1 {print $1}')
 
     local found_any=false
 
@@ -196,7 +200,7 @@ alive_tunnels=$(cloudflared tunnel list 2>/dev/null | awk 'NR>1 {print $1}')
                     fi
                 fi
             fi
-        done < <(echo "$dns_json" | grep -oE '"id":"[a-f0-9]+".*"type":"CNAME".*"content":"[^ "]+cfargotunnel.com"')
+        done < <(echo "$dns_json" | grep -oE '"id":"[a-f0-9]+".*"type":"CNAME".*"content":"[^ "]+cfargotunnel.com')
 
     done < <(echo "$zones_json" | grep -oE '"id":"[a-f0-9]+","name":"[^"]+"' | sed 's/"id":"//;s/","name":"/ /;s/"//')
 

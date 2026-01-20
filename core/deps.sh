@@ -9,7 +9,7 @@ source "$TAVX_DIR/core/utils.sh"
 
 install_gum_linux() {
     echo -e "${YELLOW}>>> 正在安装 Gum ...${NC}"
-    local ARCH=$(uname -m)
+    local ARCH; ARCH=$(uname -m)
     local G_ARCH=""
     case "$ARCH" in
         x86_64) G_ARCH="x86_64" ;; 
@@ -26,7 +26,7 @@ install_gum_linux() {
 
     local DL_CMD="curl -L -o $TMP_DIR/gum.tar.gz '$URL'"
     if ui_stream_task "正在下载 Gum ..." "$DL_CMD"; then
-        cd "$TMP_DIR"
+        cd "$TMP_DIR" || return 1
         tar -xzf gum.tar.gz
         local BIN_DIR="/usr/local/bin"
         if [ ! -w "$BIN_DIR" ] && [ -z "$SUDO_CMD" ]; then
@@ -62,7 +62,7 @@ install_yq() {
         ui_print warn "pkg 安装失败，切换至手动下载模式..."
     fi
 
-    local ARCH=$(uname -m)
+    local ARCH; ARCH=$(uname -m)
     local YQ_ARCH="amd64"
     [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]] && YQ_ARCH="arm64"
     
@@ -91,7 +91,7 @@ export -f install_yq
 
 install_cloudflared_linux() {
     ui_print info "正在获取 Cloudflared ($OS_TYPE)..."
-    local ARCH=$(uname -m)
+    local ARCH; ARCH=$(uname -m)
     local C_ARCH=""
     case "$ARCH" in
         x86_64) C_ARCH="amd64" ;; 
@@ -160,7 +160,7 @@ install_python_system() {
 check_node_version() {
     if ! command -v node &> /dev/null; then return 1; fi
     
-    local ver=$(node -v | tr -d 'v' | cut -d '.' -f 1)
+    local ver; ver=$(node -v | tr -d 'v' | cut -d '.' -f 1)
     
     if [ -z "$ver" ] || [ "$ver" -lt 20 ]; then
         return 1
@@ -234,8 +234,8 @@ EOF
 
         for dep in "${CORE_DEPENDENCIES[@]}"; do
             local cmd="${dep%%|*}"
-            local pkg_termux=$(echo "$dep" | cut -d'|' -f2)
-            local pkg_linux=$(echo "$dep" | cut -d'|' -f3)
+            local pkg_termux; pkg_termux=$(echo "$dep" | cut -d'|' -f2)
+            local pkg_linux; pkg_linux=$(echo "$dep" | cut -d'|' -f3)
             
             if [ "$cmd" == "node" ]; then
                 if ! check_node_version; then

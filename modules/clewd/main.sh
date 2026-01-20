@@ -18,7 +18,9 @@ _clewd_vars() {
     CL_DIR=$(get_app_path "$CL_APP_ID")
     CL_LOG="$LOGS_DIR/clewd.log"
     CL_PID="$RUN_DIR/clewd.pid"
+    # shellcheck disable=SC2034
     CL_CONF="$CL_DIR/config.js"
+    # shellcheck disable=SC2034
     CL_SECRETS="$CONFIG_DIR/clewd_secrets.conf"
     mkdir -p "$CL_DIR"
 }
@@ -27,7 +29,8 @@ clewd_install() {
     _clewd_vars
     ui_header "安装 Clewd (Rust版)" 
     
-    local arch=$(uname -m)
+    local arch
+    arch=$(uname -m)
     local asset_pattern="linux-x86_64"
     [[ "$arch" == "aarch64" || "$arch" == "arm64" ]] && asset_pattern="android-aarch64"
     
@@ -35,14 +38,16 @@ clewd_install() {
     auto_load_proxy_env
     
     local api_url="https://api.github.com/repos/Xerxes-2/clewdr/releases/latest"
-    local json=$(curl -s -m 10 "$api_url")
+    local json
+    json=$(curl -s -m 10 "$api_url")
     
     if [ -z "$json" ] || [[ "$json" == *"rate limit"* ]]; then
         ui_print error "GitHub API 请求失败 (可能触发频率限制)。"
         ui_pause; return 1
     fi
 
-    local download_url=$(echo "$json" | yq -p json '.assets[] | select(.name | contains("'"$asset_pattern"'")) | .browser_download_url' 2>/dev/null | head -n 1)
+    local download_url
+    download_url=$(echo "$json" | yq -p json '.assets[] | select(.name | contains("'$asset_pattern'")) | .browser_download_url' 2>/dev/null | head -n 1)
     
     if [[ -z "$download_url" || "$download_url" == "null" ]]; then
         ui_print error "无法从 API 解析下载地址。架构: $asset_pattern"
@@ -50,7 +55,7 @@ clewd_install() {
     fi
     
     local tmp_file="$TMP_DIR/clewdr_dist.zip"
-    local DL_CMD="source \"$TAVX_DIR/core/utils.sh\"; download_file_smart '$download_url' '$tmp_file' 'false'"
+    local DL_CMD="source \"$TAVX_DIR/core/utils.sh\"; download_file_smart '\''$download_url\'' '$tmp_file' 'false'"
     
     if ui_stream_task "正在下载发行包..." "$DL_CMD"; then
         ui_print info "正在解压..."
@@ -58,7 +63,8 @@ clewd_install() {
         chmod +x "$CL_DIR"/* 2>/dev/null
         
         if [ ! -f "$CL_DIR/clewdr" ]; then
-            local bin_path=$(find "$CL_DIR" -name "clewdr" -type f | head -n 1)
+            local bin_path
+            bin_path=$(find "$CL_DIR" -name "clewdr" -type f | head -n 1)
             [ -n "$bin_path" ] && mv "$bin_path" "$CL_DIR/clewdr"
         fi
         
@@ -148,7 +154,8 @@ clewd_menu() {
         if [ "$state" == "running" ]; then
             local pass="未知"
             if [ -f "$log_path" ]; then
-                local API_PASS=$(grep -iE "password:|Pass:" "$log_path" | head -n 1 | awk -F': ' '{print $2}' | tr -d ' ')
+                local API_PASS
+                API_PASS=$(grep -iE "password:|Pass:" "$log_path" | head -n 1 | awk -F': ' '{print $2}' | tr -d ' ')
                 [ -z "$API_PASS" ] && API_PASS=$(grep -E "API Password:|Pass:" "$log_path" | head -n 1 | awk '{print $NF}')
                 [ -n "$API_PASS" ] && pass="$API_PASS"
             fi
@@ -162,7 +169,8 @@ clewd_menu() {
         fi
         
         ui_status_card "$state" "$text" "${info[@]}"
-        local CHOICE=$(ui_menu "请选择操作" "🚀 启动服务" "🔑 查看密码" "📜 查看日志" "🛑 停止服务" "📥 更新重装" "🗑️  卸载模块" "🧭 关于模块" "🔙 返回")
+        local CHOICE
+        CHOICE=$(ui_menu "请选择操作" "🚀 启动服务" "🔑 查看密码" "📜 查看日志" "🛑 停止服务" "📥 更新重装" "🗑️  卸载模块" "🧭 关于模块" "🔙 返回")
         case "$CHOICE" in
             *"启动"*) clewd_start; ui_pause ;; 
             *"密码"*) 

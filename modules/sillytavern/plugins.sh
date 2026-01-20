@@ -38,7 +38,8 @@ app_plugin_install_single() {
         if ! ui_confirm "插件已存在，是否重新安装？"; then return; fi
     fi
 
-    local repo_path=$(_st_extract_repo_path "$repo_url")
+    local repo_path
+    repo_path=$(_st_extract_repo_path "$repo_url")
 
     prepare_network_strategy "SillyTavern Plugin"
     
@@ -90,6 +91,7 @@ app_plugin_list_menu() {
         
         while IFS= read -r line; do
             [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
+            # shellcheck disable=SC2034
             IFS='|' read -r name repo s c dir <<< "$line"
             name=$(echo "$name"|xargs); dir=$(echo "$dir"|xargs)
             
@@ -119,12 +121,15 @@ app_plugin_submit() {
     echo -e "${YELLOW}欢迎贡献插件！${NC}"
     echo -e "数据将提交至: $API_URL"
     echo ""
-    local name=$(ui_input "1. 插件名称 (必填)" "" "false")
+    local name
+    name=$(ui_input "1. 插件名称 (必填)" "" "false")
     if [[ -z "$name" || "$name" == "0" ]]; then ui_print info "已取消"; ui_pause; return; fi
-    local url=$(ui_input "2. GitHub 地址 (必填)" "https://github.com/" "false")
+    local url
+    url=$(ui_input "2. GitHub 地址 (必填)" "https://github.com/" "false")
     if [[ -z "$url" || "$url" == "0" || "$url" == "https://github.com/" ]]; then ui_print info "已取消"; ui_pause; return; fi
     if [[ "$url" != http* ]]; then ui_print error "地址格式错误"; ui_pause; return; fi
-    local dir=$(ui_input "3. 英文目录名 (选填，0取消)" "" "false")
+    local dir
+    dir=$(ui_input "3. 英文目录名 (选填，0取消)" "" "false")
     if [[ "$dir" == "0" ]]; then ui_print info "已取消"; ui_pause; return; fi
     
     echo -e "------------------------"
@@ -135,15 +140,18 @@ app_plugin_submit() {
     
     if ! ui_confirm "确认提交吗？"; then ui_print info "已取消"; ui_pause; return; fi
     
-    local JSON=$(printf '{"name":"%s", "url":"%s", "dirName":"%s"}' "$name" "$url" "$dir")
+    local JSON
+    JSON=$(printf '{"name":"%s", "url":"%s", "dirName":"%s"}' "$name" "$url" "$dir")
     
     _auto_heal_network_config
     local network_conf="$TAVX_DIR/config/network.conf"
     local proxy_args=""
     if [ -f "$network_conf" ]; then
-        local c=$(cat "$network_conf")
+        local c
+        c=$(cat "$network_conf")
         if [[ "$c" == PROXY* ]]; then
-            local val=${c#*|}; val=$(echo "$val"|tr -d '\n\r')
+            local val
+            val=${c#*|}; val=$(echo "$val"|tr -d '\n\r')
             proxy_args="-x $val"
         fi
     fi

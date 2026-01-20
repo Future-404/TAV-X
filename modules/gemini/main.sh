@@ -29,12 +29,13 @@ _go_check_env() {
         
         ui_print info "初始化 pnpm 环境..."
         pnpm setup >/dev/null 2>&1
+        # shellcheck disable=SC1091
         [ -f "$HOME/.bashrc" ] && source "$HOME/.bashrc"
         
         export PNPM_HOME="$HOME/.local/share/pnpm"
         case ":$PATH:" in
-            *":$PNPM_HOME:"*) ;;
-            *) export PATH="$PNPM_HOME:$PATH" ;;
+            *":$PNPM_HOME:"*) ;; 
+            *) export PATH="$PNPM_HOME:$PATH" ;; 
         esac
     fi
     return 0
@@ -52,7 +53,8 @@ gemini_install() {
 
     ui_print info "正在通过 pnpm 全局安装 @google/gemini-cli..."
     if pnpm add -g @google/gemini-cli; then
-        local app_path=$(get_app_path "gemini")
+        local app_path
+        app_path=$(get_app_path "gemini")
         mkdir -p "$app_path"
         touch "$app_path/.installed"
 
@@ -96,7 +98,8 @@ gemini_uninstall() {
         ui_print info "正在卸载 @google/gemini-cli..."
         pnpm remove -g @google/gemini-cli
 
-        local app_path=$(get_app_path "gemini")
+        local app_path
+        app_path=$(get_app_path "gemini")
         safe_rm "$app_path"
 
         ui_print success "已卸载。"
@@ -112,13 +115,14 @@ gemini_menu() {
             command -v gemini &>/dev/null && status="已就绪"
             ui_status_card "info" "状态: $status" "包名: @google/gemini-cli" "运行指令: gemini"
             
-            local CHOICE=$(ui_menu "功能菜单" "🚀 安装/更新" "💬 启动指南" "🗑️  卸载模块" "🧭 关于模块" "🔙 返回")
+            local CHOICE
+            CHOICE=$(ui_menu "功能菜单" "🚀 安装/更新" "💬 启动指南" "🗑️  卸载模块" "🧭 关于模块" "🔙 返回")
             case "$CHOICE" in
-                *"安装"*) gemini_install ;;
-                *"启动"*) gemini_start ;;
-                *"卸载"*) gemini_uninstall && [ $? -eq 2 ] && return ;;
-                *"关于"*) show_module_about_info "${BASH_SOURCE[0]}" ;;
-                *"返回"*) return ;;
+                *"安装"*) gemini_install ;; 
+                *"启动"*) gemini_start ;; 
+                *"卸载"*) gemini_uninstall && [ $? -eq 2 ] && return ;; 
+                *"关于"*) show_module_about_info "${BASH_SOURCE[0]}" ;; 
+                *"返回"*) return ;; 
             esac
         done
     else

@@ -64,7 +64,8 @@ koishi_start() {
         return 1
     fi
 
-    local port=$(grep "port:" "$KOISHI_CONFIG" | awk '{print $2}' | tr -d '\r')
+    local port
+    port=$(grep "port:" "$KOISHI_CONFIG" | awk '{print $2}' | tr -d '\r')
     [ -z "$port" ] && port="5140"
 
     if [ "$OS_TYPE" == "TERMUX" ]; then
@@ -82,7 +83,7 @@ koishi_start() {
         koishi_stop >/dev/null 2>&1
         rm -f "$KOISHI_LOG"
         
-        local START_CMD="setsid nohup npx koishi start > '$KOISHI_LOG' 2>&1 & echo \$! > '$KOISHI_PID'"
+        local START_CMD="setsid nohup npx koishi start > '$KOISHI_LOG' 2>&1 & echo \\$! > '$KOISHI_PID'"
         ui_spinner "正在启动 Koishi..." "eval \"$START_CMD\""
         
         sleep 2
@@ -140,14 +141,15 @@ koishi_menu() {
              state="running"; text="运行中"
         fi
         
-        local port=$(grep "port:" "$KOISHI_CONFIG" | awk '{print $2}' | tr -d '\r')
+        local port
+        port=$(grep "port:" "$KOISHI_CONFIG" | awk '{print $2}' | tr -d '\r')
         [ -z "$port" ] && port="5140"
         
         ui_header "Koishi 管理面板"
         ui_status_card "$state" "$text" "端口: $port" "WebUI: http://127.0.0.1:$port"
         
-        local CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🛑 停止服务" "🔧 重置密码
-        " "📜 查看日志" "🗑️  卸载模块" "🧭 关于模块" "🔙 返回")
+        local CHOICE
+        CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🛑 停止服务" "🔧 重置密码" "📜 查看日志" "🗑️  卸载模块" "🧭 关于模块" "🔙 返回")
         
         case "$CHOICE" in
             *"启动"*) koishi_start; ui_pause ;; 

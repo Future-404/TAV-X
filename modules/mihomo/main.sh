@@ -6,7 +6,7 @@
 # APP_CATEGORY: 网络与代理
 # APP_AUTHOR: MetaCubeX
 # APP_PROJECT_URL: https://github.com/MetaCubeX/mihomo
-# APP_DESC: Mihomo (原 Clash.Meta) 是一个基于 Go 语言开发的轻量级代理核心，兼容 Clash 配置格式。它支持多种代理协议和高级规则匹配，是目前性能最强、功能最丰富的 Clash 内核分支。
+# APP_DESC: Mihomo (原 Clash.Meta) 是一个基于 Go 语言开发的轻量级代理核心，兼容 Clash 配置格式。它支持多种代理协议 and 高级规则匹配，是目前性能最强、功能最丰富的 Clash 内核分支。
 # [END_METADATA]
 
 source "$TAVX_DIR/core/env.sh"
@@ -31,7 +31,8 @@ mihomo_install() {
     ui_header "安装/更新 Mihomo Core"
     mkdir -p "$MIHOMO_DIR"
     
-    local arch=$(uname -m)
+    local arch
+    arch=$(uname -m)
     local dl_arch="amd64"
     [[ "$arch" == "aarch64" || "$arch" == "arm64" ]] && dl_arch="arm64"
 
@@ -55,7 +56,8 @@ mihomo_install() {
         local UI_CMD="source '$TAVX_DIR/core/utils.sh'; download_file_smart '$ui_url' '$tmp_ui' 'true' && unzip -o '$tmp_ui' -d '$MIHOMO_DIR' && safe_rm '$tmp_ui'"
         
         if ui_stream_task "下载面板资源..." "$UI_CMD"; then
-            local extracted_dir=$(find "$MIHOMO_DIR" -maxdepth 1 -type d -name "metacubexd-*" | head -n 1)
+            local extracted_dir
+            extracted_dir=$(find "$MIHOMO_DIR" -maxdepth 1 -type d -name "metacubexd-*" | head -n 1)
             [ -n "$extracted_dir" ] && mv "$extracted_dir" "$ui_dir"
             ui_print success "WebUI 已就绪。"
         fi
@@ -111,7 +113,8 @@ EOF
         ((i++))
     done < "$MIHOMO_SUBS"
 
-    local use_list=$(printf ", %s" "${provider_names[@]}")
+    local use_list
+    use_list=$(printf ", %s" "${provider_names[@]}")
     use_list=${use_list:2}
     
     cat >> "$MIHOMO_CONF" <<EOF
@@ -126,9 +129,7 @@ EOF
 
     if [ -f "$MIHOMO_PATCH" ] && command -v yq &>/dev/null; then
         ui_print info "检测到自定义配置补丁，正在合并..."
-        yq -i '. *= load("'$MIHOMO_PATCH'")' "$MIHOMO_CONF"
-        
-        if [ $? -eq 0 ]; then
+        if yq -i '. *= load("'"$MIHOMO_PATCH"'")' "$MIHOMO_CONF"; then
             ui_print success "补丁应用成功。"
         else
             ui_print error "补丁应用失败，请检查 YAML 语法。"
@@ -147,7 +148,8 @@ EOF
         cd "$MIHOMO_DIR" || return 1
         echo "--- Mihomo Start $(date) --- " > "$MIHOMO_LOG"
         local START_CMD="setsid ./mihomo -d . >> '$MIHOMO_LOG' 2>&1 & echo \$!"
-        local new_pid=$(eval "$START_CMD")
+        local new_pid
+        new_pid=$(eval "$START_CMD")
         
         if [ -n "$new_pid" ]; then
             echo "$new_pid" > "$MIHOMO_PID"
@@ -212,7 +214,8 @@ mihomo_menu() {
         
         ui_status_card "$state" "$text" "${info[@]}"
         
-        local CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🛑 停止服务" "🔗 设置订阅" "🔧 高级配置" "🔑 设置密钥" "📊 打开面板" "📜 查看日志" "⚙️  更新核心" "🗑️  卸载模块" "🧭 关于模块" "🔙 返回")
+        local CHOICE
+        CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🛑 停止服务" "🔗 设置订阅" "🔧 高级配置" "🔑 设置密钥" "📊 打开面板" "📜 查看日志" "⚙️  更新核心" "🗑️  卸载模块" "🧭 关于模块" "🔙 返回")
         case "$CHOICE" in
             *"启动"*) mihomo_start; ui_pause ;; 
             *"停止"*) mihomo_stop; ui_print success "已停止"; ui_pause ;; 
@@ -222,10 +225,12 @@ mihomo_menu() {
                     local count=0; [ -f "$MIHOMO_SUBS" ] && count=$(grep -c "^http" "$MIHOMO_SUBS")
                     echo -e "当前已添加 ${CYAN}$count${NC} 个订阅地址"
                     echo "----------------------------------------"
-                    local sub_opt=$(ui_menu "订阅操作" "➕ 添加新订阅" "📜 查看已添加" "🗑️  清空所有" "🔙 返回")
+                    local sub_opt
+                    sub_opt=$(ui_menu "订阅操作" "➕ 添加新订阅" "📜 查看已添加" "🗑️  清空所有" "🔙 返回")
                     case "$sub_opt" in
                         *"➕"*)
-                            local url=$(ui_input_validated "请输入订阅链接" "" "url")
+                            local url
+                            url=$(ui_input_validated "请输入订阅链接" "" "url")
                             [ -n "$url" ] && { echo "$url" >> "$MIHOMO_SUBS"; ui_print success "添加成功"; }
                             ;;
                         *"📜"*)
@@ -280,7 +285,8 @@ EOF
                 ui_pause ;;
             *"密钥"*) 
                 local cur=""; [ -f "$MIHOMO_SECRET_CONF" ] && cur=$(cat "$MIHOMO_SECRET_CONF")
-                local sec=$(ui_input "面板密钥" "$cur" "false")
+                local sec
+                sec=$(ui_input "面板密钥" "$cur" "false")
                 echo "$sec" > "$MIHOMO_SECRET_CONF"; ui_print success "已保存"; ui_pause ;; 
             *"面板"*) open_browser "http://127.0.0.1:19090/ui" ;; 
             *"日志"*) safe_log_monitor "$log_path" ;; 

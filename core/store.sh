@@ -45,9 +45,11 @@ _load_store_data() {
         done < "$INDEX_FILE"
     fi
     
-    for mod_dir in "$TAVX_DIR/modules/"*; do
+    for mod_dir in "$TAVX_DIR/modules/"*;
+ do
         [ ! -d "$mod_dir" ] && continue
-        local id=$(basename "$mod_dir")
+        local id
+        id=$(basename "$mod_dir")
         local main_sh="$mod_dir/main.sh"
         [ ! -f "$main_sh" ] && continue
         
@@ -57,8 +59,10 @@ _load_store_data() {
         done
         
         if [ "$exists" = false ]; then
-            local meta_name=$(grep "MODULE_NAME:" "$main_sh" | cut -d: -f2- | xargs)
-            local meta_cat=$(grep "APP_CATEGORY:" "$main_sh" | cut -d: -f2- | xargs)
+            local meta_name
+            meta_name=$(grep "MODULE_NAME:" "$main_sh" | cut -d: -f2- | xargs)
+            local meta_cat
+            meta_cat=$(grep "APP_CATEGORY:" "$main_sh" | cut -d: -f2- | xargs)
             [ -z "$meta_name" ] && meta_name="$id"
             [ -z "$meta_cat" ] && meta_cat="本地模块"
             
@@ -76,17 +80,21 @@ manage_shortcuts_menu() {
     local SHORTCUT_FILE="$TAVX_DIR/config/shortcuts.list"
     local raw_list=()
     
-    for mod_dir in "$TAVX_DIR/modules/"*; do
+    for mod_dir in "$TAVX_DIR/modules/"*;
+ do
         [ ! -d "$mod_dir" ] && continue
-        local id=$(basename "$mod_dir")
+        local id
+        id=$(basename "$mod_dir")
         local main_sh="$mod_dir/main.sh"
         [ ! -f "$main_sh" ] && continue
         
-        local name=$(grep "MODULE_NAME:" "$main_sh" | cut -d ':' -f 2- | xargs)
+        local name
+        name=$(grep "MODULE_NAME:" "$main_sh" | cut -d ':' -f 2- | xargs)
         [ -z "$name" ] && name="$id"
         
         local status="🟡"
-        local app_path=$(get_app_path "$id")
+        local app_path
+        app_path=$(get_app_path "$id")
         if [ -d "$app_path" ] && [ -n "$(ls -A "$app_path" 2>/dev/null)" ]; then
             status="🟢"
         fi
@@ -100,7 +108,13 @@ manage_shortcuts_menu() {
         return
     fi
     
-    IFS=$'\n' sorted_list=($(printf "%s\n" "${raw_list[@]}" | sort))
+    local sorted_list=()
+    if [ "${BASH_VERSINFO:-0}" -ge 4 ]; then
+        mapfile -t sorted_list < <(printf "%s\n" "${raw_list[@]}" | sort)
+    else
+        # shellcheck disable=SC2207
+        IFS=$'\n' sorted_list=($(printf "%s\n" "${raw_list[@]}" | sort))
+    fi
     
     local display_names=()
     local mapping_ids=()
@@ -111,7 +125,12 @@ manage_shortcuts_menu() {
     
     local current_shortcuts=()
     if [ -f "$SHORTCUT_FILE" ]; then
-        mapfile -t current_shortcuts < "$SHORTCUT_FILE"
+        if [ "${BASH_VERSINFO:-0}" -ge 4 ]; then
+            mapfile -t current_shortcuts < "$SHORTCUT_FILE"
+        else
+            # shellcheck disable=SC2207
+            current_shortcuts=($(cat "$SHORTCUT_FILE"))
+        fi
     fi
     
     ui_header "⭐ 主页快捷方式"
@@ -134,8 +153,10 @@ manage_shortcuts_menu() {
                 fi
             done
         done
-        export GUM_CHOOSE_SELECTED=$(IFS=,; echo "${selected_labels[*]}")
-        local choices=$("$GUM_BIN" choose --no-limit --header="" --cursor="👉 " --cursor.foreground="$C_PINK" --selected.foreground="$C_PINK" -- "${display_names[@]}")
+        export GUM_CHOOSE_SELECTED
+        GUM_CHOOSE_SELECTED=$(IFS=,; echo "${selected_labels[*]}")
+        local choices
+        choices=$("$GUM_BIN" choose --no-limit --header="" --cursor="👉 " --cursor.foreground="$C_PINK" --selected.foreground="$C_PINK" -- "${display_names[@]}")
         unset GUM_CHOOSE_SELECTED
         
         IFS=$'\n' read -rd '' -a choices_arr <<< "$choices"
@@ -173,7 +194,8 @@ app_store_menu() {
         if [ "$current_view" == "home" ]; then
             ui_header "🛒 应用中心"
             local unique_cats=()
-            local raw_cats=$(printf "%s\n" "${STORE_CATS[@]}" | grep -v "其他分类" | sort | uniq)
+            local raw_cats
+            raw_cats=$(printf "%s\n" "${STORE_CATS[@]}" | grep -v "其他分类" | sort | uniq)
             if printf "%s\n" "${STORE_CATS[@]}" | grep -q "其他分类"; then
                 raw_cats=$(printf "%s\n其他分类" "$raw_cats")
             fi
@@ -185,7 +207,8 @@ app_store_menu() {
             
             for cat in "${unique_cats[@]}"; do
                 [ -z "$cat" ] && continue
-                local icon=$(_get_category_icon "$cat")
+                local icon
+                icon=$(_get_category_icon "$cat")
                 MENU_OPTS+=("$icon$cat")
             done
             
@@ -193,7 +216,8 @@ app_store_menu() {
             MENU_OPTS+=("🔄 刷新列表")
             MENU_OPTS+=("🔙 返回主菜单")
             
-            local CHOICE=$(ui_menu "请选择分类" "${MENU_OPTS[@]}")
+            local CHOICE
+            CHOICE=$(ui_menu "请选择分类" "${MENU_OPTS[@]}")
             
             if [[ "$CHOICE" == *"快捷方式"* ]]; then manage_shortcuts_menu; continue; fi
             if [[ "$CHOICE" == *"全部应用"* ]]; then current_view="list"; selected_category="ALL"; continue; fi
@@ -201,7 +225,8 @@ app_store_menu() {
             if [[ "$CHOICE" == *"返回主菜单"* ]]; then return; fi
             if [[ "$CHOICE" == *"----"* ]]; then continue; fi
             
-            local clean_cat=$(echo "$CHOICE" | sed -E 's/^[^ ]+[[:space:]]*//')
+            local clean_cat
+            clean_cat=$(echo "$CHOICE" | sed -E 's/^[^ ]+[[:space:]]*//')
             if [ -n "$clean_cat" ]; then
                 selected_category="$clean_cat"
                 current_view="list"
@@ -226,7 +251,8 @@ app_store_menu() {
                 local name="${STORE_NAMES[$i]}"
                 local status="🌍"
                 local mod_path="$TAVX_DIR/modules/$id"
-                local app_path=$(get_app_path "$id")
+                local app_path
+                app_path=$(get_app_path "$id")
                 
                 if [ -d "$mod_path" ] && [ -f "$mod_path/main.sh" ]; then
                     if [ -d "$app_path" ] && [ -n "$(ls -A "$app_path" 2>/dev/null)" ]; then
@@ -249,7 +275,8 @@ app_store_menu() {
             
             MENU_OPTS+=("🔙 返回上一级")
             
-            local CHOICE=$(ui_menu "应用列表" "${MENU_OPTS[@]}")
+            local CHOICE
+            CHOICE=$(ui_menu "应用列表" "${MENU_OPTS[@]}")
             
             if [[ "$CHOICE" == *"返回"* ]]; then current_view="home"; continue; fi
             
@@ -261,8 +288,8 @@ app_store_menu() {
                 fi
             done
             
-            if [ $selected_idx -ge 0 ]; then
-                _app_store_action $selected_idx
+            if [ "$selected_idx" -ge 0 ]; then
+                _app_store_action "$selected_idx"
             fi
         fi
     done
@@ -290,7 +317,8 @@ _app_store_action() {
     local cat="${STORE_CATS[$idx]}"
     
     local mod_path="$TAVX_DIR/modules/$id"
-    local app_path=$(get_app_path "$id")
+    local app_path
+    app_path=$(get_app_path "$id")
     
     local state="remote"
     if [ -d "$mod_path" ] && [ -f "$mod_path/main.sh" ]; then
@@ -312,7 +340,8 @@ _app_store_action() {
             echo -e "状态: ${BLUE}🌍 云端${NC}"
             if ui_menu "选择操作" "📥 获取模块脚本" "🔙 返回" | grep -q "获取"; then
                 prepare_network_strategy "Module Fetch"
-                local final_url=$(get_dynamic_repo_url "$url")
+                local final_url
+                final_url=$(get_dynamic_repo_url "$url")
                 
                 local CMD="mkdir -p '$mod_path'; git clone -b $branch '$final_url' '$mod_path'"
                 if ui_stream_task "正在获取脚本..." "$CMD"; then
@@ -332,7 +361,8 @@ _app_store_action() {
             
         "pending")
             echo -e "状态: ${YELLOW}🟡 待部署${NC}"
-            local ACT=$(ui_menu "选择操作" "📦 安装应用本体" "🗑️ 删除模块脚本" "🔙 返回")
+            local ACT
+            ACT=$(ui_menu "选择操作" "📦 安装应用本体" "🗑️ 删除模块脚本" "🔙 返回")
             case "$ACT" in
                 *"安装"*) _trigger_app_install "$id" ;; 
                 *"删除"*) 
@@ -348,11 +378,13 @@ _app_store_action() {
             
         "installed")
             echo -e "状态: ${GREEN}🟢 已就绪${NC}"
-            local ACT=$(ui_menu "选择操作" "🚀 管理/启动" "🔄 更新模块脚本" "🔙 返回")
+            local ACT
+            ACT=$(ui_menu "选择操作" "🚀 管理/启动" "🔄 更新模块脚本" "🔙 返回")
             case "$ACT" in
                 *"管理"*) 
                     if [ -f "$mod_path/main.sh" ]; then
-                        local entry=$(grep "MODULE_ENTRY:" "$mod_path/main.sh" | cut -d: -f2- | xargs)
+                        local entry
+                        entry=$(grep "MODULE_ENTRY:" "$mod_path/main.sh" | cut -d: -f2- | xargs)
                         if [ -n "$entry" ]; then
                             source "$mod_path/main.sh"
                             $entry

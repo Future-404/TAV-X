@@ -63,14 +63,18 @@ ui_header() {
     
     clear
     if [ "$HAS_GUM" = true ]; then
-        local logo=$("$GUM_BIN" style --foreground $C_PINK "$(get_ascii_logo)")
-        local v_tag=$("$GUM_BIN" style --foreground $C_DIM --align right "Ver: $ver | by Future 404  ")
+        local logo
+        logo=$("$GUM_BIN" style --foreground "$C_PINK" "$(get_ascii_logo)")
+        local v_tag
+        v_tag=$("$GUM_BIN" style --foreground "$C_DIM" --align right "Ver: $ver | by Future 404  ")
         echo "$logo"
         echo "$v_tag"
         
         if [ -n "$subtitle" ]; then
-            local prefix=$("$GUM_BIN" style --foreground $C_PURPLE --bold "  🚀 ")
-            local divider=$("$GUM_BIN" style --foreground $C_DIM "  ───────────────────────────────────────")
+            local prefix
+            prefix=$("$GUM_BIN" style --foreground "$C_PURPLE" --bold "  🚀 ")
+            local divider
+            divider=$("$GUM_BIN" style --foreground "$C_DIM" "  ───────────────────────────────────────")
             echo -e "${prefix}${subtitle}"
             echo "$divider"
         fi
@@ -103,7 +107,7 @@ ui_dashboard() {
         echo -n "  "
         for i in "${!base_items[@]}"; do
             echo -n -e "${base_items[$i]}"
-            [ $i -lt $((${#base_items[@]} - 1)) ] && echo -n "    "
+            [ "$i" -lt $((${#base_items[@]} - 1)) ] && echo -n "    "
         done
         echo -e "\n"
     fi
@@ -153,16 +157,24 @@ ui_input() {
     local is_pass="$3"
     
     if [ "$HAS_GUM" = true ]; then
-        local args=(--placeholder "$prompt" --width 40 --cursor.foreground $C_PINK)
+        local args=(--placeholder "$prompt" --width 40 --cursor.foreground "$C_PINK")
         [ -n "$default" ] && args+=(--value "$default")
         [ "$is_pass" = "true" ] && args+=(--password)
         "$GUM_BIN" input "${args[@]}"
     else
-        local flag=""; [ "$is_pass" = "true" ] && flag="-s"
+        local flag=""
+        [ "$is_pass" = "true" ] && flag="-s"
         echo -n -e "  ${CYAN}➜${NC} $prompt" >&2
         [ -n "$default" ] && echo -n -e " [${YELLOW}$default${NC}]" >&2
         echo -n ": " >&2
-        local val; read $flag val; echo "${val:-$default}"
+        
+        local val
+        if [ -n "$flag" ]; then
+            read -r -s val
+        else
+            read -r val
+        fi
+        echo "${val:-$default}"
     fi
 }
 export -f ui_input
@@ -186,12 +198,12 @@ ui_input_validated() {
 
         local is_ok=false
         case "$type" in
-            "numeric") [[ "$result" =~ ^[0-9]+$ ]] && is_ok=true ;;
-            "url") [[ "$result" =~ ^https?:// ]] && is_ok=true ;;
-            "ip") [[ "$result" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] && is_ok=true ;;
-            "host") [[ "$result" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}(:[0-9]{1,5})?$ ]] && is_ok=true ;;
-            "alphanumeric") [[ "$result" =~ ^[a-zA-Z0-9_-]+$ ]] && is_ok=true ;;
-            "any"|*) is_ok=true ;;
+            "numeric") [[ "$result" =~ ^[0-9]+$ ]] && is_ok=true ;; 
+            "url") [[ "$result" =~ ^https?:// ]] && is_ok=true ;; 
+            "ip") [[ "$result" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] && is_ok=true ;; 
+            "host") [[ "$result" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}(:[0-9]{1,5})?$ ]] && is_ok=true ;; 
+            "alphanumeric") [[ "$result" =~ ^[a-zA-Z0-9_-]+$ ]] && is_ok=true ;; 
+            "any"|*) is_ok=true ;; 
         esac
         
         if [ "$is_ok" = true ]; then
@@ -208,7 +220,7 @@ export -f ui_input_validated
 ui_confirm() {
     local prompt="${1:-确定要执行此操作吗？}"
     if [ "$HAS_GUM" = true ]; then
-        "$GUM_BIN" confirm "$prompt" --affirmative "是" --negative "否" --selected.background $C_PINK
+        "$GUM_BIN" confirm "$prompt" --affirmative "是" --negative "否" --selected.background "$C_PINK"
     else
         echo -e -n "${YELLOW}⚠ $prompt (y/n): ${NC}" >&2
         read -r c; [[ "$c" == "y" || "$c" == "Y" ]]
@@ -240,12 +252,14 @@ ui_stream_task() {
     (
         export TAVX_NON_INTERACTIVE=true
         export TAVX_DIR="$TAVX_DIR"
+        # shellcheck disable=SC2153
         [ -n "$TERMUX_VERSION" ] && export PATH="$PREFIX/bin:$PREFIX/bin/applets:$PATH"
         
         $stdbuf_cmd bash -c "$cmd" 2>&1
         echo $? > "$exit_status_file"
     ) | while IFS= read -r line; do
-        local clean_line=$(echo "$line" | tr -d '\r' | sed 's/^[[:space:]]*//')
+        local clean_line
+        clean_line=$(echo "$line" | tr -d '\r' | sed 's/^[[:space:]]*//')
         [ -z "$clean_line" ] && continue
         
         if [ "$HAS_GUM" = true ]; then
@@ -295,15 +309,16 @@ ui_status_card() {
                 if [[ "$line" == *": "* ]]; then
                     local k="${line%%: *}"
                     local v="${line#*: }"
-                    parts+=("$("$GUM_BIN" style --foreground $C_PURPLE "$k"): $v")
+                    parts+=("$("$GUM_BIN" style --foreground "$C_PURPLE" "$k"): $v")
                 else
                     parts+=("$line")
                 fi
             done
         fi
         
-        local joined=$("$GUM_BIN" join --vertical --align left "${parts[@]}")
-        "$GUM_BIN" style --border normal --border-foreground $C_DIM --padding "0 1" --margin "0 0 1 0" --width 45 "$joined"
+        local joined
+        joined=$("$GUM_BIN" join --vertical --align left "${parts[@]}")
+        "$GUM_BIN" style --border normal --border-foreground "$C_DIM" --padding "0 1" --margin "0 0 1 0" --width 45 "$joined"
     else
         local color_code=""
         case "$type" in
@@ -332,15 +347,16 @@ ui_print() {
     local type="${1:-info}"
     local msg="$2"
     
-    local log_level=$(echo "$type" | tr '[:lower:]' '[:upper:]')
+    local log_level
+    log_level=$(echo "$type" | tr '[:lower:]' '[:upper:]')
     write_log "$log_level" "$msg"
 
     if [ "$HAS_GUM" = true ]; then
         case $type in
-            success) "$GUM_BIN" style --foreground $C_GREEN "  ✔ $msg" ;; 
-            error)   "$GUM_BIN" style --foreground $C_RED   "  ✘ $msg" ;; 
-            warn)    "$GUM_BIN" style --foreground $C_YELLOW "  ⚠ $msg" ;; 
-            *)       "$GUM_BIN" style --foreground $C_PURPLE "  ℹ $msg" ;; 
+            success) "$GUM_BIN" style --foreground "$C_GREEN" "  ✔ $msg" ;; 
+            error)   "$GUM_BIN" style --foreground "$C_RED"   "  ✘ $msg" ;; 
+            warn)    "$GUM_BIN" style --foreground "$C_YELLOW" "  ⚠ $msg" ;; 
+            *)       "$GUM_BIN" style --foreground "$C_PURPLE" "  ℹ $msg" ;; 
         esac
     else 
         case $type in
@@ -357,7 +373,7 @@ ui_pause() {
     local prompt="${1:-按任意键继续...}"
     echo ""
     if [ "$HAS_GUM" = true ]; then
-        "$GUM_BIN" style --foreground $C_DIM "  $prompt"
+        "$GUM_BIN" style --foreground "$C_DIM" "  $prompt"
         read -n 1 -s -r
     else
         read -n 1 -s -r -p "  $prompt"

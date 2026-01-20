@@ -38,7 +38,7 @@ export -f revert_optimization_core
 
 apply_universal_fixes() {
     local PKG="com.termux"
-    local SDK_VER=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
+    local SDK_VER; SDK_VER=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
     [ -z "$SDK_VER" ] && SDK_VER=0
     
     if [ "$SDK_VER" -ge 31 ]; then
@@ -58,8 +58,8 @@ apply_universal_fixes() {
 export -f apply_universal_fixes
 
 apply_vendor_fixes() {
-    local MANUFACTURER=$(adb shell getprop ro.product.manufacturer | tr '[:upper:]' '[:lower:]')
-    local SDK_VER=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
+    local MANUFACTURER; MANUFACTURER=$(adb shell getprop ro.product.manufacturer | tr '[:upper:]' '[:lower:]')
+    local SDK_VER; SDK_VER=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
     [ -z "$SDK_VER" ] && SDK_VER=0
 
     ui_print info "正在应用厂商深度策略: ${CYAN}$MANUFACTURER${NC}"
@@ -188,13 +188,13 @@ adb_refrigerator_ui() {
     while true; do
         ui_header "小冰箱管理面板"
         
-        local frozen_count=$(adb shell pm list packages -d -3 2>/dev/null | wc -l)
-        local all_count=$(adb shell pm list packages -3 2>/dev/null | wc -l)
+        local frozen_count; frozen_count=$(adb shell pm list packages -d -3 2>/dev/null | wc -l)
+        local all_count; all_count=$(adb shell pm list packages -3 2>/dev/null | wc -l)
         
         echo -e "已冻结应用: ${CYAN}$frozen_count${NC} / 总第三方应用: $all_count"
         echo "----------------------------------------"
         
-        local OPT=$(ui_menu "请选择操作" "🧊 冻结应用 (Disable)" "🔥 解冻应用 (Enable)" "🔙 返回")
+        local OPT; OPT=$(ui_menu "请选择操作" "🧊 冻结应用 (Disable)" "🔥 解冻应用 (Enable)" "🔙 返回")
         
         case "$OPT" in
             *"冻结"*) _adb_freeze_workflow ;;
@@ -206,7 +206,7 @@ adb_refrigerator_ui() {
 
 _adb_get_pkg_list() {
     local mode="$1"
-    adb shell pm list packages -3 $mode | cut -d: -f2 | sort
+    adb shell pm list packages -3 "$mode" | cut -d: -f2 | sort
 }
 
 _adb_freeze_workflow() {
@@ -218,7 +218,7 @@ _adb_freeze_workflow() {
         ui_pause; return
     fi
     
-    local KEYWORD=$(ui_input "输入包名关键词 (如 tencent, 留空列出所有)" "" "false")
+    local KEYWORD; KEYWORD=$(ui_input "输入包名关键词 (如 tencent, 留空列出所有)" "" "false")
     
     local MATCHED_LIST=()
     for pkg in "${RAW_PKG_LIST[@]}"; do
@@ -246,7 +246,7 @@ _adb_freeze_workflow() {
         for p in "${MATCHED_LIST[@]}"; do MENU_OPTS+=("📦 $p"); done
         MENU_OPTS+=("🔙 返回")
         
-        local CHOICE=$(ui_menu "请选择目标应用" "${MENU_OPTS[@]}")
+        local CHOICE; CHOICE=$(ui_menu "请选择目标应用" "${MENU_OPTS[@]}")
         if [[ "$CHOICE" == *"返回"* ]]; then return; fi
         
         SELECTED=$(echo "$CHOICE" | awk '{print $2}')
@@ -258,7 +258,7 @@ _adb_freeze_workflow() {
     echo -e "目标应用: ${RED}$SELECTED${NC}"
     echo -e "此操作将使其从桌面消失并停止运行。"
     echo ""
-    local CONFIRM=$(ui_input "请输入 [YES] 确认冻结" "" "false")
+    local CONFIRM; CONFIRM=$(ui_input "请输入 [YES] 确认冻结" "" "false")
     
     if [ "$CONFIRM" == "YES" ]; then
         if adb shell pm disable-user --user 0 "$SELECTED" &>/dev/null; then
@@ -281,7 +281,7 @@ _adb_unfreeze_workflow() {
         ui_pause; return
     fi
 
-    local KEYWORD=$(ui_input "输入包名关键词 (留空列出所有)" "" "false")
+    local KEYWORD; KEYWORD=$(ui_input "输入包名关键词 (留空列出所有)" "" "false")
     
     local MATCHED_LIST=()
     for pkg in "${RAW_PKG_LIST[@]}"; do
@@ -309,7 +309,7 @@ _adb_unfreeze_workflow() {
         for p in "${MATCHED_LIST[@]}"; do MENU_OPTS+=("❄️  $p"); done
         MENU_OPTS+=("🔙 返回")
         
-        local CHOICE=$(ui_menu "请选择目标应用" "${MENU_OPTS[@]}")
+        local CHOICE; CHOICE=$(ui_menu "请选择目标应用" "${MENU_OPTS[@]}")
         if [[ "$CHOICE" == *"返回"* ]]; then return; fi
         
         SELECTED=$(echo "$CHOICE" | awk '{print $2}')
@@ -330,7 +330,7 @@ uninstall_adb() {
 
     if ! verify_kill_switch; then return; fi
 
-    if [ -f "$HEARTBEAT_PID" ] && kill -0 $(cat "$HEARTBEAT_PID") 2>/dev/null; then
+    if [ -f "$HEARTBEAT_PID" ] && kill -0 "$(cat "$HEARTBEAT_PID")" 2>/dev/null; then
         ui_print info "正在停止后台音频心跳..."
         stop_heartbeat
     fi
@@ -388,13 +388,13 @@ adb_manager_ui() {
         local state="stopped"; local text="未连接"; local info=()
         if check_adb_connection; then
             state="success"; text="已连接"
-            local dev_count=$(adb devices | grep "device$" | wc -l)
+            local dev_count; dev_count=$(adb devices | grep -c "device$")
             info+=( "设备数: $dev_count" )
         elif ! check_adb_binary; then
             state="error"; text="未安装"
         fi
 
-        if [ -f "$HEARTBEAT_PID" ] && kill -0 $(cat "$HEARTBEAT_PID") 2>/dev/null; then
+        if [ -f "$HEARTBEAT_PID" ] && kill -0 "$(cat "$HEARTBEAT_PID")" 2>/dev/null; then
             info+=( "音频心跳: ⚡ 运行中" )
             [ "$state" == "success" ] && state="running" || state="warn"
         fi
@@ -402,18 +402,18 @@ adb_manager_ui() {
         [ -f "$OPTIMIZED_FLAG" ] && info+=( "保活策略: 🔥 激进模式" )
         ui_status_card "$state" "$text" "${info[@]}"
         
-        local CHOICE=$(ui_menu "请选择操作" "🤝 无线配对" "🔗 快速连接" "⚡ 执行智能保活" "🎵 开启音频心跳" "🔇 关闭音频心跳" "♻️  撤销所有优化" "🗑️  重置环境" "🥶 应用小冰箱 (beta 测试功能)" "🔙 返回")
+        local CHOICE; CHOICE=$(ui_menu "请选择操作" "🤝 无线配对" "🔗 快速连接" "⚡ 执行智能保活" "🎵 开启音频心跳" "🔇 关闭音频心跳" "♻️  撤销所有优化" "🗑️  重置环境" "🥶 应用小冰箱 (beta 测试功能)" "🔙 返回")
         case "$CHOICE" in
             *"配对"*)
-                local host=$(ui_input_validated "输入 IP:端口" "127.0.0.1:" "host")
-                local code=$(ui_input_validated "输入 6 位配对码" "" "numeric")
+                local host; host=$(ui_input_validated "输入 IP:端口" "127.0.0.1:" "host")
+                local code; code=$(ui_input_validated "输入 6 位配对码" "" "numeric")
                 [ -n "$code" ] && ui_spinner "配对中..." "adb pair '$host' '$code'" && ui_pause ;;
             *"连接"*)
-                local target=$(ui_input_validated "输入 IP:端口" "127.0.0.1:" "host")
+                local target; target=$(ui_input_validated "输入 IP:端口" "127.0.0.1:" "host")
                 [ -n "$target" ] && ui_spinner "连接中..." "adb connect '$target'" && ui_pause ;;
             *"智能保活"*)
                 if ! check_adb_connection; then ui_print error "请先连接设备！"; ui_pause; continue; fi
-                local sub=$(ui_menu "方案" "🛡️ 通用保活" "🔥 激进保活" "🔙 返回")
+                local sub; sub=$(ui_menu "方案" "🛡️ 通用保活" "🔥 激进保活" "🔙 返回")
                 if [[ "$sub" == *"通用"* ]]; then
                     ui_spinner "应用通用策略..." "apply_universal_fixes" && {
                         touch "$OPTIMIZED_FLAG"

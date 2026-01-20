@@ -28,7 +28,8 @@ _geminicli2api_vars() {
 
 _geminicli2api_check_google() {
     ui_print info "检测 Google 连通性..."
-    local proxy=$(get_active_proxy)
+    local proxy
+    proxy=$(get_active_proxy)
     local cmd="curl -I -s --max-time 5 https://www.google.com"
     [ -n "$proxy" ] && cmd="$cmd --proxy $proxy"
     
@@ -80,7 +81,8 @@ geminicli2api_start() {
     _geminicli2api_check_google || return 1
     
     geminicli2api_stop
-    local port=$(grep "^PORT=" "$GE_ENV_CONF" | cut -d= -f2); [ -z "$port" ] && port=8888
+    local port
+    port=$(grep "^PORT=" "$GE_ENV_CONF" | cut -d= -f2); [ -z "$port" ] && port=8888
     ln -sf "$GE_ENV_CONF" "$GE_DIR/.env"
     
     if [ ! -f "$GE_CREDS" ]; then
@@ -88,7 +90,8 @@ geminicli2api_start() {
         ui_pause; return 1
     fi
     
-    local proxy=$(get_active_proxy)
+    local proxy
+    proxy=$(get_active_proxy)
     local p_env=""
     [ -n "$proxy" ] && p_env="http_proxy=$proxy https_proxy=$proxy all_proxy=$proxy"
     
@@ -103,7 +106,7 @@ geminicli2api_start() {
         sleep 2
         ui_print success "服务启动命令已发送。"
     else
-        local CMD="cd '$GE_DIR' && env $p_env setsid nohup python run.py > '$GE_LOG' 2>&1 & echo \$! > '$GE_PID'"
+        local CMD="cd '$GE_DIR' && env $p_env setsid nohup python run.py > '$GE_LOG' 2>&1 & echo \!\! > '$GE_PID'"
         if ui_spinner "启动进程..." "eval \"$CMD\"" ; then
             sleep 2
             if check_process_smart "$GE_PID" "python.*run.py"; then
@@ -150,15 +153,18 @@ authenticate_google() {
     fi
     
     geminicli2api_stop
-    local proxy=$(get_active_proxy); local p_env=""
+    local proxy
+    proxy=$(get_active_proxy)
+    local p_env=""
     [ -n "$proxy" ] && p_env="http_proxy='$proxy' https_proxy='$proxy'"
     
     local AUTH_LOG="$TMP_DIR/gemini_auth.log"
-    local CMD="cd '$GE_DIR' && source '$GE_VENV/bin/activate' && env -u GEMINI_CREDENTIALS GEMINI_AUTH_PASSWORD='init' PYTHONUNBUFFERED=1 $p_env python -u run.py > '$AUTH_LOG' 2>&1 & echo \$! > '$GE_PID'"
+    local CMD="cd '$GE_DIR' && source '$GE_VENV/bin/activate' && env -u GEMINI_CREDENTIALS GEMINI_AUTH_PASSWORD='init' PYTHONUNBUFFERED=1 $p_env python -u run.py > '$AUTH_LOG' 2>&1 & echo \!\! > '$GE_PID'"
     eval "$CMD"
     
     ui_print info "等待认证链接..."
     local url=""
+    # shellcheck disable=SC2034
     for i in {1..15}; do
         if grep -q "https://accounts.google.com" "$AUTH_LOG"; then
             url=$(grep -o "https://accounts.google.com[^ ]*" "$AUTH_LOG" | head -n 1 | tr -d '\r\n')
@@ -205,30 +211,34 @@ geminicli2api_menu() {
         fi
 
         if [ "$state" == "running" ]; then
-            local port=$(grep "^PORT=" "$GE_ENV_CONF" 2>/dev/null | cut -d= -f2)
+            local port
+            port=$(grep "^PORT=" "$GE_ENV_CONF" 2>/dev/null | cut -d= -f2)
             info+=( "地址: http://127.0.0.1:${port:-8888}/v1" )
         fi
         [ -f "$GE_CREDS" ] && info+=( "授权: ✅" ) || info+=( "授权: ❌" )
         
         ui_status_card "$state" "$text" "${info[@]}"
-        local CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🔑 Google认证" "⚙️  修改配置" "🛑 停止服务" "📜 查看日志" "⬆️  更新代码" "🗑️  卸载模块" "🧭 关于模块" "🔙 返回")
+        local CHOICE
+        CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🔑 Google认证" "⚙️  修改配置" "🛑 停止服务" "📜 查看日志" "⬆️  更新代码" "🗑️  卸载模块" "🧭 关于模块" "🔙 返回")
         case "$CHOICE" in
-            *"启动"*) geminicli2api_start; ui_pause ;;
-            *"认证"*) authenticate_google ;;
+            *"启动"*) geminicli2api_start; ui_pause ;; 
+            *"认证"*) authenticate_google ;; 
             *"配置"*) 
-                local p=$(grep "^PORT=" "$GE_ENV_CONF" | cut -d= -f2)
-                local new_p=$(ui_input "新端口" "${p:-8888}" "false")
+                local p
+                p=$(grep "^PORT=" "$GE_ENV_CONF" | cut -d= -f2)
+                local new_p
+                new_p=$(ui_input "新端口" "${p:-8888}" "false")
                 if [ -n "$new_p" ]; then
                     write_env_safe "$GE_ENV_CONF" "PORT" "$new_p"
                     ui_print success "已保存"
                 fi
-                ui_pause ;;
-            *"停止"*) geminicli2api_stop; ui_print success "已停止"; ui_pause ;;
-            *"日志"*) safe_log_monitor "$log_path" ;;
-            *"更新"*) geminicli2api_install ;;
-            *"卸载"*) geminicli2api_uninstall && [ $? -eq 2 ] && return ;;
-            *"关于"*) show_module_about_info "${BASH_SOURCE[0]}" ;;
-            *"返回"*) return ;;
+                ui_pause ;; 
+            *"停止"*) geminicli2api_stop; ui_print success "已停止"; ui_pause ;; 
+            *"日志"*) safe_log_monitor "$log_path" ;; 
+            *"更新"*) geminicli2api_install ;; 
+            *"卸载"*) geminicli2api_uninstall && [ $? -eq 2 ] && return ;; 
+            *"关于"*) show_module_about_info "${BASH_SOURCE[0]}" ;; 
+            *"返回"*) return ;; 
         esac
     done
 }

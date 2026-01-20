@@ -20,7 +20,7 @@ _parse_metadata() {
     _META_ENTRY=""
     _META_ID=""
 
-    local meta_block=$(grep -E "^# MODULE_(NAME|ENTRY|ID)[:=]" "$file")
+    local meta_block; meta_block=$(grep -E "^# MODULE_(NAME|ENTRY|ID)[:=]" "$file")
     [ -z "$meta_block" ] && return 1
 
     _META_NAME=$(echo "$meta_block" | grep "NAME" | head -n 1 | sed 's/^# MODULE_NAME[:=] *//;s/"//g' | xargs)
@@ -28,7 +28,7 @@ _parse_metadata() {
     _META_ID=$(echo "$meta_block" | grep "ID" | head -n 1 | sed 's/^# MODULE_ID[:=] *//;s/"//g' | xargs)
 
     if [ -z "$_META_ID" ]; then
-        local dir_name=$(basename "$(dirname "$file")")
+        local dir_name; dir_name=$(basename "$(dirname "$file")")
         [ "$dir_name" != "modules" ] && _META_ID="$dir_name" || _META_ID=$(basename "$file" .sh)
     fi
 
@@ -46,6 +46,7 @@ scan_and_load_modules() {
         if _parse_metadata "$file"; then
             unset APP_DIR ST_DIR CLEWD_DIR MIHOMO_DIR GEMINI_DIR GCLI_DIR
             unset PID_FILE LOG_FILE BINARY
+            # shellcheck disable=SC1090
             source "$file"
             REGISTERED_MODULE_NAMES+=("$_META_NAME")
             REGISTERED_MODULE_ENTRIES+=("$_META_ENTRY")

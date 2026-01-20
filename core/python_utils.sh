@@ -9,7 +9,8 @@ source "$TAVX_DIR/core/utils.sh"
 PY_CONFIG="$TAVX_DIR/config/python.conf"
 
 get_python_version() {
-    if command -v python3 &>/dev/null; then
+    if command -v python3 &>/dev/null;
+ then
         python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
     else
         echo "0.0"
@@ -19,7 +20,8 @@ export -f get_python_version
 
 check_python_version_match() {
     local target="$1"
-    local current=$(get_python_version)
+    local current
+    current=$(get_python_version)
     if [ "$current" == "$target" ]; then
         return 0
     fi
@@ -28,12 +30,13 @@ check_python_version_match() {
 export -f check_python_version_match
 
 select_pypi_mirror() {
+    local quiet_mode="${1:-interactive}"
     local current_mirror=""
     if [ -f "$PY_CONFIG" ]; then
         current_mirror=$(grep "^PYPI_INDEX_URL=" "$PY_CONFIG" | cut -d'=' -f2)
     fi
 
-    if [ "$1" == "quiet" ]; then
+    if [ "$quiet_mode" == "quiet" ]; then
         if [ -n "$current_mirror" ]; then
             export PIP_INDEX_URL="$current_mirror"
             return 0
@@ -45,15 +48,16 @@ select_pypi_mirror() {
     echo -e "当前源: ${CYAN}${current_mirror:-官方源}${NC}"
     echo "----------------------------------------"
 
-    local CHOICE=$(ui_menu "请选择镜像源" \
-        "🇨🇳 清华大学" \
-        "🇨🇳 阿里云" \
-        "🇨🇳 腾讯云" \
-        "🇨🇳 华为云" \
-        "🇨🇳 中国科大" \
-        "🌐 官方源" \
-        "✏️  自定义输入" \
-        "🔙 返回" \
+    local CHOICE
+    CHOICE=$(ui_menu "请选择镜像源"
+        "🇨🇳 清华大学"
+        "🇨🇳 阿里云"
+        "🇨🇳 腾讯云"
+        "🇨🇳 华为云"
+        "🇨🇳 中国科大"
+        "🌐 官方源"
+        "✏️  自定义输入"
+        "🔙 返回"
     )
     if [[ "$CHOICE" == *"返回"* ]]; then return; fi
     
@@ -71,7 +75,8 @@ select_pypi_mirror() {
     if [ -n "$new_url" ]; then
         write_env_safe "$PY_CONFIG" "PYPI_INDEX_URL" "$new_url"
         ui_print success "已保存首选源。"
-        if command -v pip &>/dev/null; then
+        if command -v pip &>/dev/null;
+ then
             pip config set global.index-url "$new_url" >/dev/null 2>&1
         fi
     fi
@@ -81,7 +86,8 @@ export -f select_pypi_mirror
 ensure_python_build_deps() {
     if [ "$OS_TYPE" == "TERMUX" ]; then
         local missing=false
-        for cmd in rustc cargo clang make; do
+        for cmd in rustc cargo clang make;
+ do
             if ! command -v $cmd &>/dev/null; then missing=true; break; fi
         done
         
@@ -115,13 +121,15 @@ ensure_python_build_deps() {
              fi
         fi
         
-        if ! command -v cargo &>/dev/null || ! command -v rustc &>/dev/null; then
+        if ! command -v cargo &>/dev/null || ! command -v rustc &>/dev/null;
+ then
             ui_print warn "未检测到 Rust 编译环境。"
             if ui_confirm "是否自动安装 Rust ?"; then
                 ui_print info "正在下载并安装 Rustup..."
                 if curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y; then
                     source "$HOME/.cargo/env"
-                    if command -v rustc &>/dev/null; then
+                    if command -v rustc &>/dev/null;
+ then
                         ui_print success "Rust 安装成功。"
                     else
                         ui_print error "Rust 安装脚本执行完毕但未检测到 rustc，请检查 ~/.cargo/bin 是否在 PATH 中。"
@@ -168,7 +176,8 @@ install_requirements_smart() {
     local req_file="$2"
     local mode="${3:-standard}"
     
-    local pypi_url=$(grep "^PYPI_INDEX_URL=" "$PY_CONFIG" 2>/dev/null | cut -d'=' -f2)
+    local pypi_url
+    pypi_url=$(grep "^PYPI_INDEX_URL=" "$PY_CONFIG" 2>/dev/null | cut -d'=' -f2)
     if [ -n "$pypi_url" ]; then
         export PIP_INDEX_URL="$pypi_url"
         export UV_PYPI_MIRROR="$pypi_url" 
@@ -187,7 +196,8 @@ install_requirements_smart() {
         if grep -qE "^grpcio" "$req_file"; then sys_pkgs="$sys_pkgs python-grpcio"; fi
         
         if [ -n "$sys_pkgs" ]; then
-            if command -v ui_print &>/dev/null; then
+            if command -v ui_print &>/dev/null;
+ then
                 ui_print info "检测到重型依赖，正在启用 Termux 系统源加速..."
             else
                 echo ">>> 检测到重型依赖，正在启用 Termux 系统源加速..."
@@ -218,13 +228,15 @@ install_requirements_smart() {
     echo ">>> 正在安装依赖 (Mode: $mode, Index: ${pypi_url:-Default})..."
 
     if [ "$OS_TYPE" == "LINUX" ]; then
-        if ! command -v uv &>/dev/null; then
+        if ! command -v uv &>/dev/null;
+ then
             echo ">>> [Linux] 检测到未安装 uv，尝试自动获取..."
             curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1
             export PATH="$HOME/.cargo/bin:$PATH"
         fi
 
-        if command -v uv &>/dev/null; then
+        if command -v uv &>/dev/null;
+ then
             if ui_stream_task "UV 极速安装中..." "uv pip install -r '$req_file'"; then return 0; else return 1; fi
         fi
     fi
@@ -242,19 +254,21 @@ python_environment_manager_ui() {
         ui_header "Python 基础设施管理"
         
         local state="stopped"; local text="环境缺失"; local info=()
-        if command -v python3 &>/dev/null; then
+        if command -v python3 &>/dev/null;
+ then
             state="success"; text="环境正常"
             info+=( "版本: $(python3 --version | awk '{print $2}')" )
             command -v pip3 &>/dev/null && info+=( "Pip: 已就绪" ) || info+=( "Pip: 未安装" )
         fi
         
         ui_status_card "$state" "$text" "${info[@]}"
-        local CHOICE=$(ui_menu "操作菜单" "🛠️ 安装/修复系统Python" "⚙️  设置PyPI镜像源" "⚡ 安装/同步UV" "🔍 环境诊断" "💥 彻底卸载Python" "🔙 返回")
+        local CHOICE
+        CHOICE=$(ui_menu "操作菜单" "🛠️ 安装/修复系统Python" "⚙️  设置PyPI镜像源" "⚡ 安装/同步UV" "🔍 环境诊断" "💥 彻底卸载Python" "🔙 返回")
         case "$CHOICE" in
             *"安装/修复"*) 
                 source "$TAVX_DIR/core/deps.sh"
-                install_python_system ;;
-            *"镜像"*) select_pypi_mirror ;;
+                install_python_system ;; 
+            *"镜像"*) select_pypi_mirror ;; 
             *"卸载"*) 
                 ui_header "卸载 Python 环境"
                 echo -e "${RED}警告：此操作将执行以下动作：${NC}"
@@ -276,7 +290,7 @@ python_environment_manager_ui() {
                 ui_spinner "清理用户数据..." "source \"$TAVX_DIR/core/utils.sh\"; safe_rm ~/.cache/pip ~/.cache/uv ~/.local/lib/python* ~/.cargo/bin/uv"
                 
                 ui_print success "Python & UV 环境已归零。"
-                ui_pause ;;
+                ui_pause ;; 
             *"UV"*) 
                 ui_header "UV 安装"
                 if [ "$OS_TYPE" == "TERMUX" ]; then 
@@ -285,14 +299,14 @@ python_environment_manager_ui() {
                 else
                     ui_print info "正在获取 UV..."
                     curl -LsSf https://astral.sh/uv/install.sh | sh
-                fi; ui_pause ;;
+                fi; ui_pause ;; 
             *"诊断"*) 
                 ui_header "环境诊断"
                 command -v python3 &>/dev/null && echo -e "Python3: ${GREEN}OK${NC}" || echo -e "Python3: ${RED}缺失${NC}"
                 command -v pip3 &>/dev/null && echo -e "Pip3: ${GREEN}OK${NC}" || echo -e "Pip3: ${RED}缺失${NC}"
                 [ "$OS_TYPE" == "TERMUX" ] && { command -v rustc &>/dev/null && echo -e "Rustc: ${GREEN}OK${NC}" || echo -e "Rustc: ${RED}缺失${NC}"; }
-                ui_pause ;;
-            *"返回"*) return ;;
+                ui_pause ;; 
+            *"返回"*) return ;; 
         esac
     done
 }

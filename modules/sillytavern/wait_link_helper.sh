@@ -2,6 +2,7 @@
 # SillyTavern Tunnel Wait Link Helper
 # 此脚本用于在子 Shell 中运行
 
+# shellcheck disable=SC1091
 if [ -f "$HOME/.tav_x/core/env.sh" ]; then
     source "$HOME/.tav_x/core/env.sh"
     source "$HOME/.tav_x/core/utils.sh"

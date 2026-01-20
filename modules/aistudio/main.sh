@@ -73,11 +73,12 @@ aistudio_menu() {
         ui_header "AIStudio 插件管理"
         local state="stopped"; local text="未安装"; local info=()
         if [ -d "$AI_PATH_SERVER" ] && [ -d "$AI_PATH_CLIENT" ]; then
-            state="success"; text="已安装"; info+=( "位置: 酒馆插件目录" )
+            state="success"; text="安装"; info+=( "位置: 酒馆插件目录" )
         fi
         ui_status_card "$state" "$text" "${info[@]}"
         
-        local CHOICE=$(ui_menu "操作菜单" "📥 安装/更新插件" "🗑️  卸载插件" "🧭 关于模块" "🔙 返回")
+        local CHOICE
+        CHOICE=$(ui_menu "操作菜单" "📥 安装/更新插件" "🗑️  卸载插件" "🧭 关于模块" "🔙 返回")
         case "$CHOICE" in
             *"安装"*) aistudio_install ;;
             *"卸载"*) aistudio_uninstall && [ $? -eq 2 ] && return ;;

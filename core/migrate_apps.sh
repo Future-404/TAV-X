@@ -33,7 +33,8 @@ migrate_legacy_apps() {
             shopt -s nullglob
             for app in "$source_apps_dir"/*; do
                 [ ! -d "$app" ] && continue
-                local app_name=$(basename "$app")
+                local app_name
+                app_name=$(basename "$app")
                 
                 if [ -d "$APPS_DIR/$app_name" ]; then
                     echo "⚠️  $app_name: 目标已存在，跳过迁移。"
@@ -42,8 +43,7 @@ migrate_legacy_apps() {
                 fi
 
                 echo "📦 正在迁移: $app_name ..."
-                mv "$app" "$APPS_DIR/"
-                if [ $? -eq 0 ]; then
+                if mv "$app" "$APPS_DIR/"; then
                     success "迁移成功: $app_name"
                     ((count++))
                 else
@@ -68,8 +68,7 @@ migrate_legacy_apps() {
                 fi
                 
                 echo "📦 正在迁移旧版根目录: $folder -> $dest_name ..."
-                mv "$src" "$APPS_DIR/$dest_name"
-                if [ $? -eq 0 ]; then
+                if mv "$src" "$APPS_DIR/$dest_name"; then
                     success "迁移成功: $dest_name"
                     ((count++))
                 else
@@ -80,9 +79,9 @@ migrate_legacy_apps() {
     done
 
     echo ""
-    if [ $count -gt 0 ]; then
+    if [ "$count" -gt 0 ]; then
         ui_print success "迁移完成: 成功 $count 个，跳过 $skipped 个 (已存在)。"
-    elif [ $skipped -gt 0 ]; then
+    elif [ "$skipped" -gt 0 ]; then
         ui_print warn "未执行迁移: $skipped 个应用在目标位置已存在。"
     else
         ui_print info "未发现需要迁移的应用。"
