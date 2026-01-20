@@ -42,31 +42,39 @@ app_plugin_install_single() {
 
     prepare_network_strategy "SillyTavern Plugin"
     
-    local TASKS=""
-    
+    # Ensure we are in a safe directory to avoid getcwd errors
+    cd "$TAVX_DIR" || return
+
     if [ "$s" != "-" ]; then
         local b_arg=""; [ "$s" != "HEAD" ] && b_arg="-b $s"
-        TASKS+="safe_rm '$ST_DIR/plugins/$dir'; git_clone_smart '$b_arg' '$repo_path' '$ST_DIR/plugins/$dir' || exit 1;"
+        safe_rm "$ST_DIR/plugins/$dir"
+        if ! git_clone_smart "$b_arg" "$repo_path" "$ST_DIR/plugins/$dir"; then
+            ui_print error "插件核心文件下载失败。"
+            ui_pause; return
+        fi
     fi
     
     if [ "$c" != "-" ]; then
         local b_arg=""; [ "$c" != "HEAD" ] && b_arg="-b $c"
-        TASKS+="safe_rm '$ST_DIR/public/scripts/extensions/third-party/$dir'; git_clone_smart '$b_arg' '$repo_path' '$ST_DIR/public/scripts/extensions/third-party/$dir' || exit 1;"
+        safe_rm "$ST_DIR/public/scripts/extensions/third-party/$dir"
+        if ! git_clone_smart "$b_arg" "$repo_path" "$ST_DIR/public/scripts/extensions/third-party/$dir"; then
+            ui_print error "插件前端扩展下载失败。"
+            ui_pause; return
+        fi
     fi
     
-    local WRAP_CMD="source \"$TAVX_DIR/core/utils.sh\"; $TASKS"
+    local plugin_path="$ST_DIR/plugins/$dir"
+    [ "$s" == "-" ] && plugin_path="$ST_DIR/public/scripts/extensions/third-party/$dir"
     
-    if ui_stream_task "正在下载插件..." "$WRAP_CMD"; then
-        local plugin_path="$ST_DIR/plugins/$dir"
-        [ "$s" == "-" ] && plugin_path="$ST_DIR/public/scripts/extensions/third-party/$dir"
-        
-        if [ -f "$plugin_path/package.json" ]; then
-            ui_print info "检测到插件依赖，正在自动安装..."
-            npm_install_smart "$plugin_path"
+    if [ -f "$plugin_path/package.json" ]; then
+        ui_print info "检测到插件依赖，正在自动安装..."
+        if npm_install_smart "$plugin_path"; then
+            ui_print success "安装完成！"
+        else
+            ui_print warn "虽然插件已下载，但依赖安装失败。插件可能无法正常工作。"
         fi
-        ui_print success "安装完成！"
     else
-        ui_print error "下载失败，请尝试切换网络策略。"
+        ui_print success "安装完成！"
     fi
     ui_pause
 }

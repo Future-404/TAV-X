@@ -501,18 +501,29 @@ npm_install_smart() {
     cd "$target_dir" || return 1
     auto_load_proxy_env
     local proxy_active=$?
-    local NPM_BASE="npm install --no-audit --no-fund --quiet --production"
+    
+    local NPM_CMD="npm install --no-audit --no-fund --quiet --production"
+    local NPM_RELAXED="$NPM_CMD --legacy-peer-deps"
     
     if [ $proxy_active -eq 0 ]; then
         npm config delete registry
-        if ui_stream_task "NPM 安装..." "env http_proxy='$http_proxy' https_proxy='$https_proxy' $NPM_BASE"; then return 0; fi
+        if ui_stream_task "NPM 安装..." "env http_proxy='$http_proxy' https_proxy='$https_proxy' $NPM_CMD"; then return 0; fi
+        
+        ui_print warn "标准安装失败，尝试宽松模式 (Legacy Peer Deps)..."
+        if ui_stream_task "NPM 安装 (宽松模式)..." "env http_proxy='$http_proxy' https_proxy='$https_proxy' $NPM_RELAXED"; then return 0; fi
     fi
     
     npm config set registry "https://registry.npmmirror.com"
-    if ui_stream_task "NPM 安装中 (淘宝源)..." "$NPM_BASE"; then
+    if ui_stream_task "NPM 安装 (镜像源)..." "$NPM_CMD"; then
+        npm config delete registry; return 0
+    fi
+    
+    ui_print warn "镜像安装失败，尝试宽松模式..."
+    if ui_stream_task "NPM 安装 (镜像+宽松)..." "$NPM_RELAXED"; then
         npm config delete registry; return 0
     else
-        ui_print error "依赖安装失败。"; npm config delete registry; return 1
+        ui_print error "依赖安装失败 (已尝试所有策略)。"
+        npm config delete registry; return 1
     fi
 }
 export -f npm_install_smart

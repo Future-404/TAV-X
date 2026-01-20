@@ -257,7 +257,7 @@ if [ -d "$TAVX_DIR/.git" ]; then
     echo -e "\033[1;33m检测到现有安装，尝试修复更新TAV-X...\033[0m"
     cd "$TAVX_DIR" || exit
     git remote set-url origin "$DL_URL"
-    if git fetch origin main && git reset --hard origin/main; then
+    if git fetch origin main && git reset --hard FETCH_HEAD; then
         INSTALL_SUCCESS=true
     fi
 else
