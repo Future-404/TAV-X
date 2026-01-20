@@ -98,33 +98,29 @@ ui.header = (subtitle = '') => {
     process.stdout.write('\x1Bc'); 
     
     if (hasGum) {
-        try {
-             const res = spawnSync('gum', ['style', '--foreground', '212', getAsciiLogo()], { encoding: 'utf8' });
-             if (res.status === 0) {
-                 console.log(res.stdout);
-                 const ver = process.env.CURRENT_VERSION || '3.x';
-                 const vTag = spawnSync('gum', ['style', '--foreground', '240', '--align', 'right', `Ver: ${ver} | by Future 404  `], { encoding: 'utf8' });
-                 console.log(vTag.stdout);
-                 if (subtitle) {
-                    const sub = spawnSync('gum', ['style', '--foreground', '99', '--bold', `  🚀 ${subtitle}`], { encoding: 'utf8' });
-                    const div = spawnSync('gum', ['style', '--foreground', '240', `  ───────────────────────────────────────`], { encoding: 'utf8' });
-                    console.log(sub.stdout);
-                    console.log(div.stdout);
-                 }
-                 console.log('');
-                 return;
-             }
-        } catch (e) {}
+        console.log(`${C_PINK}${bold}${getAsciiLogo()}${nc}`);
+        const ver = process.env.CURRENT_VERSION || '3.x';
+        const vTag = spawnSync('gum', ['style', '--foreground', '240', '--align', 'right', `Ver: ${ver} | by Future 404  `], { encoding: 'utf8' });
+        console.log(vTag.stdout);
+        
+        if (subtitle) {
+            const sub = spawnSync('gum', ['style', '--foreground', '212', '--bold', `  🚀 ${subtitle}`], { encoding: 'utf8' });
+            const div = spawnSync('gum', ['style', '--foreground', '240', `  ───────────────────────────────────────`], { encoding: 'utf8' });
+            console.log(sub.stdout);
+            console.log(div.stdout);
+        }
+        console.log('');
+        return;
     }
 
-    console.log(`${C_PINK}${getAsciiLogo()}${nc}`);
+    console.log(`${C_PINK}${bold}${getAsciiLogo()}${nc}`);
     const ver = process.env.CURRENT_VERSION || '3.x';
     const tagText = `Ver: ${ver} | by Future 404`;
-    console.log(`${C_DIM}${tagText.padStart(48)}${nc}`);
+    console.log(`${gray}${tagText.padStart(48)}${nc}`);
     console.log(`${gray}----------------------------------------${nc}`);
 
     if (subtitle) {
-        console.log(`${C_PURPLE}${bold}  🚀 ${subtitle}${nc}`);
+        console.log(`${C_PINK}${bold}  🚀 ${subtitle}${nc}`);
         console.log(`${gray}----------------------------------------${nc}`);
     }
     console.log('');
