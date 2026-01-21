@@ -143,14 +143,13 @@ while true; do
                 fi
             done
         fi
-    fi
-
     FINAL_OPTS+=(
         "📂 我的应用"
         "🛒 应用商城"
         "$OPT_UPD"
         "📦 迁移旧版数据"
         "⚙️  系统设置"
+        "🛡️ Project Aegis 【Alpha】"
         "💡 帮助与支持"
         "🚪 退出程序"
     )
@@ -187,6 +186,7 @@ while true; do
         *"检查脚本更新"*) perform_self_update ;; 
         *"迁移旧版数据"*) migrate_legacy_apps ;; 
         *"系统设置"*) system_settings_menu ;; 
+        *"Project Aegis"*) open_browser "https://aegis.future404.space/" ;;
         *"帮助与支持"*) show_about_page ;; 
         *"退出程序"*) 
             EXIT_OPT=$(ui_menu "请选择退出方式" "🏃 保持后台运行" "🛑 结束所有服务并退出" "🔙 取消")
