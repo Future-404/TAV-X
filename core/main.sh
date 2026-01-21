@@ -143,6 +143,8 @@ while true; do
                 fi
             done
         fi
+    fi
+
     FINAL_OPTS+=(
         "📂 我的应用"
         "🛒 应用商城"
