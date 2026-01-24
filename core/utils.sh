@@ -46,7 +46,7 @@ safe_rm() {
 
         local is_bad=false
         for bad_path in "${BLACKLIST[@]}"; do
-            if [[ "$abs_target" == $bad_path ]]; then
+            if [[ "$abs_target" == "$bad_path" ]]; then
                 echo "❌ [安全拦截] 禁止删除关键系统目录: $abs_target" >&2
                 is_bad=true
                 break
@@ -138,7 +138,8 @@ check_process_smart() {
     local pattern="$2"
 
     if [ -f "$pid_file" ]; then
-        local pid=$(cat "$pid_file")
+        local pid
+        pid=$(cat "$pid_file")
         if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null;
         then
             return 0
@@ -148,7 +149,8 @@ check_process_smart() {
 
     if [ -z "$pattern" ]; then return 1; fi
 
-    local real_pid=$(pgrep -f "$pattern" | grep -v "pgrep" | head -n 1)
+    local real_pid
+    real_pid=$(pgrep -f "$pattern" | grep -v "pgrep" | head -n 1)
     
     if [ -n "$real_pid" ]; then
         echo "$real_pid" > "$pid_file"
@@ -199,9 +201,11 @@ kill_process_safe() {
     local pattern="$2"
     
     if [ -f "$pid_file" ]; then
-        local pid=$(cat "$pid_file")
+        local pid
+        pid=$(cat "$pid_file")
         if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-            local cmdline=$(get_process_cmdline "$pid")
+            local cmdline
+            cmdline=$(get_process_cmdline "$pid")
             if [[ "$cmdline" =~ $pattern ]]; then
                 kill -9 "$pid" >/dev/null 2>&1
             fi
@@ -260,9 +264,9 @@ get_modules_status_line() {
     done
     
     local count=${#running_apps[@]}
-    if [ $count -eq 0 ]; then
+    if [ "$count" -eq 0 ]; then
         echo ""
-    elif [ $count -eq 1 ]; then
+    elif [ "$count" -eq 1 ]; then
         echo -e "${GREEN}● ${NC}${running_apps[0]}"
     else
         echo -e "${GREEN}● ${NC}${running_apps[0]} 等 ${count} 个应用正在运行"
@@ -425,7 +429,8 @@ is_app_running() {
         
         local pid_file="$TAVX_DIR/run/${id}.pid"
         if [ -f "$pid_file" ] && [ -s "$pid_file" ]; then
-            local pid=$(cat "$pid_file")
+            local pid
+            pid=$(cat "$pid_file")
             if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then return 0; fi
         fi
         
@@ -437,7 +442,8 @@ is_app_running() {
         fi
         
         if [ -f "$pid_file" ] && [ -s "$pid_file" ]; then
-            local pid=$(cat "$pid_file")
+            local pid
+            pid=$(cat "$pid_file")
             if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then return 0; fi
         fi
         return 1
@@ -468,8 +474,10 @@ stop_all_services_routine() {
         for pid_file in "$run_dir"/*.pid; do
             [ ! -f "$pid_file" ] && continue
             
-            local pid=$(cat "$pid_file")
-            local name=$(basename "$pid_file" .pid)
+            local pid
+            pid=$(cat "$pid_file")
+            local name
+            name=$(basename "$pid_file" .pid)
             
             if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
                 kill -15 "$pid" 2>/dev/null
@@ -498,10 +506,14 @@ show_module_about_info() {
         return
     fi
 
-    local name=$(grep "# MODULE_NAME:" "$module_file" | head -n 1 | cut -d: -f2- | xargs)
-    local author=$(grep "# APP_AUTHOR:" "$module_file" | head -n 1 | cut -d: -f2- | xargs)
-    local url=$(grep "# APP_PROJECT_URL:" "$module_file" | head -n 1 | cut -d: -f2- | xargs)
-    local desc=$(grep "# APP_DESC:" "$module_file" | head -n 1 | cut -d: -f2- | xargs)
+    local name
+    name=$(grep "# MODULE_NAME:" "$module_file" | head -n 1 | cut -d: -f2- | xargs)
+    local author
+    author=$(grep "# APP_AUTHOR:" "$module_file" | head -n 1 | cut -d: -f2- | xargs)
+    local url
+    url=$(grep "# APP_PROJECT_URL:" "$module_file" | head -n 1 | cut -d: -f2- | xargs)
+    local desc
+    desc=$(grep "# APP_DESC:" "$module_file" | head -n 1 | cut -d: -f2- | xargs)
 
     ui_header "关于: ${name:-未知模块}"
 

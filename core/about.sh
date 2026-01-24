@@ -6,12 +6,12 @@ GROUP_QQ="616353694"
 CONTACT_EMAIL="future_404@outlook.com"
 PROJECT_URL="https://github.com/Future-404/TAV-X"
 SLOGAN="别让虚拟的温柔，偷走了你在现实里本该拥有的温暖。"
-UPDATE_SUMMARY="v3.1.0 架构级重构升级：
-  1. [重构] 引入 termux-services (Runit)，实现常驻守护与崩溃自愈
-  2. [新增] 核心依赖清单化，环境初始化秒级响应
-  3. [新增] 命令行快捷指令支持 (st ps, st re, st log, st stop)
-  4. [新增] 开机自启管理菜单，支持一键切换服务自启状态
-  5. [优化] 移除日志冗余时间戳，适配终端 MOTD 启动提示"
+UPDATE_SUMMARY="v3.2.13 功能优化与安全加固：
+  1. [新增] 命令行快捷指令 \`st hb\`，支持一键切换音频保活状态
+  2. [优化] 音频保活服务更名为 \`audio_keeper\`，逻辑更简洁
+  3. [优化] 核心库 \`safe_rm\` 安全加固，防止误删系统目录
+  4. [优化] 移除过时的 ADB 兼容路径清理逻辑，代码更精简
+  5. [优化] 修复多处 ShellCheck 警告，提升脚本健壮性"
 
 show_shortcuts_help() {
     ui_header "快捷指令用法"
@@ -21,6 +21,7 @@ show_shortcuts_help() {
     printf "  ${CYAN}%-15s${NC} %s\n" "st ps" "查看当前运行中的服务"
     printf "  ${CYAN}%-15s${NC} %s\n" "st re" "重启所有运行中的服务"
     printf "  ${CYAN}%-15s${NC} %s\n" "st stop" "一键停止所有服务"
+    printf "  ${CYAN}%-15s${NC} %s\n" "st hb" "快捷开关音频保活 (audio_keeper)"
     printf "  ${CYAN}%-15s${NC} %s\n" "st update" "强制进入脚本更新模式"
     printf "  ${CYAN}%-15s${NC} %s\n" "st log" "查看可用日志的应用 ID"
     printf "  ${CYAN}%-15s${NC} %s\n" "st log [ID]" "实时监控指定应用日志"
@@ -79,22 +80,28 @@ show_about_page() {
     local ACTION=""
     
     if [ "$HAS_GUM" = true ]; then
-        ACTION=$("$GUM_BIN" choose "🔙 返回主菜单" "⌨️ 快捷指令用法" "🔥 加入 Q 群" "🐙 GitHub 项目主页")
+        ACTION=$("$GUM_BIN" choose "🔙 返回主菜单" "⌨️ 快捷指令用法" "🛡️ Project Aegis (Alpha)" "🔥 加入 Q 群" "🐙 GitHub 项目主页")
     else
         echo "1. 返回主菜单"
         echo "2. ⌨️  快捷指令用法"
-        echo "3. 一键加入 Q 群"
-        echo "4. 打开 GitHub 项目主页"
+        echo "3. 🛡️  Project Aegis (Alpha)"
+        echo "4. 一键加入 Q 群"
+        echo "5. 打开 GitHub 项目主页"
         read -r -p "请选择: " idx
         case "$idx" in
             "2") ACTION="快捷指令" ;;
-            "3") ACTION="加入 Q 群" ;;
-            "4") ACTION="GitHub" ;;
+            "3") ACTION="Project Aegis" ;;
+            "4") ACTION="加入 Q 群" ;;
+            "5") ACTION="GitHub" ;;
             *)   ACTION="返回" ;;
         esac
     fi
 
     case "$ACTION" in
+        *"Project Aegis"*)
+            open_browser "https://aegis.future404.space/"
+            show_about_page
+            ;;
         *"快捷指令"*)
             show_shortcuts_help
             show_about_page

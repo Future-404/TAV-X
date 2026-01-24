@@ -11,7 +11,6 @@ PKG="com.termux"
 LOG_FILE="$LOGS_DIR/adb_manager.log"
 HEARTBEAT_PID="$RUN_DIR/audio_heartbeat.pid"
 SILENCE_FILE="$CONFIG_DIR/silence.wav"
-LEGACY_ADB_DIR="$TAVX_DIR/adb_tools"
 OPTIMIZED_FLAG="$CONFIG_DIR/.adb_optimized"
 
 revert_optimization_core() {
@@ -123,15 +122,10 @@ check_adb_binary() {
 
 check_adb_connection() {
     check_adb_binary || return 1
-    timeout 2 adb devices 2>/dev/null | grep -q "device$"
+    timeout 0.2 adb devices 2>/dev/null | grep -q "device$"
 }
 
 ensure_adb_installed() {
-    if [ -d "$LEGACY_ADB_DIR" ]; then 
-        safe_rm "$LEGACY_ADB_DIR"
-        sed -i '/adb_tools\/platform-tools/d' "$HOME/.bashrc" 2>/dev/null
-    fi
-
     if check_adb_binary; then return 0; fi
     ui_header "ADB 组件安装"
     ui_print info "正在尝试自动安装 ADB 工具包..."
@@ -157,13 +151,40 @@ start_heartbeat() {
     
     ensure_silence_file || { ui_pause; return 1; }
     ui_header "启动音频心跳"
-    setsid nohup bash -c "while true; do mpv --no-terminal --volume=0 --loop=inf \"$SILENCE_FILE\"; sleep 1; done" > /dev/null 2>&1 &
-    echo $! > "$HEARTBEAT_PID"
-    ui_print success "音频心跳已在后台开启，正在模拟前台占用..."
+
+    local use_service=false
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        use_service=true
+    fi
+
+    if [ "$use_service" = true ]; then
+        tavx_service_register "audio_keeper" "mpv --no-terminal --volume=0 --loop=inf \"$SILENCE_FILE\"" "$TAVX_DIR"
+        
+        local i=0
+        while [ $i -lt 5 ]; do
+            if sv status audio_keeper >/dev/null 2>&1; then
+                break
+            fi
+            sleep 1
+            ((i++))
+        done
+        
+        ui_print success "音频心跳服务已注册并启动。"
+    else
+        setsid nohup bash -c "while true; do mpv --no-terminal --volume=0 --loop=inf \"$SILENCE_FILE\"; sleep 1; done" > /dev/null 2>&1 &
+        echo $! > "$HEARTBEAT_PID"
+        ui_print success "音频心跳已在后台开启..."
+    fi
     ui_pause
 }
 
 stop_heartbeat() {
+    if [ "$OS_TYPE" == "TERMUX" ] && [ -d "$PREFIX/var/service/audio_keeper" ]; then
+        sv down audio_keeper 2>/dev/null
+        rm -rf "$PREFIX/var/service/audio_keeper"
+        ui_print success "音频心跳服务已移除。"
+    fi
+
     kill_process_safe "$HEARTBEAT_PID" "mpv"
     if command -v termux-wake-unlock &> /dev/null; then termux-wake-unlock; fi
     ui_print success "音频心跳已停止。"
@@ -175,7 +196,7 @@ adb_refrigerator_ui() {
         ui_pause; return
     fi
 
-    ui_header "🥶 应用小冰箱 (App Freezer)"
+    ui_header "🥶 应用小冰箱"
     echo -e "${RED}⚠️  高危功能免责声明${NC}"
     echo "----------------------------------------"
     echo -e "1. 本功能通过 ADB 强行禁用应用，可能导致${RED}系统卡死、无限重启或无法开机${NC}。"
@@ -194,7 +215,7 @@ adb_refrigerator_ui() {
         echo -e "已冻结应用: ${CYAN}$frozen_count${NC} / 总第三方应用: $all_count"
         echo "----------------------------------------"
         
-        local OPT; OPT=$(ui_menu "请选择操作" "🧊 冻结应用 (Disable)" "🔥 解冻应用 (Enable)" "🔙 返回")
+        local OPT; OPT=$(ui_menu "请选择操作" "🧊 冻结应用" "🔥 解冻应用" "🔙 返回")
         
         case "$OPT" in
             *"冻结"*) _adb_freeze_workflow ;;
@@ -357,12 +378,10 @@ uninstall_adb() {
     fi
 
     echo ""
-    if [ -d "$LEGACY_ADB_DIR" ] || [ -f "$LOG_FILE" ]; then
+    if [ -f "$LOG_FILE" ]; then
         ui_spinner "清理模块文件..." "
-            safe_rm '$LEGACY_ADB_DIR'
             safe_rm '$LOG_FILE'
             safe_rm '$HEARTBEAT_PID'
-            sed -i '/adb_tools\/platform-tools/d' '$HOME/.bashrc'
         "
         ui_print success "模块文件已清理。"
     fi
@@ -396,6 +415,9 @@ adb_manager_ui() {
 
         if [ -f "$HEARTBEAT_PID" ] && kill -0 "$(cat "$HEARTBEAT_PID")" 2>/dev/null; then
             info+=( "音频心跳: ⚡ 运行中" )
+            [ "$state" == "success" ] && state="running" || state="warn"
+        elif [ "$OS_TYPE" == "TERMUX" ] && sv status audio_keeper 2>/dev/null | grep -q "run:"; then
+            info+=( "音频心跳: 🔄 运行中" )
             [ "$state" == "success" ] && state="running" || state="warn"
         fi
 

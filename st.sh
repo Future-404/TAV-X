@@ -42,7 +42,7 @@ FORCE_UPDATE=false
 if [ "$TAVX_INSTALLER_MODE" == "true" ]; then FORCE_UPDATE=true; fi
 if [[ "$1" == "update" || "$1" == "install" || "$1" == "reinstall" ]]; then FORCE_UPDATE=true; fi
 
-if [[ "$1" == "status" || "$1" == "ps" || "$1" == "list" || "$1" == "stop" || "$1" == "kill" || "$1" == "re" || "$1" == "log" ]]; then
+if [[ "$1" == "status" || "$1" == "ps" || "$1" == "list" || "$1" == "stop" || "$1" == "kill" || "$1" == "re" || "$1" == "log" || "$1" == "hb" ]]; then
     if [ -f "$HOME/.tav_x/core/env.sh" ]; then
         source "$HOME/.tav_x/core/env.sh"
         source "$HOME/.tav_x/core/utils.sh"
@@ -50,23 +50,28 @@ if [[ "$1" == "status" || "$1" == "ps" || "$1" == "list" || "$1" == "stop" || "$
         case "$1" in
             status|ps|list)
                 echo -e "${BLUE}=== TAV-X 服务状态 ===${NC}"
+                
+                # 1. 扫描系统服务 (Termux)
+                if [ "$OS_TYPE" == "TERMUX" ] && [ -d "$PREFIX/var/service" ]; then
+                    for s in "$PREFIX/var/service"/*; do
+                        [ ! -d "$s" ] && continue
+                        if [ -f "$s/.tavx_managed" ]; then
+                            if sv status "$(basename "$s")" 2>/dev/null | grep -q "^run:"; then
+                                echo -e "${GREEN}[RUNNING]${NC} $(basename "$s")"
+                            fi
+                        fi
+                    done
+                fi
+
+                # 2. 扫描模块应用
                 if [ -d "$TAVX_DIR/modules" ]; then
                     for mod in "$TAVX_DIR/modules"/*; do
                         [ ! -d "$mod" ] && continue
                         id=$(basename "$mod")
-                        if [ "$id" == "cloudflare" ]; then
-                            if [ "$OS_TYPE" == "TERMUX" ]; then
-                                for s in "$PREFIX/var/service"/cf_tunnel_*; do
-                                    [ ! -d "$s" ] && continue
-                                    sv status "$(basename "$s")" 2>/dev/null | grep -q "^run:" && echo -e "${GREEN}[RUNNING]${NC} $(basename "$s")"
-                                done
-                            else
-                                for pid_f in "$TAVX_DIR/run"/cf_*.pid; do
-                                    [ -f "$pid_f" ] && kill -0 $(cat "$pid_f") 2>/dev/null && echo -e "${GREEN}[RUNNING]${NC} $(basename "$pid_f" .pid)"
-                                done
-                            fi
-                            continue
-                        fi
+                        
+                        # 跳过已作为服务显示的 cloudflare (如果存在)
+                        if [ "$id" == "cloudflare" ] && [ -d "$PREFIX/var/service/cloudflare" ]; then continue; fi
+                        
                         is_app_running "$id" && echo -e "${GREEN}[RUNNING]${NC} $id"
                     done
                 fi
@@ -113,6 +118,16 @@ if [[ "$1" == "status" || "$1" == "ps" || "$1" == "list" || "$1" == "stop" || "$
                         echo -e "${RED}错误: 未找到日志文件 '$2'${NC}"
                         echo -e "请运行 ${CYAN}st log${NC} 查看可用 ID"
                     fi
+                fi
+                ;;
+            hb)
+                source "$TAVX_DIR/core/adb_utils.sh"
+                if { [ -f "$HEARTBEAT_PID" ] && kill -0 "$(cat "$HEARTBEAT_PID")" 2>/dev/null; } || { [ "$OS_TYPE" == "TERMUX" ] && sv status audio_keeper 2>/dev/null | grep -q "run:"; }; then
+                    echo -e "${YELLOW}检测到音频心跳正在运行，正在停止...${NC}"
+                    stop_heartbeat
+                else
+                    echo -e "${CYAN}正在启动音频心跳快速配置...${NC}"
+                    start_heartbeat
                 fi
                 ;;
         esac
@@ -163,7 +178,8 @@ check_github_speed() {
     
     echo -e "\033[1;33m正在测试 GitHub 直连速度 (阈值: 800KB/s)...\033[0m"
     
-    local speed=$(curl -s -L -m 5 -w "%{speed_download}\n" -o /dev/null "$TEST_URL" 2>/dev/null)
+    local speed
+    speed=$(curl -s -L -m 5 -w "%{speed_download}\n" -o /dev/null "$TEST_URL" 2>/dev/null)
     speed=${speed%.*}
     if [ -z "$speed" ]; then speed=0; fi
     local speed_kb=$((speed / 1024))
@@ -184,7 +200,8 @@ check_github_speed() {
 select_mirror_interactive() {
     echo -e "\n\033[1;36m>>> 启动备用方案：镜像源测速选择\033[0m"
     echo -e "\033[1;33m正在并发测速，请稍候...\033[0m"
-    local tmp_file=$(mktemp)
+    local tmp_file
+    tmp_file=$(mktemp)
     
     for url in "${DEFAULT_POOL[@]}"; do
         (
@@ -207,7 +224,8 @@ select_mirror_interactive() {
             local mark="\033[1;32m🟢"
             [ "$dur" -gt 800 ] && mark="\033[1;33m🟡"
             [ "$dur" -gt 1500 ] && mark="\033[1;31m🔴"
-            local domain=$(echo "$url" | awk -F/ '{print $3}')
+            local domain
+            domain=$(echo "$url" | awk -F/ '{print $3}')
             echo -e "$i. $mark ${dur}ms \033[0m| $domain"
             VALID_URLS+=("$url")
             ((i++))
@@ -224,7 +242,7 @@ select_mirror_interactive() {
     VALID_URLS+=("https://github.com/")
     
     echo ""
-    read -p "请选择镜像编号 [默认 1]: " USER_CHOICE
+    read -r -p "请选择镜像编号 [默认 1]: " USER_CHOICE
     USER_CHOICE=${USER_CHOICE:-1}
     
     if [[ "$USER_CHOICE" =~ ^[0-9]+$ ]] && [ "$USER_CHOICE" -ge 1 ] && [ "$USER_CHOICE" -le "${#VALID_URLS[@]}" ]; then
