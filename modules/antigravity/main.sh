@@ -4,8 +4,9 @@
 # MODULE_NAME: Antigravity2API
 # MODULE_ENTRY: antigravity_menu
 # APP_CATEGORY: AI模型接口
-# APP_AUTHOR: TAV-X
-# APP_DESC: Antigravity API 转 OpenAI 格式的代理服务，支持自动管理 Token 和配额。
+# APP_AUTHOR: liuw1535
+# APP_PROJECT_URL: https://github.com/liuw1535/antigravity2api-nodejs
+# APP_DESC: 将 Google Antigravity API 转换为 OpenAI 兼容格式的代理服务，支持流式响应、工具调用和多账号管理。
 # [END_METADATA]
 
 source "$TAVX_DIR/core/env.sh"
