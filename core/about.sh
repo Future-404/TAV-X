@@ -6,12 +6,11 @@ GROUP_QQ="616353694"
 CONTACT_EMAIL="future_404@outlook.com"
 PROJECT_URL="https://github.com/Future-404/TAV-X"
 SLOGAN="别让虚拟的温柔，偷走了你在现实里本该拥有的温暖。"
-UPDATE_SUMMARY="v3.2.13 功能优化与安全加固：
-  1. [新增] 命令行快捷指令 \`st hb\`，支持一键切换音频保活状态
-  2. [优化] 音频保活服务更名为 \`audio_keeper\`，逻辑更简洁
-  3. [优化] 核心库 \`safe_rm\` 安全加固，防止误删系统目录
-  4. [优化] 移除过时的 ADB 兼容路径清理逻辑，代码更精简
-  5. [优化] 修复多处 ShellCheck 警告，提升脚本健壮性"
+UPDATE_SUMMARY="v3.2.14 模块集成与交互优化：
+  1. [新增] 集成 Antigravity2API 模块，完美支持 Google Thinking 模型代理
+  2. [新增] 模块专属配置管理器，支持图形化修改 config.json 与 .env
+  3. [优化] 模块安装流程接入 TAV-X 标准网络核心，支持镜像加速与代理注入
+  4. [优化] 授权流程增强，支持自动捕获 URL 并唤起浏览器完成 OAuth 登录"
 
 show_shortcuts_help() {
     ui_header "快捷指令用法"
