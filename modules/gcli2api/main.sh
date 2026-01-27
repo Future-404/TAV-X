@@ -122,6 +122,7 @@ gcli2api_uninstall() {
     _gcli2api_vars
     if verify_kill_switch; then
         gcli2api_stop
+        tavx_service_remove "gcli2api"
         safe_rm "$GCLI_DIR" "$GCLI_LOG" "$GCLI_CONF" "$GCLI_PID"
         ui_print success "已卸载。"
         return 2
@@ -164,7 +165,7 @@ gcli2api_menu() {
                 write_env_safe "$GCLI_CONF" "GCLI_HOST" "$GCLI_HOST"
                 
                 ui_print success "配置已保存"; ui_pause ;; 
-            *"日志"*) safe_log_monitor "$log_path" ;; 
+            *"日志"*) ui_watch_log "gcli2api" ;; 
             *"更新"*) gcli2api_install ;; 
             *"卸载"*) gcli2api_uninstall && [ $? -eq 2 ] && return ;; 
             *"关于"*) show_module_about_info "${BASH_SOURCE[0]}" ;; 

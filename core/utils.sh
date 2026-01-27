@@ -379,7 +379,7 @@ tavx_service_register() {
         touch "$sv_dir/.tavx_managed"
         
         cat > "$sv_dir/run" <<EOF
-#!/data/data/com.termux/files/usr/bin/sh
+#!/data/data/com.termux/files/usr/bin/bash
 exec 2>&1
 cd $work_dir || exit 1
 exec $run_cmd
@@ -402,12 +402,14 @@ export -f tavx_service_register
 tavx_service_control() {
     local action="$1"
     local name="$2"
+    local flags="$3"
     
     if [ "$OS_TYPE" == "TERMUX" ]; then
         if [ "$action" == "status" ]; then
             sv status "$name"
         else
-            sv "$action" "$name"
+            # 使用 eval 或直接传递，这里直接传递即可
+            sv $flags "$action" "$name"
         fi
     else
         ui_print error "当前环境不支持 sv 服务控制。"
@@ -415,6 +417,18 @@ tavx_service_control() {
     fi
 }
 export -f tavx_service_control
+
+tavx_service_remove() {
+    local name="$1"
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        if [ -d "$PREFIX/var/service/$name" ]; then
+            sv down "$name" >/dev/null 2>&1
+            rm -rf "$PREFIX/var/service/$name"
+            ui_print success "服务已移除: $name"
+        fi
+    fi
+}
+export -f tavx_service_remove
 
 is_app_running() {
     local id="$1"
@@ -462,7 +476,8 @@ stop_all_services_routine() {
                 [ ! -d "$s" ] && continue
                 if [ -f "$s/.tavx_managed" ]; then
                     local sname=$(basename "$s")
-                    sv down "$sname" 2>/dev/null
+                    # 使用 force-stop 配合 2秒超时，防止 Proot 等顽固进程卡死
+                    sv -w 2 force-stop "$sname" 2>/dev/null
                     ui_print success "已停止服务: $sname"
                 fi
             done

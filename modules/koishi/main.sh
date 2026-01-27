@@ -115,6 +115,9 @@ koishi_uninstall() {
     
     koishi_stop
     
+    # [标准] 移除服务注册
+    tavx_service_remove "koishi"
+    
     if ui_spinner "正在删除文件..." "safe_rm '$KOISHI_DIR'"; then
         ui_print success "已卸载。"
         return 2
@@ -158,11 +161,7 @@ koishi_menu() {
                  ui_print info "请在启动状态下访问 Web 控制台进行配置。"
                  ui_print info "Koishi v4+ 默认为无密码模式，首次访问可创建管理员。"
                  ui_pause ;; 
-            *"日志"*) 
-                local log_path="$KOISHI_LOG"
-                [ "$OS_TYPE" == "TERMUX" ] && log_path="$PREFIX/var/service/koishi/log/current"
-                safe_log_monitor "$log_path"
-                ;; 
+            *"日志"*) ui_watch_log "koishi" ;; 
             *"卸载"*) koishi_uninstall && [ $? -eq 2 ] && return ;; 
             *"关于"*) show_module_about_info "${BASH_SOURCE[0]}" ;; 
             *"返回"*) return ;; 

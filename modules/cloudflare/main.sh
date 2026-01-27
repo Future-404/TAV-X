@@ -571,14 +571,14 @@ _tunnel_action_menu() {
                 fi ;; 
             *"编辑"*) 
                 if command -v nano &>/dev/null; then nano "$conf"; else vi "$conf"; fi ;; 
-            *"日志"*) safe_log_monitor "$log_path" ;; 
+            *"日志"*) ui_watch_log "$svc_name" ;; 
             *"删除隧道"*) 
                 if verify_kill_switch; then
                     ui_print info "正在停止本地服务..."
                     if [ "$OS_TYPE" == "TERMUX" ]; then
                         tavx_service_control "down" "$svc_name"
-                        # 彻底移除服务目录
-                        rm -rf "$PREFIX/var/service/$svc_name"
+                        # [标准] 移除服务注册
+                        tavx_service_remove "$svc_name"
                     else
                         kill_process_safe "$pid_f" "cloudflared"
                     fi
@@ -627,7 +627,7 @@ cf_stop_all() {
     if [ "$OS_TYPE" == "TERMUX" ] && command -v sv &>/dev/null; then
         for s in "$PREFIX/var/service"/cf_tunnel_*; do
             [ ! -d "$s" ] && continue
-            sv down "$(basename "$s")" 2>/dev/null
+            sv -w 2 force-stop "$(basename "$s")" 2>/dev/null
         done
     fi
 

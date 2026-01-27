@@ -380,3 +380,31 @@ ui_pause() {
     fi
 }
 export -f ui_pause
+
+ui_watch_log() {
+    local app_id="$1"
+    local log_path=""
+    
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        log_path="$PREFIX/var/service/$app_id/log/current"
+    fi
+    
+    # Fallback
+    if [ ! -f "$log_path" ]; then
+        log_path="$LOGS_DIR/${app_id}.log"
+    fi
+    
+    if [ -f "$log_path" ]; then
+        # 引用 utils 里的监控函数
+        if command -v safe_log_monitor &>/dev/null; then
+            safe_log_monitor "$log_path"
+        else
+            ui_print error "缺少 safe_log_monitor 函数。"
+            ui_pause
+        fi
+    else
+        ui_print error "未找到日志文件: $log_path"
+        ui_pause
+    fi
+}
+export -f ui_watch_log

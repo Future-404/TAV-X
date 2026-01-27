@@ -172,6 +172,8 @@ antigravity_uninstall() {
     if ! verify_kill_switch; then return; fi
     
     antigravity_stop
+    tavx_service_remove "antigravity"
+    
     if ui_spinner "正在清除..." "safe_rm '$AG_DIR' '$AG_PID'"; then
         ui_print success "模块数据已卸载。"
         return 2 
@@ -264,7 +266,7 @@ antigravity_menu() {
         case "$CHOICE" in
             *"启动"*) antigravity_start; ui_pause ;; 
             *"获取授权"*) antigravity_login ;;
-            *"日志"*) safe_log_monitor "$log_path" ;; 
+            *"日志"*) ui_watch_log "antigravity" ;; 
             *"停止"*) antigravity_stop; ui_print success "已停止"; ui_pause ;; 
             *"重装"*) antigravity_install ;; 
             *"卸载"*) antigravity_uninstall && [ $? -eq 2 ] && return ;;

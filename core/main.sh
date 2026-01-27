@@ -12,6 +12,7 @@ source "$TAVX_DIR/core/updater.sh"
 source "$TAVX_DIR/core/store.sh"
 source "$TAVX_DIR/core/about.sh"
 source "$TAVX_DIR/core/migrate_apps.sh"
+source "$TAVX_DIR/core/proot_ui.sh"
 check_dependencies
 scan_and_load_modules
 check_for_updates

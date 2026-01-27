@@ -6,11 +6,11 @@ GROUP_QQ="616353694"
 CONTACT_EMAIL="future_404@outlook.com"
 PROJECT_URL="https://github.com/Future-404/TAV-X"
 SLOGAN="别让虚拟的温柔，偷走了你在现实里本该拥有的温暖。"
-UPDATE_SUMMARY="v3.2.14 模块集成与交互优化：
-  1. [新增] 集成 Antigravity2API 模块，完美支持 Google Thinking 模型代理
-  2. [新增] 模块专属配置管理器，支持图形化修改 config.json 与 .env
-  3. [优化] 模块安装流程接入 TAV-X 标准网络核心，支持镜像加速与代理注入
-  4. [优化] 授权流程增强，支持自动捕获 URL 并唤起浏览器完成 OAuth 登录"
+UPDATE_SUMMARY="v3.3.0 混合架构与 Grok2API：
+  1. [重磅] 引入 PRoot Debian 容器架构，彻底终结 Termux 编译难题
+  2. [新增] 集成 Grok2API 模块，支持 UV 加速安装与 WebUI 管理
+  3. [核心] 系统设置新增 'Debian 容器管理'，支持一键终端与依赖维护
+  4. [优化] 强化服务停止逻辑 (Force-Stop)，修复日志查看与交互体验"
 
 show_shortcuts_help() {
     ui_header "快捷指令用法"

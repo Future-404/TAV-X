@@ -48,8 +48,7 @@ select_pypi_mirror() {
     echo -e "当前源: ${CYAN}${current_mirror:-官方源}${NC}"
     echo "----------------------------------------"
 
-    local CHOICE
-    CHOICE=$(ui_menu "请选择镜像源"
+    local options=(
         "🇨🇳 清华大学"
         "🇨🇳 阿里云"
         "🇨🇳 腾讯云"
@@ -59,6 +58,10 @@ select_pypi_mirror() {
         "✏️  自定义输入"
         "🔙 返回"
     )
+
+    local CHOICE
+    CHOICE=$(ui_menu "请选择镜像源" "${options[@]}")
+    
     if [[ "$CHOICE" == *"返回"* ]]; then return; fi
     
     local new_url=""
@@ -92,7 +95,7 @@ ensure_python_build_deps() {
         done
         
         if [ "$missing" == "false" ]; then
-            local test_file="$TMP_DIR/rust_test_$$"
+            local test_file="$TMP_DIR/rust_test_$"
             echo 'fn main(){}' > "$test_file.rs"
             if ! rustc "$test_file.rs" -o "$test_file.bin" >/dev/null 2>&1; then
                 missing=true
@@ -171,79 +174,104 @@ create_venv_smart() {
 }
 export -f create_venv_smart
 
+ensure_uv_installed() {
+    if command -v uv &>/dev/null; then return 0; fi
+
+    ui_print info "正在安装高性能包管理器 uv..."
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        if sys_install_pkg "uv"; then return 0; fi
+        # 回退方案
+        if command -v pip &>/dev/null; then
+             pip install uv && return 0
+        fi
+    else
+        if curl -LsSf https://astral.sh/uv/install.sh | sh; then
+            export PATH="$HOME/.cargo/bin:$PATH"
+            return 0
+        fi
+    fi
+    ui_print warn "UV 安装失败，将降级使用 pip。"
+    return 1
+}
+export -f ensure_uv_installed
+
 install_requirements_smart() {
     local venv_path="$1"
-    local req_file="$2"
+    local target="$2"
     local mode="${3:-standard}"
     
     local pypi_url
     pypi_url=$(grep "^PYPI_INDEX_URL=" "$PY_CONFIG" 2>/dev/null | cut -d'=' -f2)
     if [ -n "$pypi_url" ]; then
         export PIP_INDEX_URL="$pypi_url"
-        export UV_PYPI_MIRROR="$pypi_url" 
+        export UV_PYPI_MIRROR="$pypi_url"
+        export UV_INDEX_URL="$pypi_url"
     fi
-
-    export PIP_DISABLE_PIP_VERSION_CHECK=1
-    
-    if [ "$OS_TYPE" == "TERMUX" ] && [ -f "$req_file" ]; then
-        local sys_pkgs=""
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        local check_file="$target"
+        [ -d "$target" ] && check_file="$target/pyproject.toml"
         
-        if grep -qE "^numpy" "$req_file"; then sys_pkgs="$sys_pkgs python-numpy"; fi
-        if grep -qE "^pillow" "$req_file"; then sys_pkgs="$sys_pkgs python-pillow"; fi
-        if grep -qE "^pandas" "$req_file"; then sys_pkgs="$sys_pkgs python-pandas"; fi
-        if grep -qE "^lxml" "$req_file"; then sys_pkgs="$sys_pkgs python-lxml"; fi
-        if grep -qE "^cryptography" "$req_file"; then sys_pkgs="$sys_pkgs python-cryptography"; fi
-        if grep -qE "^grpcio" "$req_file"; then sys_pkgs="$sys_pkgs python-grpcio"; fi
-        
-        if [ -n "$sys_pkgs" ]; then
-            if command -v ui_print &>/dev/null;
- then
-                ui_print info "检测到重型依赖，正在启用 Termux 系统源加速..."
-            else
-                echo ">>> 检测到重型依赖，正在启用 Termux 系统源加速..."
-            fi
-
-            if ! pkg list-repos 2>/dev/null | grep -q "tur"; then
-                 sys_install_pkg "tur-repo"
-            fi
+        if [ -f "$check_file" ]; then
+            local sys_pkgs=""
+            if grep -qE "numpy|pandas" "$check_file"; then sys_pkgs="$sys_pkgs python-numpy python-pandas"; fi
+            if grep -qE "pillow" "$check_file"; then sys_pkgs="$sys_pkgs python-pillow"; fi
+            if grep -qE "cryptography" "$check_file"; then sys_pkgs="$sys_pkgs python-cryptography openssl"; fi
+            if grep -qE "lxml" "$check_file"; then sys_pkgs="$sys_pkgs python-lxml"; fi
             
-            sys_install_pkg "$sys_pkgs"
+            if [ -n "$sys_pkgs" ]; then
+                ui_print info "检测到需要编译的依赖，正在安装系统库以加速..."
+                sys_install_pkg "tur-repo"
+                sys_install_pkg "$sys_pkgs"
+            fi
         fi
     fi
 
     if [ ! -f "$venv_path/bin/activate" ]; then
-        echo "Error: Venv not found at $venv_path"
+        ui_print error "虚拟环境未找到: $venv_path"
         return 1
     fi
     
     source "$venv_path/bin/activate"
+    ensure_uv_installed
+
+    local install_cmd=""
+    local install_desc=""
     
-    if [ "$OS_TYPE" == "TERMUX" ] && [ "$mode" == "compile" ]; then
+    if command -v uv &>/dev/null; then
+        if [ -d "$target" ] && [ -f "$target/pyproject.toml" ]; then
+            install_cmd="cd '$target' && uv pip install ."
+            install_desc="UV 项目安装 (pyproject.toml)..."
+        elif [ -f "$target" ]; then
+            install_cmd="uv pip install -r '$target'"
+            install_desc="UV 依赖安装..."
+        fi
+    fi
+    
+    if [ -z "$install_cmd" ]; then
+        if [ -d "$target" ] && [ -f "$target/pyproject.toml" ]; then
+            install_cmd="cd '$target' && pip install ."
+            install_desc="Pip 项目安装..."
+        elif [ -f "$target" ]; then
+            install_cmd="pip install -r '$target'"
+            install_desc="Pip 依赖安装..."
+        fi
+    fi
+    
+    if [ -z "$install_cmd" ]; then
+        ui_print error "无法识别的安装目标: $target"
+        return 1
+    fi
+    
+    if [ "$OS_TYPE" == "TERMUX" ]; then
         export CC="clang"
         export CXX="clang++"
-        export MATHLIB="m"
-        export PIP_IGNORE_INSTALLED=0 
+        export CFLAGS="-Wno-incompatible-function-pointer-types"
     fi
 
-    echo ">>> 正在安装依赖 (Mode: $mode, Index: ${pypi_url:-Default})..."
-
-    if [ "$OS_TYPE" == "LINUX" ]; then
-        if ! command -v uv &>/dev/null;
- then
-            echo ">>> [Linux] 检测到未安装 uv，尝试自动获取..."
-            curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null 2>&1
-            export PATH="$HOME/.cargo/bin:$PATH"
-        fi
-
-        if command -v uv &>/dev/null;
- then
-            if ui_stream_task "UV 极速安装中..." "uv pip install -r '$req_file'"; then return 0; else return 1; fi
-        fi
-    fi
-    
-    if ui_stream_task "Pip 安装依赖..." "pip install -r '$req_file'"; then
+    if ui_stream_task "$install_desc" "$install_cmd"; then
         return 0
     else
+        ui_print error "依赖安装失败。"
         return 1
     fi
 }

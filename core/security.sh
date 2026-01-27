@@ -172,21 +172,51 @@ configure_analytics() {
     ui_header "匿名统计与项目支持"
     echo -e "当前状态: $current_stat"
     echo ""
-    echo -e "${YELLOW}作为个人开发者，我想知道：${NC}"
-    echo -e " • ${CYAN}「是否真的有人在用？」${NC} —— 这直接决定我是否继续维护它。"
-    echo -e " • ${CYAN}「大家在什么系统上用它？」${NC} —— 这帮助我决定优先优化的方向。"
-    echo ""
-    echo -e "为此，我仅收集${GREEN}最基础${NC}的数据："
-    echo -e " ${GREEN}✓${NC} 应用版本号"
-    echo -e " ${GREEN}✓${NC} 操作系统类型 (Android/Linux)"
-    echo -e " ${RED}✗ 绝不收集：${NC} 任何身份信息、位置、本地文件等个人隐私。"
-    echo -e "所有数据均已进行${PURPLE}完全匿名与脱敏处理${NC}。"
-    echo -e "你可以随时在源码中审查此逻辑：${CYAN}https://github.com/Future-404/TAV-X${NC}"
-    echo ""
-    echo -e "你的每一次使用，都是对我最大的鼓励。这份数据是我持续维护项目的关键动力。"
-    echo -e "----------------------------------"
-    echo -e "${RED}关闭后将导致...${NC}"
-    echo -e "我将无法获知你的使用情况，这可能会让我误判项目已无人需要，从而影响后续更新。"
+    
+    local md_content="
+### 🌟 开发者心声
+
+作为个人开发者，我想知道：
+* **「是否真的有人在用？」** —— 这直接决定我是否继续维护它。
+* **「大家在什么系统上用它？」** —— 这帮助我决定优先优化的方向。
+
+---
+
+### 🛡️ 数据隐私承诺
+
+为此，我仅收集 **最基础** 的数据：
+* ✅ 应用版本号
+* ✅ 操作系统类型 (Android/Linux)
+
+> **❌ 绝不收集：** 任何身份信息、位置、本地文件等个人隐私。
+> 所有数据均已进行 **完全匿名与脱敏处理**。
+
+你可以随时在源码中审查此逻辑：
+[https://github.com/Future-404/TAV-X](https://github.com/Future-404/TAV-X)
+
+---
+
+**你的每一次使用，都是对我最大的鼓励。这份数据是我持续维护项目的关键动力。**
+
+> ⚠️ **关闭后将导致...**
+> 我将无法获知你的使用情况，这可能会让我误判项目已无人需要，从而影响后续更新。
+"
+
+    if [ "$HAS_GUM" = true ]; then
+        echo "$md_content" | gum format
+    else
+        # Fallback for text mode
+        echo -e "${YELLOW}作为个人开发者，我想知道：${NC}"
+        echo -e " • ${CYAN}「是否真的有人在用？」${NC}"
+        echo -e " • ${CYAN}「大家在什么系统上用它？」${NC}"
+        echo ""
+        echo -e "为此，我仅收集${GREEN}最基础${NC}的数据："
+        echo -e " ${GREEN}✓${NC} 版本号与系统类型"
+        echo -e " ${RED}✗ 绝不收集隐私信息${NC}"
+        echo ""
+        echo -e "你的支持是我更新的动力。"
+        echo "----------------------------------"
+    fi
     echo ""
     
     local choice
@@ -341,6 +371,7 @@ system_settings_menu() {
             "🚀 开机自启管理"
             "🎨 界面模式切换"
             "🐍 Python环境管理"
+            "🐧 Debian 容器管理"
             "📱 ADB智能助手"
             "📊 匿名统计开关"
             "🧹 系统垃圾清理"
@@ -357,6 +388,8 @@ system_settings_menu() {
             *"Python"*) 
                 source "$TAVX_DIR/core/python_utils.sh"
                 python_environment_manager_ui ;; 
+            *"Debian"*)
+                proot_settings_menu ;;
             *"ADB"*) 
                 source "$TAVX_DIR/core/adb_utils.sh"
                 adb_manager_ui ;; 

@@ -186,6 +186,7 @@ mihomo_uninstall() {
     _mihomo_vars
     if verify_kill_switch; then
         mihomo_stop
+        tavx_service_remove "mihomo"
         ui_spinner "清理文件中..." "safe_rm '$MIHOMO_DIR' '$MIHOMO_SUBS' '$MIHOMO_SECRET_CONF' '$MIHOMO_PID' '$MIHOMO_LOG' '$MIHOMO_PATCH'"
         ui_print success "卸载完成。"
         return 2
@@ -289,7 +290,7 @@ EOF
                 sec=$(ui_input "面板密钥" "$cur" "false")
                 echo "$sec" > "$MIHOMO_SECRET_CONF"; ui_print success "已保存"; ui_pause ;; 
             *"面板"*) open_browser "http://127.0.0.1:19090/ui" ;; 
-            *"日志"*) safe_log_monitor "$log_path" ;; 
+            *"日志"*) ui_watch_log "mihomo" ;; 
             *"更新"*) mihomo_install ;; 
             *"卸载"*) mihomo_uninstall && [ $? -eq 2 ] && return ;; 
             *"关于"*) show_module_about_info "${BASH_SOURCE[0]}" ;;

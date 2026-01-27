@@ -128,6 +128,8 @@ clewd_uninstall() {
     if ! verify_kill_switch; then return; fi
     
     clewd_stop
+    tavx_service_remove "clewd"
+    
     if ui_spinner "正在清除..." "safe_rm '$CL_DIR' '$CL_PID'"; then
         ui_print success "模块数据已卸载。"
         return 2 
@@ -181,7 +183,7 @@ clewd_menu() {
                     ui_print warn "日志文件不存在。"
                 fi
                 ui_pause ;; 
-            *"日志"*) safe_log_monitor "$log_path" ;; 
+            *"日志"*) ui_watch_log "clewd" ;; 
             *"停止"*) clewd_stop; ui_print success "已停止"; ui_pause ;; 
             *"更新"*) clewd_install ;; 
             *"卸载"*) clewd_uninstall && [ $? -eq 2 ] && return ;; 

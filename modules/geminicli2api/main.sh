@@ -134,6 +134,7 @@ geminicli2api_uninstall() {
     _geminicli2api_vars
     if verify_kill_switch; then
         geminicli2api_stop
+        tavx_service_remove "geminicli2api"
         ui_spinner "清理文件中..." "safe_rm '$GE_DIR' '$GE_ENV_CONF' '$GE_PID' '$GE_LOG'"
         ui_print success "已卸载。"
         return 2
@@ -234,7 +235,7 @@ geminicli2api_menu() {
                 fi
                 ui_pause ;; 
             *"停止"*) geminicli2api_stop; ui_print success "已停止"; ui_pause ;; 
-            *"日志"*) safe_log_monitor "$log_path" ;; 
+            *"日志"*) ui_watch_log "geminicli2api" ;; 
             *"更新"*) geminicli2api_install ;; 
             *"卸载"*) geminicli2api_uninstall && [ $? -eq 2 ] && return ;; 
             *"关于"*) show_module_about_info "${BASH_SOURCE[0]}" ;; 

@@ -217,8 +217,10 @@ sillytavern_uninstall() {
     if ! verify_kill_switch; then return; fi
     
     sillytavern_stop
-    if ui_spinner "正在抹除酒馆数据..." "safe_rm '$ST_DIR'" ;
-then
+    # [标准] 移除服务注册
+    tavx_service_remove "sillytavern"
+    
+    if ui_spinner "正在清除数据..." "safe_rm '$ST_DIR' '$ST_PID_FILE'"; then
         ui_print success "卸载完成。"
         return 2
     fi
@@ -344,11 +346,7 @@ sillytavern_menu() {
             *"插件"*) app_plugin_menu ;; 
             *"更新"*) _st_update_submenu ;; 
             *"备份"*) _st_backup_submenu ;; 
-            *"日志"*) 
-                local log_path="$ST_LOG"
-                [ "$OS_TYPE" == "TERMUX" ] && log_path="$PREFIX/var/service/sillytavern/log/current"
-                safe_log_monitor "$log_path" 
-                ;; 
+            *"日志"*) ui_watch_log "sillytavern" ;; 
             *"卸载"*) sillytavern_uninstall && [ $? -eq 2 ] && return ;; 
             *"关于"*) show_module_about_info "${BASH_SOURCE[0]}" ;; 
             *"返回"*) return ;; 
