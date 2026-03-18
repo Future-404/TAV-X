@@ -6,11 +6,11 @@ GROUP_QQ="616353694"
 CONTACT_EMAIL="future_404@outlook.com"
 PROJECT_URL="https://github.com/Future-404/TAV-X"
 SLOGAN="别让虚拟的温柔，偷走了你在现实里本该拥有的温暖。"
-UPDATE_SUMMARY="v3.4.0 混合架构与 Grok2API：
-  1. [重磅] 引入 CLIproxyAPI 模块，支持几乎所有主流CLI2API
-  2. [新增] 集成 Grok2API 模块，支持 UV 加速安装与 WebUI 管理
-  3. [核心] 系统设置新增 'Debian 容器管理'，支持一键终端与依赖维护
-  4. [优化] 强化服务停止逻辑 (Force-Stop)，修复日志查看与交互体验"
+UPDATE_SUMMARY="v3.4.1 (Patch Update)
+  1. [清理] 移除 SillyTavern 模块中的冗余死代码脚本
+  2. [安全] 插件 SCryptPublic 难以审计安全性，暂未对该提交进行收录
+  3. [新增] 插件库更新：新增 ai生图 (st-chatu8) 插件
+  4. [公告] 后续版本将逐步移除 geminicli2api 与 antigravity 两个模块，请及时备份或迁移至更推荐的 CLIProxyAPI 插件中。"
 
 show_shortcuts_help() {
     ui_header "快捷指令用法"
