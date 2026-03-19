@@ -25,44 +25,11 @@ API_KEY = os.getenv("API_KEY", "")
 PORT = int(os.getenv("PORT", 7860))
 HOST = os.getenv("HOST", "0.0.0.0")
 PROXY = os.getenv("http_proxy") or os.getenv("https_proxy") or os.getenv("all_proxy")
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
-# 导入精简后的核心逻辑
-# 注意：我们假设 main.sh 已经把 template/core 拷贝过来了
-try:
-    from core.google_api import create_google_session, get_common_headers
-    from core.message import build_full_context_text, parse_last_message
-    from core.jwt import JWTManager
-except ImportError as e:
-    logger.error(f"核心逻辑导入失败: {e}。请确保 core/ 目录完整。")
-    raise
-
-# --- 账号管理 (纯手动模式) ---
-# 格式建议: email,cid,csesidx,secure_c_ses,host_c_oses
+# 账号管理
 ACCOUNTS = []
 accounts_file = os.path.join(os.path.dirname(__file__), "accounts.json")
-
-def load_manual_accounts():
-    global ACCOUNTS
-    # 优先从环境变量加载 (适合 Docker/Termux 一行流)
-    env_acc = os.getenv("ACCOUNTS_JSON")
-    if env_acc:
-        try:
-            ACCOUNTS = json.loads(env_acc)
-            logger.info(f"从环境变量加载了 {len(ACCOUNTS)} 个账号")
-            return
-        except:
-            pass
-            
-    # 从本地文件加载
-    if os.path.exists(accounts_file):
-        try:
-            with open(accounts_file, "r") as f:
-                ACCOUNTS = json.load(f)
-                logger.info(f"从文件加载了 {len(ACCOUNTS)} 个账号")
-        except Exception as e:
-            logger.error(f"加载账号文件失败: {e}")
-
-load_manual_accounts()
 
 class AccountPicker:
     def __init__(self, accounts):
@@ -78,17 +45,37 @@ class AccountPicker:
 
 picker = AccountPicker(ACCOUNTS)
 
-# --- FastAPI App ---
-app = FastAPI(title="Gemini Business 2 OpenAI API (Manual Mode)")
+def load_manual_accounts():
+    global ACCOUNTS, picker
+    env_acc = os.getenv("ACCOUNTS_JSON")
+    if env_acc:
+        try:
+            ACCOUNTS = json.loads(env_acc)
+            picker = AccountPicker(ACCOUNTS)
+            return
+        except:
+            pass
+            
+    if os.path.exists(accounts_file):
+        try:
+            with open(accounts_file, "r") as f:
+                ACCOUNTS = json.load(f)
+                picker = AccountPicker(ACCOUNTS)
+        except:
+            pass
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+load_manual_accounts()
 
+# 导入核心逻辑
+try:
+    from core.google_api import create_google_session, get_common_headers
+    from core.message import build_full_context_text
+    from core.jwt import JWTManager
+    from util.streaming_parser import parse_json_array_stream_async
+except ImportError as e:
+    logger.error(f"核心逻辑导入失败: {e}")
+
+# --- Models ---
 class Message(BaseModel):
     role: str
     content: str
@@ -99,82 +86,135 @@ class ChatRequest(BaseModel):
     stream: bool = False
     temperature: Optional[float] = 0.7
 
+app = FastAPI(title="Gemini Business 2 OpenAI API (Manual Mode)")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+def create_chunk(id: str, created: int, model: str, delta: dict, finish_reason: Union[str, None]) -> str:
+    return json.dumps({
+        "id": id,
+        "object": "chat.completion.chunk",
+        "created": created,
+        "model": model,
+        "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}]
+    })
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok", "accounts_count": len(ACCOUNTS)}
+
 @app.get("/v1/models")
 async def list_models():
     return {
         "object": "list",
-        "data": [
-            {"id": "gemini-2.5-flash", "object": "model", "created": int(time.time()), "owned_by": "google"},
-            {"id": "gemini-2.5-pro", "object": "model", "created": int(time.time()), "owned_by": "google"}
-        ]
+        "data": [{"id": "gemini-2.5-flash", "object": "model", "created": int(time.time()), "owned_by": "google"}]
     }
 
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request, body: ChatRequest, authorization: str = Header(None)):
-    # 1. 鉴权
-    if API_KEY:
-        if not authorization or not authorization.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Missing Authorization")
-        if authorization[7:] != API_KEY:
-            raise HTTPException(status_code=401, detail="Invalid API Key")
+    if not ACCOUNTS: load_manual_accounts()
+    if API_KEY and (not authorization or authorization[7:] != API_KEY):
+        raise HTTPException(status_code=401, detail="Invalid API Key")
 
-    # 2. 选号
     acc = picker.get_next()
-    if not acc:
-        raise HTTPException(status_code=500, detail="No manual accounts configured. Please add accounts to accounts.json")
+    if not acc: raise HTTPException(status_code=500, detail="No accounts")
 
-    # 3. 构造 Google 请求
-    # 这里直接提取 template/core 中的逆向逻辑
+    request_id = str(uuid.uuid4())[:8]
+    logger.info(f"[CHAT] [req_{request_id}] Using account: {acc.get('id')}")
+
     try:
-        # 准备会话
-        async with httpx.AsyncClient(proxy=PROXY, verify=False, timeout=120.0) as client:
-            # 这里的逻辑是对 template/main.py 对话部分的精简实现
-            
-            # 获取 common headers
-            headers = get_common_headers(
-                secure_c_ses=acc['secure_c_ses'],
-                host_c_oses=acc['host_c_oses'],
-                config_id=acc['config_id']
-            )
-            
-            # 转换消息格式
-            prompt = build_full_context_text(body.messages)
-            
-            # 构造 Google 的 csesidx 路径请求
-            # 这是一个典型的逆向工程调用点
-            chat_url = f"https://business.gemini.google/u/0/_/ConversationsHttp/SendMessage?csesidx={acc['csesidx']}"
-            
-            # 注意：实际 SendMessage payload 非常复杂，通常通过 template/core/google_api.py 处理
-            # 为了保证可用性，我们将直接封装一个调用逻辑
-            
-            # 这里简化演示，实际代码会深度引用 core/google_api.py 的逻辑
-            request_id = f"chatcmpl-{uuid.uuid4()}"
-            created = int(time.time())
+        # 1. 获取 JWT
+        jwt_mgr = JWTManager(acc['secure_c_ses'], acc['host_c_oses'], PROXY, USER_AGENT)
+        jwt = await jwt_mgr.get_jwt(request_id)
+        
+        # 2. 构造请求
+        headers = get_common_headers(jwt, USER_AGENT)
+        google_payload = {
+            "configId": acc['config_id'],
+            "additionalParams": {"token": "-"},
+            "streamAssistRequest": {
+                "session": f"projects/-/locations/global/widgets/default_widget/sessions/session-{uuid.uuid4()}",
+                "query": {"parts": [{"text": build_full_context_text(body.messages)}]},
+                "answerGenerationMode": "NORMAL",
+                "assistGenerationConfig": {"modelId": body.model.replace("gemini-", "")},
+                "languageCode": "zh-CN",
+                "assistSkippingMode": "REQUEST_ASSIST"
+            }
+        }
 
+        # 3. 发起请求并处理响应
+        async def response_generator():
+            chat_id = f"chatcmpl-{uuid.uuid4()}"
+            created = int(time.time())
+            full_content = ""
+            
             if body.stream:
-                async def stream_generator():
-                    # 这里模拟流式输出，实际应 pipe Google 的流
-                    yield f"data: {json.dumps({'id': request_id, 'object': 'chat.completion.chunk', 'created': created, 'model': body.model, 'choices': [{'index': 0, 'delta': {'role': 'assistant', 'content': ''}, 'finish_reason': None}]})}\n\n"
-                    # 真实逻辑：调用 Google 并解析其特殊的 JSON Array Stream
-                    # 参考 template/util/streaming_parser.py
-                    content = f"[Manual Mode] 正在使用 {acc['id']} 转发您的请求..."
-                    for char in content:
-                        yield f"data: {json.dumps({'id': request_id, 'object': 'chat.completion.chunk', 'created': created, 'model': body.model, 'choices': [{'index': 0, 'delta': {'content': char}, 'finish_reason': None}]})}\n\n"
-                        await asyncio.sleep(0.02)
+                yield f"data: {create_chunk(chat_id, created, body.model, {'role': 'assistant'}, None)}\n\n"
+
+            async with httpx.AsyncClient(proxy=PROXY, verify=False, timeout=300.0) as client:
+                async with client.stream(
+                    "POST", 
+                    "https://biz-discoveryengine.googleapis.com/v1alpha/locations/global/widgetStreamAssist",
+                    headers=headers, 
+                    json=google_payload
+                ) as r:
+                    if r.status_code != 200:
+                        err = await r.aread()
+                        logger.error(f"[API] Error: {err.decode()}")
+                        if body.stream: yield f"data: {json.dumps({'error': err.decode()})}\n\n"
+                        return
+
+                    async for json_obj in parse_json_array_stream_async(r.aiter_lines()):
+                        # 提取文本内容
+                        sar = json_obj.get("streamAssistResponse", {})
+                        replies = sar.get("answer", {}).get("replies", [])
+                        for reply in replies:
+                            content = reply.get("text", "")
+                            if content:
+                                full_content += content
+                                if body.stream:
+                                    yield f"data: {create_chunk(chat_id, created, body.model, {'content': content}, None)}\n\n"
+
+                if body.stream:
+                    yield f"data: {create_chunk(chat_id, created, body.model, {}, 'stop')}\n\n"
                     yield "data: [DONE]\n\n"
+                else:
+                    # 非流式直接返回最终收集的内容
+                    # 此处逻辑在生成器外处理，详见下方返回逻辑
+                    pass
+
+        if body.stream:
+            return StreamingResponse(response_generator(), media_type="text/event-stream")
+        else:
+            # 对于非流式，我们需要先耗尽生成器来收集 full_content
+            # 或者为了简单起见，这里直接写一个非流式的请求逻辑
+            async with httpx.AsyncClient(proxy=PROXY, verify=False, timeout=300.0) as client:
+                r = await client.post(
+                    "https://biz-discoveryengine.googleapis.com/v1alpha/locations/global/widgetStreamAssist",
+                    headers=headers, json=google_payload
+                )
+                full_text = ""
+                async for obj in parse_json_array_stream_async(r.text.splitlines()):
+                    replies = obj.get("streamAssistResponse", {}).get("answer", {}).get("replies", [])
+                    for rep in replies:
+                        full_text += rep.get("text", "")
                 
-                return StreamingResponse(stream_generator(), media_type="text/event-stream")
-            else:
                 return {
-                    "id": request_id,
+                    "id": f"chatcmpl-{uuid.uuid4()}",
                     "object": "chat.completion",
-                    "created": created,
+                    "created": int(time.time()),
                     "model": body.model,
-                    "choices": [{"index": 0, "message": {"role": "assistant", "content": f"[Manual Mode] 收到请求。账号: {acc['id']}"}, "finish_reason": "stop"}]
+                    "choices": [{"index": 0, "message": {"role": "assistant", "content": full_text}, "finish_reason": "stop"}]
                 }
 
     except Exception as e:
-        logger.error(f"请求转发失败: {e}")
+        logger.error(f"[CHAT] Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

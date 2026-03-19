@@ -4,6 +4,7 @@
 # MODULE_NAME: Gemini Business 2 OpenAI API
 # MODULE_ENTRY: business2api_menu
 # APP_CATEGORY: AI模型接口
+# APP_VERSION: Beta-Testing (In Development)
 # APP_AUTHOR: TAV-X Developer
 # APP_PROJECT_URL: https://github.com/Future-404/TAV-X
 # APP_DESC: 基于 Gemini Business 逆向工程，提供完全兼容 OpenAI 标准的 API 接口，支持多账号负载均衡和流式输出。
@@ -30,12 +31,15 @@ business2api_install() {
     
     prepare_network_strategy
 
-    # 复制核心逻辑（精简自 template）
-    ui_print info "正在同步核心逻辑..."
+    # 复制核心逻辑与脚本
+    ui_print info "正在同步核心逻辑与脚本..."
     cp -r "$TAVX_DIR/template/core" "$B2A_DIR/"
-    cp "$TAVX_DIR/template/requirements.txt" "$B2A_DIR/"
-    # 我们将创建一个更精简的 main.py 供 B2A 使用
-    cp "$TAVX_DIR/template/main.py" "$B2A_DIR/app.py"
+    cp -r "$TAVX_DIR/template/util" "$B2A_DIR/"
+    # 使用精简版依赖文件
+    cp "$TAVX_DIR/modules/business2api/requirements_mini.txt" "$B2A_DIR/requirements.txt"
+    # 从模块源码目录拷贝脚本到运行目录
+    cp "$TAVX_DIR/modules/business2api/app.py" "$B2A_DIR/"
+    cp "$TAVX_DIR/modules/business2api/import_account.py" "$B2A_DIR/"
 
     if ui_stream_task "创建 Python 虚拟环境..." "source \"$TAVX_DIR/core/python_utils.sh\"; create_venv_smart '$B2A_VENV'"; then
         ui_print info "正在安装 Python 依赖..."
@@ -74,25 +78,28 @@ business2api_start() {
     local p_env=""
     [ -n "$proxy" ] && p_env="http_proxy=$proxy https_proxy=$proxy all_proxy=$proxy"
     
-    local RUN_CMD="env $p_env '$B2A_VENV/bin/python' app.py"
-
     ui_print info "正在启动 Gemini Business API 服务..."
 
     if [ "$OS_TYPE" == "TERMUX" ]; then
+        local RUN_CMD="env $p_env '$B2A_VENV/bin/python' app.py"
         tavx_service_register "business2api" "$RUN_CMD" "$B2A_DIR"
         tavx_service_control "up" "business2api"
         sleep 2
         ui_print success "服务启动命令已发送。"
     else
-        local CMD="cd '$B2A_DIR' && env $p_env setsid nohup '$B2A_VENV/bin/python' app.py > '$B2A_LOG' 2>&1 & echo \!\! > '$B2A_PID'"
-        if ui_spinner "启动进程..." "eval \"$CMD\"" ; then
-            sleep 2
-            if check_process_smart "$B2A_PID" "python.*app.py"; then
-                ui_print success "服务已启动，监听端口: $port"
-            else
-                ui_print error "启动失败，请检查日志: $B2A_LOG"
-                tail -n 10 "$B2A_LOG"
-            fi
+        cd "$B2A_DIR" || return 1
+        # 直接执行并脱离终端
+        env $p_env nohup "$B2A_VENV/bin/python" app.py > "$B2A_LOG" 2>&1 &
+        local pid=$!
+        echo "$pid" > "$B2A_PID"
+        
+        # 验证启动
+        sleep 2
+        if kill -0 "$pid" 2>/dev/null; then
+            ui_print success "服务已启动，监听端口: $port (PID: $pid)"
+        else
+            ui_print error "服务启动失败，请检查日志: $B2A_LOG"
+            [ -f "$B2A_LOG" ] && tail -n 10 "$B2A_LOG"
         fi
     fi
 }
@@ -145,6 +152,8 @@ business2api_menu() {
             *"停止"*) business2api_stop; ui_print success "已停止"; ui_pause ;; 
             *"导入"*) 
                 _b2api_vars
+                # 动态补全脚本，防止文件丢失
+                [ ! -f "$B2A_DIR/import_account.py" ] && cp "$TAVX_DIR/modules/business2api/import_account.py" "$B2A_DIR/"
                 cd "$B2A_DIR" && "$B2A_VENV/bin/python" import_account.py
                 ui_pause ;;
             *"配置"*) 
