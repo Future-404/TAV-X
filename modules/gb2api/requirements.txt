@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+httpx
+python-dotenv
+pydantic
+pydantic-core
+annotated-doc
+annotated-types
+anyio
+certifi
+click
+h11
+httpcore
+idna
+starlette
+typing-extensions
+typing-inspection

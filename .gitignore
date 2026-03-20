@@ -65,5 +65,6 @@ config/shortcuts.list
 !config/store.csv
 !config/silence.wav
 !modules/sillytavern/plugins.list
+!modules/**/requirements.txt
 GEMINI.md
 
