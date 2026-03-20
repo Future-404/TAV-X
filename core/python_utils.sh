@@ -266,11 +266,20 @@ install_requirements_smart() {
         export CC="clang"
         export CXX="clang++"
         export CFLAGS="-Wno-incompatible-function-pointer-types"
+        # 修复 Rust/Maturin 编译报错: Failed to determine Android API level
+        export ANDROID_API_LEVEL=24
     fi
 
     if ui_stream_task "$install_desc" "$install_cmd"; then
         return 0
     else
+        if [[ "$install_cmd" == *"uv pip"* ]]; then
+            ui_print warn "UV 安装失败 (可能因环境变量被隔离)，尝试回退到标准 Pip..."
+            local fallback_cmd="${install_cmd/uv pip/pip}"
+            if ui_stream_task "Pip 回退安装..." "$fallback_cmd"; then
+                return 0
+            fi
+        fi
         ui_print error "依赖安装失败。"
         return 1
     fi
