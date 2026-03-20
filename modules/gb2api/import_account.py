@@ -79,7 +79,8 @@ def main():
             "config_id": cid,
             "csesidx": csesidx,
             "secure_c_ses": ses,
-            "host_c_oses": oses
+            "host_c_oses": oses,
+            "import_time": int(time.time())
         }
 
         base_dir = os.path.dirname(os.path.abspath(__file__))

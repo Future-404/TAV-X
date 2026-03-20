@@ -102,8 +102,9 @@ class AccountManager:
         self.accounts = []
         for acc in accounts_data:
             acc_data = acc.copy()
-            acc_data['cooldown_until'] = 0
-            acc_data['fail_count'] = 0
+            acc_data['cooldown_until'] = acc.get('cooldown_until', 0)
+            acc_data['fail_count'] = acc.get('fail_count', 0)
+            acc_data['import_time'] = acc.get('import_time', 0)
             acc_data['session_name'] = None
             acc_data['session_expires'] = 0
             
@@ -176,8 +177,11 @@ class AccountManager:
                         # 指数退避：5分钟 -> 10分钟 -> 20分钟 -> 最大 6 小时
                         cooldown = min(300 * (2 ** (acc['fail_count'] - 1)), 21600)
                         acc['cooldown_until'] = time.time() + cooldown
+                        needs_save = True
                         logger.warning(f"⏳ 账号 {email} 触发 Google 限流 (第{acc['fail_count']}次)，将冷却 {cooldown} 秒。")
                     elif status_code == 200:
+                        if acc.get('fail_count', 0) > 0 or acc.get('cooldown_until', 0) > 0:
+                            needs_save = True
                         acc['fail_count'] = 0
                         acc['cooldown_until'] = 0
                         if acc.get('status') in ['banned', 'expired']:
@@ -195,8 +199,11 @@ class AccountManager:
             # 同步最新状态到全局 ACCOUNTS 列表中
             for acc in self.accounts:
                 for orig_acc in ACCOUNTS:
-                    if orig_acc['id'] == acc['id'] and 'status' in acc:
-                        orig_acc['status'] = acc['status']
+                    if orig_acc['id'] == acc['id']:
+                        if 'status' in acc: orig_acc['status'] = acc['status']
+                        orig_acc['cooldown_until'] = acc.get('cooldown_until', 0)
+                        orig_acc['fail_count'] = acc.get('fail_count', 0)
+                        if 'import_time' in acc: orig_acc['import_time'] = acc['import_time']
             
             # 原子写入
             temp_file = accounts_file + ".tmp"
@@ -233,11 +240,13 @@ try:
 except ImportError as e:
     logger.error(f"核心逻辑导入失败: {e}")
 
+from typing import List, Optional, Union, Any
+
 from pydantic import BaseModel
 
 class Message(BaseModel):
     role: str
-    content: Union[str, List[dict]]
+    content: Any
 
 class ChatRequest(BaseModel):
     model: str = "gemini-auto"
@@ -292,7 +301,8 @@ async def get_accounts_status():
             status_list.append({
                 "id": acc["id"],
                 "state": state,
-                "cooldown_remaining": max(0, int(acc.get("cooldown_until", 0) - now))
+                "cooldown_remaining": max(0, int(acc.get("cooldown_until", 0) - now)),
+                "import_time": acc.get("import_time", 0)
             })
         return {"total": len(picker.accounts), "accounts": status_list}
 
@@ -424,7 +434,7 @@ async def chat_completions(request: Request, body: ChatRequest, authorization: s
     if API_KEY and (not authorization or authorization[7:] != API_KEY):
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
-    conv_key = get_conversation_key([m.dict() for m in body.messages], request.client.host)
+    conv_key = get_conversation_key([m.model_dump() if hasattr(m, 'model_dump') else dict(m) for m in body.messages], request.client.host)
     
     async with session_locks_lock:
         if conv_key not in SESSION_LOCKS:

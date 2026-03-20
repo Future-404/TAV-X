@@ -2,6 +2,8 @@ import json
 import os
 import asyncio
 import httpx
+import time
+from datetime import datetime
 
 async def main():
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -31,10 +33,27 @@ async def main():
                 for acc in accounts:
                     state = acc['state']
                     email = acc['id']
+                    import_time = acc.get('import_time', 0)
                     
+                    # 计算导入时长
+                    age_str = ""
+                    is_old = False
+                    if import_time > 0:
+                        age_days = (time.time() - import_time) / 86400
+                        if age_days >= 14:
+                            is_old = True
+                            age_str = f" \033[35m(已导入 {int(age_days)} 天，随时可能过期)\033[0m"
+                        else:
+                            age_str = f" \033[90m(已导入 {int(age_days)} 天)\033[0m"
+                    else:
+                        age_str = " \033[90m(较早导入)\033[0m"
+
                     if state == "valid":
                         valid_count += 1
-                        print(f"  🔍 账号: {email:<30} \033[92m[ ✅ 健康运行中 ]\033[0m")
+                        if is_old:
+                            print(f"  🔍 账号: {email:<30} \033[93m[ ⚠️ 高危运行中 ]\033[0m{age_str}")
+                        else:
+                            print(f"  🔍 账号: {email:<30} \033[92m[ ✅ 健康运行中 ]\033[0m{age_str}")
                     elif state == "rate_limited":
                         limit_count += 1
                         remain = acc['cooldown_remaining']
@@ -44,13 +63,13 @@ async def main():
                             remain_str = f"{remain // 60}分钟{remain % 60}秒"
                         else:
                             remain_str = f"{remain}秒"
-                        print(f"  🔍 账号: {email:<30} \033[93m[ ⏳ 触发限流，冷却倒计时 {remain_str} ]\033[0m")
+                        print(f"  🔍 账号: {email:<30} \033[93m[ ⏳ 触发限流，冷却倒计时 {remain_str} ]\033[0m{age_str}")
                     elif state == "banned":
                         banned_count += 1
-                        print(f"  🔍 账号: {email:<30} \033[1;31m[ ⛔ 触发 403 被 Google 封禁隔离 ]\033[0m")
+                        print(f"  🔍 账号: {email:<30} \033[1;31m[ ⛔ 触发 403 被 Google 封禁隔离 ]\033[0m{age_str}")
                     else:
                         expired_count += 1
-                        print(f"  🔍 账号: {email:<30} \033[91m[ ❌ 令牌已失效 (401) ]\033[0m")
+                        print(f"  🔍 账号: {email:<30} \033[91m[ ❌ 令牌已失效 (401) ]\033[0m{age_str}")
                 
                 print("\n" + "-"*60)
                 print(f"📊 概览: 共 {len(accounts)} 个 | \033[92m健康: {valid_count}\033[0m | \033[93m限流: {limit_count}\033[0m | \033[91m失效: {expired_count}\033[0m | \033[1;31m封禁: {banned_count}\033[0m")
