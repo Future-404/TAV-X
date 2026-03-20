@@ -1,34 +1,30 @@
-import os
 import json
-import time
-import asyncio
-import uuid
 import logging
-import base64
-from typing import List, Optional, Union, Dict, Any
-from fastapi import FastAPI, HTTPException, Header, Request, Body
+import os
+import time
+import uuid
+from datetime import datetime
+from typing import List, Optional, Union
+
+import httpx
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
-import httpx
-from dotenv import load_dotenv
 
-# 加载环境变量
-load_dotenv()
+# 配置日志
+logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(levelname)s | %(message)s')
+logger = logging.getLogger(__name__)
 
-# 设置日志
-logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
-logger = logging.getLogger("gb2api")
-
-# 核心配置
-API_KEY = os.getenv("API_KEY", "")
+# --- 配置区 ---
+API_KEY = os.getenv("API_KEY", "sk-business-key")
 PORT = int(os.getenv("PORT", 7860))
 HOST = os.getenv("HOST", "0.0.0.0")
 PROXY = os.getenv("http_proxy") or os.getenv("https_proxy") or os.getenv("all_proxy")
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 import types
-import httpx
+import asyncio
+import base64
 
 # 账号管理
 ACCOUNTS = []
@@ -58,8 +54,11 @@ class AccountManager:
             # 为每个账号创建一个独占的 httpx client 以复用连接
             client = httpx.AsyncClient(proxy=PROXY, verify=False, timeout=30.0)
             
-            from core.jwt import JWTManager
-            acc_data['jwt_mgr'] = JWTManager(config, client, USER_AGENT)
+            try:
+                from core.jwt import JWTManager
+                acc_data['jwt_mgr'] = JWTManager(config, client, USER_AGENT)
+            except ImportError:
+                logger.error("未找到 core.jwt 模块")
             
             self.accounts.append(acc_data)
             
@@ -112,7 +111,7 @@ def load_manual_accounts():
         try:
             mtime = os.path.getmtime(accounts_file)
             if mtime > last_accounts_mtime:
-                with open(accounts_file, "r") as f:
+                with open(accounts_file, "r", encoding="utf-8") as f:
                     ACCOUNTS = json.load(f)
                     picker.load_accounts(ACCOUNTS)
                 last_accounts_mtime = mtime
@@ -127,22 +126,29 @@ try:
     from core.google_api import create_google_session, get_common_headers
     from core.message import build_full_context_text
     from core.jwt import JWTManager
-    from util.streaming_parser import parse_json_array_stream_async
+    from util.streaming_parser import parse_json_array_stream_async, parse_json_array_stream
 except ImportError as e:
     logger.error(f"核心逻辑导入失败: {e}")
 
 # --- Models ---
+class Message(BaseModel if 'BaseModel' in globals() else object):
+    role: str
+    content: str
+
+# 如果由于某种原因 BaseModel 没导入成功，手动打补丁
+from pydantic import BaseModel
+
 class Message(BaseModel):
     role: str
     content: str
 
 class ChatRequest(BaseModel):
-    model: str = "gemini-2.5-flash"
+    model: str = "gemini-auto"
     messages: List[Message]
     stream: bool = False
     temperature: Optional[float] = 0.7
 
-app = FastAPI(title="GB2API (Manual Mode)")
+app = FastAPI(title="GB2API (Stable)")
 
 app.add_middleware(
     CORSMiddleware,
@@ -342,16 +348,10 @@ async def chat_completions(request: Request, body: ChatRequest, authorization: s
                 if body.stream:
                     yield f"data: {create_chunk(chat_id, created, body.model, {}, 'stop')}\n\n"
                     yield "data: [DONE]\n\n"
-                else:
-                    # 非流式直接返回最终收集的内容
-                    # 此处逻辑在生成器外处理，详见下方返回逻辑
-                    pass
 
         if body.stream:
             return StreamingResponse(response_generator(), media_type="text/event-stream")
         else:
-            # 对于非流式，我们需要先耗尽生成器来收集 full_content
-            # 或者为了简单起见，这里直接写一个非流式的请求逻辑
             async with httpx.AsyncClient(proxy=PROXY, verify=False, timeout=300.0) as client:
                 r = await client.post(
                     "https://biz-discoveryengine.googleapis.com/v1alpha/locations/global/widgetStreamAssist",
@@ -367,7 +367,8 @@ async def chat_completions(request: Request, body: ChatRequest, authorization: s
 
                 full_text = ""
                 media_files_non_stream = []
-                async for obj in parse_json_array_stream_async(r.text.splitlines()):
+                # 使用同步版解析器处理全量文本流
+                for obj in parse_json_array_stream(r.text.splitlines()):
                     replies = obj.get("streamAssistResponse", {}).get("answer", {}).get("replies", [])
                     for rep in replies:
                         content_obj = rep.get("groundedContent", {}).get("content", {})
@@ -385,22 +386,19 @@ async def chat_completions(request: Request, body: ChatRequest, authorization: s
                                 full_text += f"<think>\n{text}\n</think>\n\n"
                             else:
                                 full_text += text
-                                
+                
+                # 处理媒体
                 for idx, (fid, mime) in enumerate(media_files_non_stream):
                     try:
-                        logger.info(f"[MEDIA] 正在下载生成的媒体文件: {fid[:8]}...")
                         dl_url = f"https://biz-discoveryengine.googleapis.com/v1alpha/{session_name}:downloadFile?fileId={fid}&alt=media"
                         dl_resp = await client.get(dl_url, headers=headers, follow_redirects=True, timeout=120.0)
-                        dl_resp.raise_for_status()
                         b64_data = base64.b64encode(dl_resp.content).decode("utf-8")
-                        
                         if mime.startswith("video/"):
                             full_text += f"\n\n<video src='data:{mime};base64,{b64_data}' controls></video>\n\n"
                         else:
                             full_text += f"\n\n![Generated Image](data:{mime};base64,{b64_data})\n\n"
-                    except Exception as e:
-                        full_text += f"\n\n> ⚠️ 图片/视频下载失败: {e}\n\n"
-                
+                    except: pass
+
                 return {
                     "id": f"chatcmpl-{uuid.uuid4()}",
                     "object": "chat.completion",
