@@ -72,6 +72,7 @@ gb2api_install() {
     cp "$TAVX_DIR/modules/gb2api/app.py" "$GB2A_DIR/"
     cp "$TAVX_DIR/modules/gb2api/import_account.py" "$GB2A_DIR/"
     cp "$TAVX_DIR/modules/gb2api/check_accounts.py" "$GB2A_DIR/"
+    cp "$TAVX_DIR/modules/gb2api/delete_account.py" "$GB2A_DIR/"
 
     if ui_stream_task "创建 Python 虚拟环境..." "source \"$TAVX_DIR/core/python_utils.sh\"; create_venv_smart '$GB2A_VENV'"; then
         ui_print info "正在安装 Python 依赖..."
@@ -94,7 +95,18 @@ gb2api_install() {
 
 gb2api_start() {
     _gb2api_vars
+    
+    local needs_update=false
     if [ ! -d "$GB2A_DIR" ] || [ ! -f "$GB2A_ENV_CONF" ]; then
+        needs_update=true
+    elif [ "$TAVX_DIR/modules/gb2api/app.py" -nt "$GB2A_DIR/app.py" ] || \
+         [ "$TAVX_DIR/modules/gb2api/requirements.txt" -nt "$GB2A_DIR/requirements.txt" ] || \
+         [ "$TAVX_DIR/modules/gb2api/main.sh" -nt "$GB2A_DIR/app.py" ]; then
+        ui_print info "检测到代码库已更新，正在自动同步运行环境..."
+        needs_update=true
+    fi
+    
+    if $needs_update; then
         gb2api_install || return 1
     fi
     
@@ -178,7 +190,7 @@ gb2api_menu() {
         
         ui_status_card "$state" "$text" "${info[@]}"
         local CHOICE
-        CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🛑 停止服务" "🔍 账号监控" "🩺 环境诊断" "📥 导入账号" "⚙️  修改配置" "📜 查看日志" "⬇️  更新逻辑" "🗑️  卸载模块" "🧭 关于模块" "🔙 返回")
+        CHOICE=$(ui_menu "操作菜单" "🚀 启动服务" "🛑 停止服务" "🔍 账号监控" "🩺 环境诊断" "📥 导入账号" "🗑️  删除账号" "⚙️  修改配置" "📜 查看日志" "⬇️  更新逻辑" "🗑️  卸载模块" "🧭 关于模块" "🔙 返回")
         case "$CHOICE" in
             *"启动"*) gb2api_start; ui_pause ;; 
             *"停止"*) gb2api_stop; ui_print success "已停止"; ui_pause ;; 
@@ -194,6 +206,11 @@ gb2api_menu() {
                 # 动态补全脚本，防止文件丢失
                 [ ! -f "$GB2A_DIR/import_account.py" ] && cp "$TAVX_DIR/modules/gb2api/import_account.py" "$GB2A_DIR/"
                 cd "$GB2A_DIR" && "$GB2A_VENV/bin/python" import_account.py
+                ui_pause ;;
+            *"删除账号"*)
+                _gb2api_vars
+                [ ! -f "$GB2A_DIR/delete_account.py" ] && cp "$TAVX_DIR/modules/gb2api/delete_account.py" "$GB2A_DIR/"
+                cd "$GB2A_DIR" && "$GB2A_VENV/bin/python" delete_account.py
                 ui_pause ;;
             *"配置"*) 
                 # 简单编辑配置
