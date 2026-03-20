@@ -299,7 +299,7 @@ async def chat_completions(request: Request, body: ChatRequest, authorization: s
             return {"id": f"chatcmpl-{uuid.uuid4()}", "object": "chat.completion", "created": int(time.time()), "model": body.model, "choices": [{"index": 0, "message": {"role": "assistant", "content": full_text}, "finish_reason": "stop"}]}
 
     except Exception as e:
-        logger.error(f"[CHAT] Error: {e}")
+        logger.exception(f"[CHAT] 致命错误: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
