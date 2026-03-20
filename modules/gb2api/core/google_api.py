@@ -143,13 +143,14 @@ async def upload_context_file(
     session_name: str,
     mime_type: str,
     base64_content: str,
-    account_manager: "AccountManager",
+    jwt: str,
+    config_id: str,
+    account_id: str,
     http_client: httpx.AsyncClient,
     user_agent: str,
     request_id: str = ""
 ) -> str:
     """上传文件到指定 Session，返回 fileId"""
-    jwt = await account_manager.get_jwt(request_id)
     headers = get_common_headers(jwt, user_agent)
 
     # 生成随机文件名
@@ -157,7 +158,7 @@ async def upload_context_file(
     file_name = f"upload_{int(time.time())}_{uuid.uuid4().hex[:6]}.{ext}"
 
     body = {
-        "configId": account_manager.config.config_id,
+        "configId": config_id,
         "additionalParams": {"token": "-"},
         "addContextFileRequest": {
             "name": session_name,
@@ -176,7 +177,7 @@ async def upload_context_file(
 
     req_tag = f"[req_{request_id}] " if request_id else ""
     if r.status_code != 200:
-        logger.error(f"[FILE] [{account_manager.config.account_id}] {req_tag}文件上传失败: {r.status_code}")
+        logger.error(f"[FILE] [{account_id}] {req_tag}文件上传失败: {r.status_code}")
         error_text = r.text
         if r.status_code == 400:
             try:
@@ -192,7 +193,7 @@ async def upload_context_file(
 
     data = r.json()
     file_id = data.get("addContextFileResponse", {}).get("fileId")
-    logger.info(f"[FILE] [{account_manager.config.account_id}] {req_tag}文件上传成功: {mime_type}")
+    logger.info(f"[FILE] [{account_id}] {req_tag}文件上传成功: {mime_type}")
     return file_id
 
 
