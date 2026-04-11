@@ -77,17 +77,29 @@ cliproxyapi_install() {
 cliproxyapi_start() {
     _cp_vars
     [ ! -x "$CP_BIN" ] && { ui_print error "程序未安装或不可执行"; return 1; }
-    
+
+    if is_app_running "$CP_APP_ID"; then
+        ui_print warn "服务已在运行中"
+        return 0
+    fi
+
     if [ "$OS_TYPE" == "TERMUX" ]; then
         tavx_service_register "$CP_SVC_NAME" "./cli-proxy-api" "$CP_DIR"
         tavx_service_control "up" "$CP_SVC_NAME"
         ui_print success "服务启动命令已发送。"
     else
         cd "$CP_DIR" || return 1
-        cliproxyapi_stop
+        rm -f "$RUN_DIR/${CP_APP_ID}.pid"
         setsid nohup ./cli-proxy-api > "$CP_LOG" 2>&1 &
-        echo $! > "$RUN_DIR/${CP_APP_ID}.pid"
-        ui_print success "已在后台启动。"
+        local new_pid=$!
+        sleep 0.5
+        if kill -0 "$new_pid" 2>/dev/null; then
+            echo "$new_pid" > "$RUN_DIR/${CP_APP_ID}.pid"
+            ui_print success "已在后台启动 (PID: $new_pid)。"
+        else
+            ui_print error "启动失败，请查看日志: $CP_LOG"
+            return 1
+        fi
     fi
 }
 
