@@ -149,6 +149,7 @@ while true; do
     FINAL_OPTS+=(
         "📂 我的应用"
         "🛒 应用商城"
+        "✨ Echo AI 角色扮演"
         "$OPT_UPD"
         "📦 迁移旧版数据"
         "⚙️  系统设置"
@@ -185,6 +186,61 @@ while true; do
     case "$CHOICE" in
         *"我的应用"*) app_drawer_menu ;; 
         *"应用商城"*) app_store_menu ;; 
+        *"Echo AI"*)
+            local url="https://hlo.lol"
+            clear
+            if [ "$HAS_GUM" = true ]; then
+                "$GUM_BIN" format << 'MD'
+# ✨ Echo —— 我做的新项目，来玩玩？
+
+大家好，我是 Future 404，TAV-X 的作者。
+
+最近我做了一个新项目叫 **Echo**，想跟老朋友们分享一下 👇
+
+---
+
+## 它是什么？
+
+一个 **纯前端的 AI 角色扮演框架**，不需要服务器，不需要部署，
+打开浏览器就能用，数据全存在你自己的设备上。
+
+---
+
+## 有什么好玩的？
+
+- 📱 **扩展应用生态** —— 自己手搓 AI 应用，比如让角色拥有一部真实的手机
+- 🃏 **完整角色卡支持** —— PNG / JSON V2、世界书、正则全部兼容
+- 🎨 **全局 CSS 自定义** —— 界面想长什么样你说了算
+- 🧠 **向量记忆库** —— 让她真的记住你说过的话
+- 🤖 **内置写卡 Agent** —— 说一句话，AI 帮你写好角色卡并导出 PNG
+
+---
+
+从 ST 迁过来几乎零成本，欢迎来玩 🎉
+MD
+            else
+                echo ""
+                echo "  ✨ Echo —— 我做的新项目，来玩玩？"
+                echo "  ─────────────────────────────────"
+                echo "  纯前端 AI 角色扮演框架，无需服务器，打开浏览器即用。"
+                echo ""
+                echo "  • 扩展应用生态（手搓 AI 应用）"
+                echo "  • PNG/JSON V2 角色卡完整支持"
+                echo "  • 全局 CSS 自定义界面"
+                echo "  • 向量记忆库"
+                echo "  • 内置写卡 Agent"
+                echo ""
+            fi
+            local ACT
+            ACT=$(ui_menu "Echo AI 角色扮演" "🚀 立即体验" "🔙 返回")
+            if [[ "$ACT" == *"立即体验"* ]]; then
+                if command -v termux-open-url &>/dev/null; then
+                    termux-open-url "$url"
+                else
+                    xdg-open "$url" 2>/dev/null || ui_print info "请手动访问: $url"
+                fi
+            fi
+            ;;
         *"检查脚本更新"*) perform_self_update ;; 
         *"迁移旧版数据"*) migrate_legacy_apps ;; 
         *"系统设置"*) system_settings_menu ;; 
