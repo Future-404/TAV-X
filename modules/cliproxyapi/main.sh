@@ -52,7 +52,7 @@ cliproxyapi_install() {
     # 3. 编译二进制文件
     cd "$CP_DIR" || return 1
     ui_print info "正在编译二进制文件 (这可能需要一点时间)..."
-    if ! ui_stream_task "正在编译..." "go build -o cli-proxy-api ./cmd/server"; then
+    if ! ui_stream_task "正在编译..." "export CGO_ENABLED=0; go build -ldflags='-s -w' -o cli-proxy-api ./cmd/server"; then
         ui_print error "编译失败，请检查错误输出。"
         return 1
     fi
@@ -83,6 +83,9 @@ cliproxyapi_start() {
         return 0
     fi
 
+    # 启动前强制清理残留
+    cliproxyapi_stop
+
     if [ "$OS_TYPE" == "TERMUX" ]; then
         tavx_service_register "$CP_SVC_NAME" "./cli-proxy-api" "$CP_DIR"
         tavx_service_control "up" "$CP_SVC_NAME"
@@ -107,6 +110,8 @@ cliproxyapi_stop() {
     _cp_vars
     if [ "$OS_TYPE" == "TERMUX" ]; then
         tavx_service_control "down" "$CP_SVC_NAME"
+        # 暴力清理 Termux 下可能的卡死进程
+        pkill -9 -f "cli-proxy-api" >/dev/null 2>&1
     else
         kill_process_safe "$RUN_DIR/${CP_APP_ID}.pid" "cli-proxy-api"
     fi

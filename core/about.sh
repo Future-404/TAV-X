@@ -6,11 +6,11 @@ GROUP_QQ="616353694"
 CONTACT_EMAIL="future_404@outlook.com"
 PROJECT_URL="https://github.com/Future-404/TAV-X"
 SLOGAN="别让虚拟的温柔，偷走了你在现实里本该拥有的温暖。"
-UPDATE_SUMMARY="v3.4.2 (Beta Feature Update)
-  1. [新增] Gemini Business 2 OpenAI 接口网关模块 (Testing Phase)
-  2. [新增] 模块内置智能账号导入逻辑，支持三段式手动导入
-  3. [优化] 核心服务启动逻辑，解决 nohup 模式下 PID 获取异常
-  4. [优化] 依赖管理机制，提供针对轻量级模块的精简版依赖安装"
+UPDATE_SUMMARY="v3.4.8 (Core Stability Fix)
+  1. [修复] CLIProxyAPI 在 Termux 下的启动稳定性，强制清理僵尸进程
+  2. [优化] 核心服务注册逻辑，支持包含空格的复杂工作目录路径
+  3. [优化] 模块编译参数，禁用 CGO 以实现跨 Termux 版本兼容性
+  4. [增强] 运行状态检测机制，支持服务管理器状态漂移下的进程级兜底"
 
 show_shortcuts_help() {
     ui_header "快捷指令用法"

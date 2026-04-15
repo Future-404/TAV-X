@@ -381,7 +381,7 @@ tavx_service_register() {
         cat > "$sv_dir/run" <<EOF
 #!/data/data/com.termux/files/usr/bin/bash
 exec 2>&1
-cd $work_dir || exit 1
+cd "$work_dir" || exit 1
 exec $run_cmd
 EOF
         chmod +x "$sv_dir/run"
@@ -436,8 +436,10 @@ is_app_running() {
     if [ "$OS_TYPE" == "TERMUX" ]; then
         if sv status "$id" 2>/dev/null | grep -q "^run:"; then return 0; fi
         
-        if [ "$id" == "cloudflare" ]; then
-            pgrep -f "cloudflared" >/dev/null 2>&1 && return 0
+        if [[ "$id" == "cloudflare" || "$id" == "cliproxyapi" ]]; then
+            local pattern="cloudflared"
+            [ "$id" == "cliproxyapi" ] && pattern="cli-proxy-api"
+            pgrep -f "$pattern" >/dev/null 2>&1 && return 0
             return 1
         fi
         
