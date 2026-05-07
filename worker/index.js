@@ -25,7 +25,10 @@ export default {
       if (!ghRes.ok) throw new Error("GitHub Error");
       
       const originalScript = await ghRes.text();
-      const injectedScript = "export TAVX_INSTALLER_MODE=true\n" + originalScript;
+      const injectedScript = originalScript.replace(
+        /^(#!\/bin\/bash\n)/,
+        '$1export TAVX_INSTALLER_MODE=true\n'
+      );
       
       return new Response(injectedScript, { 
         headers: { 'content-type': 'text/plain;charset=UTF-8' } 
