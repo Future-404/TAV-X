@@ -180,12 +180,15 @@ cf_login() {
         
         local latest_file=""
         for pattern in "${scan_paths[@]}"; do
+            local dir
+            dir=$(dirname "$pattern")
+            local name
+            name=$(basename "$pattern")
+            [ ! -d "$dir" ] && continue
             local found
-            found=$(find "$(dirname "$pattern")" -maxdepth 1 -name "$(basename "$pattern")" -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n 1 | cut -d' ' -f2-)
-            if [ -n "$found" ]; then
-                if [ -z "$latest_file" ] || [ "$found" -nt "$latest_file" ]; then
-                    latest_file="$found"
-                fi
+            found=$(find "$dir" -maxdepth 1 -name "$name" 2>/dev/null | xargs ls -t 2>/dev/null | head -n 1)
+            if [ -n "$found" ] && { [ -z "$latest_file" ] || [ "$found" -nt "$latest_file" ]; }; then
+                latest_file="$found"
             fi
         done
         
