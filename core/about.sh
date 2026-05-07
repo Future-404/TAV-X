@@ -6,11 +6,13 @@ GROUP_QQ="616353694"
 CONTACT_EMAIL="future_404@outlook.com"
 PROJECT_URL="https://github.com/Future-404/TAV-X"
 SLOGAN="别让虚拟的温柔，偷走了你在现实里本该拥有的温暖。"
-UPDATE_SUMMARY="v3.4.8 (Core Stability Fix)
-  1. [修复] CLIProxyAPI 在 Termux 下的启动稳定性，强制清理僵尸进程
-  2. [优化] 核心服务注册逻辑，支持包含空格的复杂工作目录路径
-  3. [优化] 模块编译参数，禁用 CGO 以实现跨 Termux 版本兼容性
-  4. [增强] 运行状态检测机制，支持服务管理器状态漂移下的进程级兜底"
+UPDATE_SUMMARY="v3.4.9 (Cloudflare Module Enhancement)
+  1. [新增] Cloudflare 隧道模块支持查看使用文档 (📖 使用文档)
+  2. [优化] 切换账号登录时明确提示旧隧道将失效，避免误操作
+  3. [优化] DNS 路由绑定失败时提示常见原因（域名未托管在当前账号）
+
+  🔧 重新安装/更新脚本:
+  curl -v -L https://tav-x.rka.qzz.io"
 
 show_shortcuts_help() {
     ui_header "快捷指令用法"
