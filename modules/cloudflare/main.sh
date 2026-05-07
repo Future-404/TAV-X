@@ -167,6 +167,11 @@ cf_login() {
     
     if [ ! -f "$CF_USER_DATA/cert.pem" ]; then
         ui_print info "正在自动扫描下载目录..."
+        if [ "$OS_TYPE" == "TERMUX" ] && [ ! -d "$HOME/storage/downloads" ]; then
+            ui_print warn "需要存储权限才能扫描下载目录，正在申请..."
+            termux-setup-storage
+            sleep 3
+        fi
         local scan_paths=(
             "$HOME/storage/downloads/cert*.pem"
             "$HOME/downloads/cert*.pem"
