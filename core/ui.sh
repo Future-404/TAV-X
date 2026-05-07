@@ -381,6 +381,22 @@ ui_pause() {
 }
 export -f ui_pause
 
+ui_show_doc() {
+    local doc_file="$1"
+    local title="${2:-文档}"
+    if [ ! -f "$doc_file" ]; then
+        ui_print error "文档文件不存在: $doc_file"
+        ui_pause
+        return
+    fi
+    if [ "$HAS_GUM" = true ]; then
+        "$GUM_BIN" pager --show-line-numbers < "$doc_file"
+    else
+        less -R "$doc_file"
+    fi
+}
+export -f ui_show_doc
+
 ui_watch_log() {
     local app_id="$1"
     local log_path=""

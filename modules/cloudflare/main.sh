@@ -124,8 +124,8 @@ cf_login() {
     esac
     
     if [ -f "$CF_USER_DATA/cert.pem" ]; then
-        ui_print warn "检测到已存在登录凭证。"
-        if ! ui_confirm "重新授权将覆盖现有证书，确定吗？"; then return 0; fi
+        ui_print warn "检测到已存在登录凭证。切换账号后，旧账号下的所有隧道将无法使用！"
+        if ! ui_confirm "确认切换账号？(旧凭证将被删除且不可恢复)"; then return 0; fi
         rm -f "$CF_USER_DATA/cert.pem"
     fi
     
@@ -267,7 +267,7 @@ cf_add_ingress() {
     if ui_stream_task "配置 DNS 路由..." "\"$CF_BIN\" tunnel route dns \"$name\" \"$domain\" "; then
         ui_print success "DNS 记录已添加。"
     else
-        ui_print error "DNS 绑定失败，请检查域名权限。"
+        ui_print error "DNS 绑定失败 (常见原因: 域名未托管在当前账号的 Cloudflare 下，或授权时选择的域名与此域名不符)。"
         if ! ui_confirm "是否强制写入本地配置？(可能导致隧道报错)"; then return 1; fi
     fi
     
@@ -667,6 +667,7 @@ cf_menu() {
             "🧹 扫描并清理孤儿 DNS" \
             "🛑 停止所有服务" \
             "🗑️  卸载/重置模块" \
+            "📖 使用文档" \
             "🧭 关于模块" \
             "🔙 返回"
         )
@@ -695,6 +696,7 @@ cf_menu() {
                     return 2
                 fi ;; 
             *"关于"*) show_module_about_info "${BASH_SOURCE[0]}" ;; 
+            *"文档"*) ui_show_doc "$TAVX_DIR/modules/cloudflare/README.md" "Cloudflare 隧道使用文档" ;; 
             *"返回"*) return ;; 
         esac
     done
