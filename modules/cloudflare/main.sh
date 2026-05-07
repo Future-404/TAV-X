@@ -275,7 +275,17 @@ cf_add_ingress() {
     if ui_stream_task "配置 DNS 路由..." "\"$CF_BIN\" tunnel route dns \"$name\" \"$domain\" "; then
         ui_print success "DNS 记录已添加。"
     else
-        ui_print error "DNS 绑定失败 (常见原因: 域名未托管在当前账号的 Cloudflare 下，或授权时选择的域名与此域名不符)。"
+        ui_print error "DNS 绑定失败 (code: 1003)"
+        echo ""
+        echo -e "  ${YELLOW}可能原因:${NC}"
+        echo -e "  1. 域名 ${CYAN}$domain${NC} 未托管在当前 Cloudflare 账号下"
+        echo -e "  2. 登录授权时选择的域名与此域名不一致"
+        echo -e "  3. 域名刚转入 Cloudflare，Zone 状态仍为 Pending"
+        echo ""
+        echo -e "  ${YELLOW}解决方法:${NC}"
+        echo -e "  → 登录 ${CYAN}dash.cloudflare.com${NC} 确认域名状态为 Active"
+        echo -e "  → 返回菜单重新执行 ${CYAN}🔐 Tunnel 登录授权${NC}，授权时选择正确的域名"
+        echo ""
         if ! ui_confirm "是否强制写入本地配置？(可能导致隧道报错)"; then return 1; fi
     fi
     
