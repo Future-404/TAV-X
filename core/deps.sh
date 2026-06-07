@@ -160,13 +160,65 @@ install_python_system() {
 check_node_version() {
     if ! command -v node &> /dev/null; then return 1; fi
     
-    local ver; ver=$(node -v | tr -d 'v' | cut -d '.' -f 1)
+    # Try to actually run node; capture stderr to detect linker errors
+    local node_output
+    node_output=$(node -v 2>&1)
+    local node_exit=$?
+    
+    # Detect OpenSSL linking failure (common Termux issue)
+    if echo "$node_output" | grep -qi "cannot link\|OSSL_PROVIDER\|cannot locate symbol"; then
+        export _NODE_OPENSSL_BROKEN=true
+        return 1
+    fi
+    
+    # If node -v failed for any other reason, treat as broken
+    if [ $node_exit -ne 0 ]; then
+        return 1
+    fi
+    
+    local ver; ver=$(echo "$node_output" | tr -d 'v' | cut -d '.' -f 1)
     
     if [ -z "$ver" ] || [ "$ver" -lt 20 ]; then
         return 1
     fi
     return 0
 }
+
+repair_node_openssl() {
+    # Repairs the OpenSSL <-> Node.js ABI mismatch in Termux.
+    # This happens when pkg partially upgrades openssl or nodejs,
+    # leaving them out of sync.
+    ui_print warn "检测到 Node.js 与 OpenSSL 库版本不匹配 (链接错误)"
+    ui_print info "正在尝试自动修复: 重新同步 openssl 与 nodejs ..."
+    
+    local REPAIR_CMD="pkg install -y openssl nodejs && pkg upgrade -y openssl nodejs"
+    if ui_stream_task "修复 OpenSSL / Node.js 链接问题..." "$REPAIR_CMD"; then
+        # Verify the fix worked
+        local verify_output
+        verify_output=$(node -v 2>&1)
+        if echo "$verify_output" | grep -qi "cannot link\|OSSL_PROVIDER\|cannot locate symbol"; then
+            ui_print warn "首次修复未生效，尝试强制重装 ..."
+            local FORCE_CMD="pkg reinstall -y openssl openssl-tool nodejs"
+            if ui_stream_task "强制重装 OpenSSL 与 Node.js ..." "$FORCE_CMD"; then
+                verify_output=$(node -v 2>&1)
+                if echo "$verify_output" | grep -qi "cannot link\|OSSL_PROVIDER\|cannot locate symbol"; then
+                    ui_print error "自动修复失败。请手动执行: pkg upgrade && pkg reinstall openssl nodejs"
+                    return 1
+                fi
+            else
+                ui_print error "强制重装失败，请检查网络后重试。"
+                return 1
+            fi
+        fi
+        unset _NODE_OPENSSL_BROKEN
+        ui_print success "OpenSSL 链接问题已修复！Node.js 版本: $verify_output"
+        return 0
+    else
+        ui_print error "修复失败，请手动执行: pkg upgrade && pkg reinstall openssl nodejs"
+        return 1
+    fi
+}
+export -f repair_node_openssl
 
 setup_nodesource() {
     ui_print info "正在配置 NodeSource 源..."
@@ -239,7 +291,11 @@ EOF
             
             if [ "$cmd" == "node" ]; then
                 if ! check_node_version; then
-                    if [ "$OS_TYPE" == "TERMUX" ]; then MISSING_PKGS="$MISSING_PKGS $pkg_termux"
+                    if [ "$_NODE_OPENSSL_BROKEN" == "true" ] && [ "$OS_TYPE" == "TERMUX" ]; then
+                        # OpenSSL linking issue detected — attempt targeted repair
+                        repair_node_openssl || ALL_FOUND=false
+                    elif [ "$OS_TYPE" == "TERMUX" ]; then
+                        MISSING_PKGS="$MISSING_PKGS $pkg_termux"
                     else
                         [ "$NEEDS_UI" == "false" ] && ui_header "环境初始化"
                         echo -e "${YELLOW}Node.js 版本过低或未安装，正在配置 NodeSource...${NC}"
