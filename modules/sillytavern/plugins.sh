@@ -51,6 +51,7 @@ app_plugin_install_single() {
         safe_rm "$ST_DIR/plugins/$dir"
         if ! git_clone_smart "$b_arg" "$repo_path" "$ST_DIR/plugins/$dir"; then
             ui_print error "插件核心文件下载失败。"
+            ui_print info "提示：如果直连 GitHub 失败，请在 [系统设置 -> 网络设置] 中测试并启用加速镜像源。"
             ui_pause; return
         fi
     fi
@@ -60,6 +61,7 @@ app_plugin_install_single() {
         safe_rm "$ST_DIR/public/scripts/extensions/third-party/$dir"
         if ! git_clone_smart "$b_arg" "$repo_path" "$ST_DIR/public/scripts/extensions/third-party/$dir"; then
             ui_print error "插件前端扩展下载失败。"
+            ui_print info "提示：如果直连 GitHub 失败，请在 [系统设置 -> 网络设置] 中测试并启用加速镜像源。"
             ui_pause; return
         fi
     fi
