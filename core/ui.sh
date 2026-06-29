@@ -130,23 +130,40 @@ ui_menu() {
         "$GUM_BIN" choose --header="" --cursor="👉 " --cursor.foreground "$C_PINK" --selected.foreground "$C_PINK" -- "$@"
     else
         echo -e "\n${CYAN}[ $header ]${NC}" >&2
-        local i=1
         local options=("$@")
+        local back_idx=0
+        local idx=1
         for opt in "${options[@]}"; do
-            echo -e "  ${YELLOW}$i.${NC} $opt" >&2
+            if [[ "$opt" == *"返回"* || "$opt" == *"取消"* || "$opt" == *"退出"* || "$opt" == *"Back"* || "$opt" == *"Cancel"* || "$opt" == *"Exit"* ]]; then
+                back_idx=$idx
+            fi
+            ((idx++))
+        done
+
+        local i=1
+        for opt in "${options[@]}"; do
+            if [ "$i" -eq "$back_idx" ]; then
+                echo -e "  ${YELLOW}0.${NC} $opt" >&2
+            else
+                echo -e "  ${YELLOW}$i.${NC} $opt" >&2
+            fi
             ((i++))
         done
         
-        local idx
+        local user_idx
         while true; do
             echo -n -e "\n  ${BLUE}➜${NC} 请输入编号: " >&2
-            read -r idx
-            if [[ "$idx" =~ ^[0-9]+$ ]] && [ "$idx" -ge 1 ] && [ "$idx" -le "${#options[@]}" ]; then
+            read -r user_idx
+            if [ "$user_idx" = "0" ] && [ "$back_idx" -gt 0 ]; then
+                 user_idx=$back_idx
+                 break
+            fi
+            if [[ "$user_idx" =~ ^[0-9]+$ ]] && [ "$user_idx" -ge 1 ] && [ "$user_idx" -le "${#options[@]}" ]; then
                  break
             fi
             echo -e "  ${RED}✘ 无效选择，请重试。${NC}" >&2
         done
-        echo "${options[$((idx-1))]}"
+        echo "${options[$((user_idx-1))]}"
     fi
 }
 export -f ui_menu

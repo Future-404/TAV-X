@@ -137,12 +137,28 @@ ui.menu = (title, options) => {
     }
 
     if (title) console.log(`\n${C_CYAN}[ ${title} ]${nc}`);
-    options.forEach((opt, i) => console.log(`  ${yellow}${i + 1}.${nc} ${opt}`));
+    
+    let backIdx = 0;
+    options.forEach((opt, i) => {
+        if (opt.includes('返回') || opt.includes('取消') || opt.includes('退出') || 
+            opt.toLowerCase().includes('back') || opt.toLowerCase().includes('cancel') || opt.toLowerCase().includes('exit')) {
+            backIdx = i + 1;
+        }
+    });
+
+    options.forEach((opt, i) => {
+        const num = (i + 1) === backIdx ? 0 : (i + 1);
+        console.log(`  ${yellow}${num}.${nc} ${opt}`);
+    });
     
     while(true) {
         process.stdout.write(`\n  ${blue}➜${nc} 请输入编号: `);
         const input = readLineSync();
-        const idx = parseInt(input);
+        let idx = parseInt(input);
+        
+        if (input === '0' && backIdx > 0) {
+            idx = backIdx;
+        }
         
         if (!isNaN(idx) && idx >= 1 && idx <= options.length) {
             return options[idx - 1];

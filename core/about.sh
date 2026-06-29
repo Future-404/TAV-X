@@ -83,17 +83,17 @@ show_about_page() {
     if [ "$HAS_GUM" = true ]; then
         ACTION=$("$GUM_BIN" choose "🔙 返回主菜单" "⌨️ 快捷指令用法" "🛡️ Project Aegis (Alpha)" "🔥 加入 Q 群" "🐙 GitHub 项目主页")
     else
-        echo "1. 返回主菜单"
-        echo "2. ⌨️  快捷指令用法"
-        echo "3. 🛡️  Project Aegis (Alpha)"
-        echo "4. 一键加入 Q 群"
-        echo "5. 打开 GitHub 项目主页"
+        echo "0. 返回主菜单"
+        echo "1. ⌨️  快捷指令用法"
+        echo "2. 🛡️  Project Aegis (Alpha)"
+        echo "3. 一键加入 Q 群"
+        echo "4. 打开 GitHub 项目主页"
         read -r -p "请选择: " idx
         case "$idx" in
-            "2") ACTION="快捷指令" ;;
-            "3") ACTION="Project Aegis" ;;
-            "4") ACTION="加入 Q 群" ;;
-            "5") ACTION="GitHub" ;;
+            "1") ACTION="快捷指令" ;;
+            "2") ACTION="Project Aegis" ;;
+            "3") ACTION="加入 Q 群" ;;
+            "4") ACTION="GitHub" ;;
             *)   ACTION="返回" ;;
         esac
     fi
