@@ -6,7 +6,7 @@
 # APP_CATEGORY: AIBOX
 # APP_AUTHOR: friuns2
 # APP_PROJECT_URL: https://github.com/friuns2/codex-mobile
-# APP_DESC: 专为移动端 (Termux) 与 Linux/Windows 设计的 Codex 远程 Web UI 界面，提供极简网页控制面板与内置终端。
+# APP_DESC: 专为移动端 (Termux) 与 Linux/Windows 设计的 Codex 远程 Web UI 界面，基于原作者预编译包，免本地构建秒速启动。
 # [END_METADATA]
 
 source "$TAVX_DIR/core/env.sh"
@@ -19,6 +19,7 @@ _codexmobile_vars() {
     CM_LOG="$LOGS_DIR/codexmobile.log"
     CM_PID="$RUN_DIR/codexmobile.pid"
     CM_ENV_CONF="$CONFIG_DIR/codexmobile.env"
+    CM_CLI_BIN="$CM_DIR/node_modules/codexapp/dist-cli/index.js"
     mkdir -p "$CM_DIR"
 }
 
@@ -50,49 +51,7 @@ codexmobile_install() {
     _codexmobile_vars
     ui_header "安装 Codex Mobile (Web UI)"
 
-    local GIT_REPO="https://github.com/friuns2/codex-mobile.git"
-
-    if ! command -v git &> /dev/null; then
-        ui_print warn "未检测到 git，正在安装..."
-        sys_install_pkg "git" || return 1
-    fi
-
-    prepare_network_strategy
-    
-    local do_install=true
-
-    if [ -d "$CM_DIR" ] && [ -d "$CM_DIR/.git" ]; then
-        if ui_confirm "检测到已安装 Codex Mobile，是否更新源码？\n[No] 将清除并重新克隆安装"; then
-            cd "$CM_DIR" || return 1
-            local remote_url
-            remote_url=$(get_dynamic_repo_url "$GIT_REPO")
-            if ui_stream_task "正在更新源码..." "git pull --autostash '$remote_url'"; then
-                ui_print success "源码更新成功。"
-                do_install=false
-            else
-                ui_print error "更新失败，将重新安装。"
-                safe_rm "$CM_DIR"
-            fi
-        else
-            safe_rm "$CM_DIR"
-        fi
-    elif [ -d "$CM_DIR" ]; then
-        ui_print warn "发现残留目录，正在清理重装..."
-        safe_rm "$CM_DIR"
-    fi
-
-    if [ "$do_install" = true ]; then
-        if git_clone_smart "" "$GIT_REPO" "$CM_DIR"; then
-            ui_print success "仓库拉取完成。"
-        else
-            ui_print error "Git 克隆失败，请检查网络设置。"
-            ui_pause; return 1
-        fi
-    fi
-
-    ui_print info "检查 Node.js 环境 (推荐 >= 18)..."
-    cd "$CM_DIR" || return 1
-    
+    ui_print info "检查 Node.js 环境 (要求 >= 18)..."
     local node_ok=false
     if command -v node &> /dev/null; then
         local node_ver
@@ -113,31 +72,21 @@ codexmobile_install() {
         fi
     fi
 
-    if [ "$OS_TYPE" == "TERMUX" ]; then
-        if ! command -v clang &> /dev/null || ! command -v make &> /dev/null; then
-            ui_print info "Termux 环境: 补充 C/C++ 依赖工具 (node-pty 原生编译所需)..."
-            sys_install_pkg "clang" "make" "python"
-        fi
-    elif command -v apt-get &> /dev/null; then
-        if ! dpkg -s build-essential &> /dev/null; then
-            ui_print info "Linux 环境: 补充 build-essential 工具..."
-            sys_install_pkg "build-essential"
-        fi
+    prepare_network_strategy
+
+    ui_print info "正在下载并部署原作者预编译发行包 (codexapp)..."
+    cd "$CM_DIR" || return 1
+
+    # 创建基础 package.json 避免 npm 安装报错
+    if [ ! -f "$CM_DIR/package.json" ]; then
+        echo '{"name":"tavx-codexmobile-app","private":true}' > "$CM_DIR/package.json"
     fi
 
-    ui_print info "开始安装依赖并构建应用..."
-    local BUILD_CMD
-    if command -v pnpm &> /dev/null; then
-        pnpm config set onlyBuiltDependencies node-pty esbuild @firebase/util protobufjs 2>/dev/null || true
-        BUILD_CMD="(pnpm install --config.onlyBuiltDependencies=node-pty,esbuild,@firebase/util,protobufjs || npm install) && (pnpm run build:frontend || npm run build:frontend) && (pnpm run build:cli || npm run build:cli)"
+    local INSTALL_CMD="npm install codexapp@latest --no-audit --no-fund"
+    if ui_stream_task "部署 Codex Mobile 预编译包..." "$INSTALL_CMD"; then
+        ui_print success "Codex Mobile 发行包部署完成！"
     else
-        BUILD_CMD="npm install && npm run build:frontend && npm run build:cli"
-    fi
-
-    if ui_stream_task "正在构建 Codex Mobile..." "$BUILD_CMD"; then
-        ui_print success "依赖安装与前端构建完成！"
-    else
-        ui_print error "构建失败，请检查网络或依赖环境。"
+        ui_print error "下载部署失败，请检查网络设置。"
         ui_pause; return 1
     fi
 
@@ -146,15 +95,15 @@ codexmobile_install() {
         ui_print success "已生成默认配置文件 ($CM_ENV_CONF)"
     fi
 
-    ui_print success "Codex Mobile 安装成功！"
+    ui_print success "Codex Mobile 安装成功！(免本地编译)"
 }
 
 codexmobile_start() {
     _codexmobile_vars
     _codexmobile_load_env
 
-    if [ ! -f "$CM_DIR/package.json" ] || [ ! -f "$CM_DIR/dist-cli/index.js" ]; then
-        if ui_confirm "未检测到已构建的 Codex Mobile，是否立即安装？"; then
+    if [ ! -f "$CM_CLI_BIN" ]; then
+        if ui_confirm "未检测到 Codex Mobile 组件，是否立即安装？"; then
             codexmobile_install || return 1
         else
             return 1
@@ -174,7 +123,7 @@ codexmobile_start() {
         ARGS+=("--no-login")
     fi
 
-    local RUN_CMD="node dist-cli/index.js ${ARGS[*]}"
+    local RUN_CMD="node '$CM_CLI_BIN' ${ARGS[*]}"
 
     if [ "$OS_TYPE" == "TERMUX" ]; then
         if command -v termux-wake-lock &> /dev/null; then
@@ -335,7 +284,7 @@ codexmobile_menu() {
             "⚙️ 参数配置" \
             "📜 查看日志" \
             "⚡ (Termux) 保持CPU唤醒锁" \
-            "📥 重装/更新源码" \
+            "📥 重装/更新至最新发布包" \
             "🗑️  卸载模块" \
             "🧭 关于模块" \
             "🔙 返回")
