@@ -114,7 +114,7 @@ codexmobile_start() {
 
     cd "$CM_DIR" || return 1
 
-    local ARGS=("--port" "$CM_PORT" "--host" "$CM_BIND_HOST")
+    local ARGS=("--port" "$CM_PORT" "--no-open")
     if [ "$CM_ENABLE_TUNNEL" != "true" ]; then
         ARGS+=("--no-tunnel")
     fi
@@ -182,7 +182,6 @@ codexmobile_config_menu() {
     while true; do
         ui_header "⚙️ Codex Mobile 参数配置"
         echo -e "当前端口 : ${GREEN}${CM_PORT}${NC}"
-        echo -e "绑定地址 : ${GREEN}${CM_BIND_HOST}${NC}"
         echo -e "Cloudflare 隧道 : ${GREEN}${CM_ENABLE_TUNNEL}${NC}"
         echo -e "免登录模式 (--no-login): ${GREEN}${CM_SKIP_LOGIN}${NC}"
         echo ""
@@ -190,9 +189,8 @@ codexmobile_config_menu() {
         local CHOICE
         CHOICE=$(ui_menu "选择要修改的设置" \
             "1. 修改服务端口 [当前: $CM_PORT]" \
-            "2. 修改监听网卡 [当前: $CM_BIND_HOST]" \
-            "3. 切换 Cloudflare 隧道模式 [当前: $CM_ENABLE_TUNNEL]" \
-            "4. 切换免登录模式 (--no-login) [当前: $CM_SKIP_LOGIN]" \
+            "2. 切换 Cloudflare 隧道模式 [当前: $CM_ENABLE_TUNNEL]" \
+            "3. 切换免登录模式 (--no-login) [当前: $CM_SKIP_LOGIN]" \
             "💾 保存并返回")
 
         case "$CHOICE" in
@@ -208,14 +206,6 @@ codexmobile_config_menu() {
                 fi
                 ;;
             *"2."*)
-                local input_host
-                input_host=$(ui_input "输入监听地址 (如 0.0.0.0 或 127.0.0.1)" "$CM_BIND_HOST")
-                if [ -n "$input_host" ]; then
-                    CM_BIND_HOST="$input_host"
-                    ui_print success "绑定地址设置为: $CM_BIND_HOST"
-                fi
-                ;;
-            *"3."*)
                 if [ "$CM_ENABLE_TUNNEL" == "true" ]; then
                     CM_ENABLE_TUNNEL="false"
                 else
@@ -223,7 +213,7 @@ codexmobile_config_menu() {
                 fi
                 ui_print success "Cloudflare 隧道已设置为: $CM_ENABLE_TUNNEL"
                 ;;
-            *"4."*)
+            *"3."*)
                 if [ "$CM_SKIP_LOGIN" == "true" ]; then
                     CM_SKIP_LOGIN="false"
                 else
