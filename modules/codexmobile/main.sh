@@ -25,19 +25,18 @@ _codexmobile_vars() {
 
 _codexmobile_load_env() {
     _codexmobile_vars
-    CM_PORT="18923"
-    CM_BIND_HOST="0.0.0.0"
-    CM_ENABLE_TUNNEL="false"
-    CM_SKIP_LOGIN="true"
-
     if [ -f "$CM_ENV_CONF" ]; then
         # shellcheck disable=SC1090
         source "$CM_ENV_CONF"
     fi
+    [ -z "$CM_PORT" ] && CM_PORT="18923"
+    [ -z "$CM_BIND_HOST" ] && CM_BIND_HOST="0.0.0.0"
+    [ -z "$CM_ENABLE_TUNNEL" ] && CM_ENABLE_TUNNEL="false"
+    [ -z "$CM_SKIP_LOGIN" ] && CM_SKIP_LOGIN="true"
 }
 
 _codexmobile_save_env() {
-    _codexmobile_vars
+    _codexmobile_load_env
     cat <<EOF > "$CM_ENV_CONF"
 # Codex Mobile Configuration
 CM_PORT="$CM_PORT"
