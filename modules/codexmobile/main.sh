@@ -233,6 +233,25 @@ codexmobile_config_menu() {
     done
 }
 
+codexmobile_login() {
+    _codexmobile_vars
+    if [ ! -f "$CM_CLI_BIN" ]; then
+        ui_print error "请先安装 Codex Mobile 模块。"
+        ui_pause; return 1
+    fi
+
+    ui_header "🔑 Codex 账号授权登录"
+    ui_print info "即将启动官方 Codex 授权交互流程..."
+    echo -e "${YELLOW}提示: 请按照终端提示在浏览器中完成登录与 Token 绑定。${NC}"
+    echo ""
+
+    auto_load_proxy_env
+    cd "$CM_DIR" || return 1
+
+    node "$CM_CLI_BIN" login
+    ui_pause
+}
+
 codexmobile_menu() {
     while true; do
         _codexmobile_vars
@@ -268,6 +287,7 @@ codexmobile_menu() {
         local CHOICE
         CHOICE=$(ui_menu "请选择操作" \
             "🚀 启动服务" \
+            "🔑 账号登录 / 授权" \
             "🛑 停止服务" \
             "🔄 重启服务" \
             "⚙️ 参数配置" \
@@ -281,6 +301,8 @@ codexmobile_menu() {
         case "$CHOICE" in
             *"启动"*)
                 codexmobile_start; ui_pause ;;
+            *"登录"*)
+                codexmobile_login ;;
             *"停止"*)
                 codexmobile_stop; ui_print success "已发出停止指令"; ui_pause ;;
             *"重启"*)
