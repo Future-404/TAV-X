@@ -125,8 +125,19 @@ codexmobile_install() {
         fi
     fi
 
+    ui_print info "检查构建包管理器 (pnpm)..."
+    if ! command -v pnpm &> /dev/null; then
+        ui_print info "正在自动安装 pnpm..."
+        npm install -g pnpm 2>/dev/null || true
+    fi
+
     ui_print info "开始安装依赖并构建应用..."
-    local BUILD_CMD="npm install && npm run build:frontend && npm run build:cli"
+    local BUILD_CMD
+    if command -v pnpm &> /dev/null; then
+        BUILD_CMD="pnpm install && pnpm run build:frontend && pnpm run build:cli"
+    else
+        BUILD_CMD="npm install && npm run build:frontend && npm run build:cli"
+    fi
 
     if ui_stream_task "正在构建 Codex Mobile..." "$BUILD_CMD"; then
         ui_print success "依赖安装与前端构建完成！"
