@@ -233,6 +233,158 @@ codexmobile_config_menu() {
     done
 }
 
+codexmobile_import_account() {
+    _codexmobile_vars
+    ui_header "📥 导入 JSON 登录凭证"
+    echo -e "${YELLOW}支持导入包含 access_token / refresh_token 的凭证 JSON。${NC}"
+    echo -e "例如: 可以选择【输入文件路径】或【直接粘贴 JSON 字符串】"
+    echo ""
+
+    local import_mode
+    import_mode=$(ui_menu "选择导入方式" "📁 读取 JSON 文件路径" "📋 直接粘贴 JSON 内容" "🔙 返回")
+
+    local json_content=""
+    if [[ "$import_mode" == *"文件路径"* ]]; then
+        local file_path
+        file_path=$(ui_input "请输入 JSON 文件完整路径 (如 /sdcard/Download/auth.json)")
+        if [ ! -f "$file_path" ]; then
+            ui_print error "找不到指定文件: $file_path"
+            ui_pause; return 1
+        fi
+        json_content=$(cat "$file_path")
+    elif [[ "$import_mode" == *"粘贴"* ]]; then
+        json_content=$(ui_input "请粘贴 JSON 凭证内容")
+    else
+        return 0
+    fi
+
+    if [ -z "$json_content" ]; then
+        ui_print error "JSON 内容不能为空！"
+        ui_pause; return 1
+    fi
+
+    ui_print info "正在解析并导入凭证到多账号池..."
+
+    export CM_IMPORT_JSON="$json_content"
+    export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+
+    local node_import_script='
+const fs = require("fs");
+const path = require("path");
+const crypto = require("crypto");
+
+try {
+    const rawJson = process.env.CM_IMPORT_JSON || "";
+    let data;
+    try {
+        data = JSON.parse(rawJson);
+    } catch(e) {
+        console.error("JSON 格式错误，请检查语法。");
+        process.exit(1);
+    }
+
+    const codexHome = process.env.CODEX_HOME || path.join(process.env.HOME || "", ".codex");
+    if (!fs.existsSync(codexHome)) {
+        fs.mkdirSync(codexHome, { recursive: true });
+    }
+
+    let authMode = data.auth_mode || "chatgpt";
+    let tokens = data.tokens || {};
+    if (data.access_token || data.accessToken) {
+        tokens.access_token = data.access_token || data.accessToken;
+    }
+    if (data.refresh_token || data.refreshToken) {
+        tokens.refresh_token = data.refresh_token || data.refreshToken;
+    }
+    if (data.id_token || data.idToken) {
+        tokens.id_token = data.id_token || data.idToken;
+    }
+    if (data.account_id || data.accountId) {
+        tokens.account_id = data.account_id || data.accountId;
+    }
+
+    if (!tokens.access_token) {
+        console.error("未检测到有效的 access_token 凭证！");
+        process.exit(1);
+    }
+
+    const authFileObj = {
+        auth_mode: authMode,
+        tokens: tokens
+    };
+
+    const mainAuthPath = path.join(codexHome, "auth.json");
+    fs.writeFileSync(mainAuthPath, JSON.stringify(authFileObj, null, 2), "utf8");
+
+    const accountId = tokens.account_id || ("user-" + crypto.createHash("sha256").update(tokens.access_token).digest("hex").slice(0, 16));
+    const storageId = crypto.createHash("sha256").update(accountId).digest("hex");
+
+    const accountDir = path.join(codexHome, "accounts", storageId);
+    if (!fs.existsSync(accountDir)) {
+        fs.mkdirSync(accountDir, { recursive: true });
+    }
+    fs.writeFileSync(path.join(accountDir, "auth.json"), JSON.stringify(authFileObj, null, 2), "utf8");
+
+    const accountsStatePath = path.join(codexHome, "accounts.json");
+    let state = { activeAccountId: accountId, activeStorageId: storageId, accounts: [] };
+    if (fs.existsSync(accountsStatePath)) {
+        try {
+            const rawState = JSON.parse(fs.readFileSync(accountsStatePath, "utf8"));
+            if (Array.isArray(rawState.accounts)) state.accounts = rawState.accounts;
+        } catch(e) {}
+    }
+
+    state.activeAccountId = accountId;
+    state.activeStorageId = storageId;
+
+    const existingIdx = state.accounts.findIndex(a => a.storageId === storageId || a.accountId === accountId);
+    const newEntry = {
+        accountId: accountId,
+        storageId: storageId,
+        userId: null,
+        authMode: authMode,
+        email: data.email || null,
+        planType: data.plan_type || data.planType || null,
+        lastRefreshedAtIso: new Date().toISOString(),
+        lastActivatedAtIso: new Date().toISOString(),
+        quotaSnapshot: null,
+        quotaUpdatedAtIso: null,
+        quotaStatus: "idle",
+        quotaError: null,
+        unavailableReason: null
+    };
+
+    if (existingIdx >= 0) {
+        state.accounts[existingIdx] = { ...state.accounts[existingIdx], ...newEntry };
+    } else {
+        state.accounts.unshift(newEntry);
+    }
+
+    fs.writeFileSync(accountsStatePath, JSON.stringify(state, null, 2), "utf8");
+
+    console.log("SUCCESS: " + accountId);
+} catch (err) {
+    console.error(err.message || String(err));
+    process.exit(1);
+}
+'
+
+    local res
+    res=$(node -e "$node_import_script" 2>&1)
+    local ret=$?
+    unset CM_IMPORT_JSON
+
+    if [ $ret -eq 0 ]; then
+        local acc_id
+        acc_id=$(echo "$res" | grep "SUCCESS:" | cut -d: -f2 | xargs)
+        ui_print success "JSON 凭证导入成功！账号 ID: ${acc_id:-已导入}"
+        ui_print info "已同步至多账号池。如果服务正在运行，请重启后生效。"
+    else
+        ui_print error "凭证导入失败: $res"
+    fi
+    ui_pause
+}
+
 codexmobile_menu() {
     while true; do
         _codexmobile_vars
@@ -268,6 +420,7 @@ codexmobile_menu() {
         local CHOICE
         CHOICE=$(ui_menu "请选择操作" \
             "🚀 启动服务" \
+            "📥 导入 JSON 凭证 (多账号数据)" \
             "🛑 停止服务" \
             "🔄 重启服务" \
             "⚙️ 参数配置" \
@@ -281,6 +434,8 @@ codexmobile_menu() {
         case "$CHOICE" in
             *"启动"*)
                 codexmobile_start; ui_pause ;;
+            *"导入 JSON"*)
+                codexmobile_import_account ;;
             *"停止"*)
                 codexmobile_stop; ui_print success "已发出停止指令"; ui_pause ;;
             *"重启"*)
