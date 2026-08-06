@@ -52,6 +52,7 @@ perform_self_update() {
         reset_to_official_remote "$TAVX_DIR" "Future-404/TAV-X.git"
         
         ui_print success "脚本核心已更新！即将重启..."
+        cd "$HOME" 2>/dev/null || true
         sleep 1
         exec bash "$TAVX_DIR/st.sh"
     else

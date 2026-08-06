@@ -59,6 +59,10 @@ safe_rm() {
             continue
         fi
 
+        if [ -n "$abs_target" ] && [[ "$PWD" == "$abs_target"* ]]; then
+            cd "$HOME" 2>/dev/null || cd "/"
+        fi
+
         if [ -e "$target" ] || [ -L "$target" ]; then
             rm -rf "$target"
         fi
@@ -405,11 +409,19 @@ tavx_service_control() {
     local flags="$3"
     
     if [ "$OS_TYPE" == "TERMUX" ]; then
+        local sv_dir="$PREFIX/var/service/$name"
+        if [ "$action" != "status" ] && [ -d "$sv_dir" ] && [ ! -e "$sv_dir/supervise/ok" ]; then
+            local wait_count=0
+            while [ ! -e "$sv_dir/supervise/ok" ] && [ $wait_count -lt 6 ]; do
+                sleep 0.5
+                ((wait_count++))
+            done
+        fi
+
         if [ "$action" == "status" ]; then
             sv status "$name"
         else
-            # 使用 eval 或直接传递，这里直接传递即可
-            sv $flags "$action" "$name"
+            sv $flags "$action" "$name" 2>/dev/null || sv $flags "$action" "$name" 2>/dev/null
         fi
     else
         ui_print error "当前环境不支持 sv 服务控制。"
