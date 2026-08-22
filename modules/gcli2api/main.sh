@@ -57,11 +57,6 @@ gcli2api_install() {
     fi
 
     local TARGET_REQ="$GCLI_DIR/requirements.txt"
-    if [ "$OS_TYPE" == "TERMUX" ] && [ -f "$GCLI_DIR/requirements-termux.txt" ]; then
-        ui_print info "检测到 Termux 专属依赖列表，已自动启用加速方案。"
-        TARGET_REQ="$GCLI_DIR/requirements-termux.txt"
-    fi
-    
     local INSTALL_CMD="source \"$TAVX_DIR/core/python_utils.sh\"; install_requirements_smart '$GCLI_VENV' '$TARGET_REQ' 'standard'"
     if ! ui_stream_task "正在安装 Pip 依赖...." "$INSTALL_CMD"; then
         ui_print error "依赖安装失败。"
