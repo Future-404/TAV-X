@@ -511,6 +511,8 @@ tavx_service_register() {
         cat > "$sv_dir/run" <<EOF
 #!/data/data/com.termux/files/usr/bin/bash
 exec 2>&1
+export SSL_CERT_FILE="$PREFIX/etc/tls/cert.pem"
+export SSL_CERT_DIR="$PREFIX/etc/tls"
 cd "$work_dir" || exit 1
 exec $run_cmd
 EOF

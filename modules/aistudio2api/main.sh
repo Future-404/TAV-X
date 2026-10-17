@@ -55,7 +55,11 @@ _aistudio2api_init_env() {
     _aistudio2api_vars
     if [ ! -f "$AS_ENV" ]; then
         ui_print info "正在初始化默认运行配置 (.env)..."
-        cat << 'EOF' > "$AS_ENV"
+        local detected_proxy=""
+        if command -v get_active_proxy &>/dev/null; then
+            detected_proxy=$(get_active_proxy 2>/dev/null)
+        fi
+        cat << EOF > "$AS_ENV"
 # 账户状态文件、目录或逗号分隔的多个路径
 AISTUDIO_AUTH_STATES=auth
 
@@ -81,7 +85,7 @@ ADMIN_USERNAME=admin
 ADMIN_PASSWORD=
 
 # setup 与未指定账户使用的代理 (留空使用直连或系统代理)
-PROXY=
+PROXY=${detected_proxy}
 
 # 超时设置
 INIT_TIMEOUT=2m
@@ -102,6 +106,9 @@ BUILD_NATIVE_NONSTREAM=true
 WAA_BACKEND=go
 TEMPORARY_CHAT=false
 EOF
+        if [ -n "$detected_proxy" ]; then
+            ui_print info "💡 自动检测到本地代理并关联: $detected_proxy"
+        fi
         ui_print success "配置文件 (.env) 初始化完成，默认已开启纯 Go WAA 后端！"
     fi
 }
@@ -202,6 +209,18 @@ aistudio2api_start() {
     ui_header "启动 AIStudio2API"
     _aistudio2api_init_env
     auto_load_proxy_env
+
+    # 自动检测并补齐本地代理
+    local cur_p
+    cur_p=$(grep "^PROXY=" "$AS_ENV" 2>/dev/null | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r' | xargs)
+    if [ -z "$cur_p" ] && command -v get_active_proxy &>/dev/null; then
+        local found_p
+        found_p=$(get_active_proxy 2>/dev/null)
+        if [ -n "$found_p" ]; then
+            sed -i "s|^PROXY=.*|PROXY=${found_p}|g" "$AS_ENV"
+            ui_print info "💡 检测到本地代理，已自动配置: $found_p"
+        fi
+    fi
 
     cd "$AS_DIR" || return 1
 
@@ -545,6 +564,8 @@ PY_EOF
 
     ui_print success "凭据自适应转码校验通过！"
     ui_print info "正在通过 aistudio2api 导入并签署状态凭据..."
+    export SSL_CERT_FILE="$PREFIX/etc/tls/cert.pem"
+    export SSL_CERT_DIR="$PREFIX/etc/tls"
     cd "$AS_DIR" || return 1
     if "$AS_BIN" setup --storage-state "$converted_file"; then
         ui_print success "🎉 账号凭据导入并验证成功！已绑定 Google 账户: $account_email"
