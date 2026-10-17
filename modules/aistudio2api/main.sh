@@ -395,58 +395,96 @@ _aistudio2api_process_and_import() {
     local converted_file="$TMP_DIR/aistudio_auth_converted_$$.json"
 
     python3 - "$target_file" "$converted_file" << 'PY_EOF'
-import json, sys
+import json, sys, re
 
 src_path = sys.argv[1]
 dst_path = sys.argv[2]
 
 try:
     with open(src_path, "r", encoding="utf-8") as f:
-        raw = json.load(f)
+        raw_text = f.read().strip()
 except Exception as e:
-    sys.stderr.write(f"JSON 解析失败: {e}\n")
+    sys.stderr.write(f"读取凭据数据失败: {e}\n")
     sys.exit(2)
 
 cookies = []
 origins = []
+parsed_ok = False
 
-if isinstance(raw, dict) and "cookies" in raw:
-    cookies = raw.get("cookies", [])
-    origins = raw.get("origins", [])
-elif isinstance(raw, list):
-    for c in raw:
-        if not isinstance(c, dict):
+# 1. 优先尝试解析为 JSON (Cookie-Editor 数组 或 Playwright 字典)
+if (raw_text.startswith("{") and raw_text.endswith("}")) or (raw_text.startswith("[") and raw_text.endswith("]")):
+    try:
+        raw_json = json.loads(raw_text)
+        if isinstance(raw_json, dict) and "cookies" in raw_json:
+            cookies = raw_json.get("cookies", [])
+            origins = raw_json.get("origins", [])
+            parsed_ok = True
+        elif isinstance(raw_json, list):
+            for c in raw_json:
+                if not isinstance(c, dict):
+                    continue
+                s_raw = str(c.get("sameSite") or "").strip().lower()
+                if s_raw == "lax":
+                    s_site = "Lax"
+                elif s_raw == "strict":
+                    s_site = "Strict"
+                else:
+                    s_site = "None"
+
+                exp = c.get("expirationDate") or c.get("expires")
+                try:
+                    expires = float(exp) if exp is not None else -1.0
+                except (ValueError, TypeError):
+                    expires = -1.0
+
+                cookies.append({
+                    "name": c.get("name", ""),
+                    "value": c.get("value", ""),
+                    "domain": c.get("domain", ".google.com"),
+                    "path": c.get("path", "/"),
+                    "expires": expires,
+                    "httpOnly": bool(c.get("httpOnly", False)),
+                    "secure": bool(c.get("secure", True)),
+                    "sameSite": s_site
+                })
+            parsed_ok = True
+    except Exception:
+        parsed_ok = False
+
+# 2. 若非 JSON 或 JSON 解析失败，尝试自适应解析为 Cookie Header 纯文本 (name=value; name2=value2...)
+if not parsed_ok:
+    header_text = raw_text
+    if header_text.lower().startswith("cookie:"):
+        header_text = header_text[7:].strip()
+
+    tokens = re.split(r'[;\n\r]+', header_text)
+    for token in tokens:
+        token = token.strip()
+        if not token or "=" not in token:
             continue
-        s_raw = str(c.get("sameSite") or "").strip().lower()
-        if s_raw == "lax":
-            s_site = "Lax"
-        elif s_raw == "strict":
-            s_site = "Strict"
-        else:
-            s_site = "None"
+        name, value = token.split("=", 1)
+        name = name.strip()
+        value = value.strip()
+        if not name or not value:
+            continue
 
-        exp = c.get("expirationDate") or c.get("expires")
-        try:
-            expires = float(exp) if exp is not None else -1.0
-        except (ValueError, TypeError):
-            expires = -1.0
-
+        is_sec = True if (name.startswith("__Secure-") or "sapisid" in name.lower()) else False
+        is_httponly = True if name in ["SID", "HSID", "SSID", "__Secure-1PSID", "__Secure-3PSID"] else False
         cookies.append({
-            "name": c.get("name", ""),
-            "value": c.get("value", ""),
-            "domain": c.get("domain", ""),
-            "path": c.get("path", "/"),
-            "expires": expires,
-            "httpOnly": bool(c.get("httpOnly", False)),
-            "secure": bool(c.get("secure", False)),
-            "sameSite": s_site
+            "name": name,
+            "value": value,
+            "domain": ".google.com",
+            "path": "/",
+            "expires": -1.0,
+            "httpOnly": is_httponly,
+            "secure": is_sec,
+            "sameSite": "None" if is_sec else "Lax"
         })
-else:
-    sys.stderr.write("无效的数据结构：根节点必须为 Cookie 列表或 StorageState 对象\n")
-    sys.exit(3)
+    if cookies:
+        parsed_ok = True
 
 if not cookies:
-    sys.stderr.write("未解析到任何有效 Cookie 条目\n")
+    sys.stderr.write("未解析到任何有效 Cookie 条目。支持 JSON 格式以及 'key=value;' 纯文本格式\n")
     sys.exit(3)
 
 # 校验 Google 登录凭据核心标识
@@ -489,14 +527,14 @@ PY_EOF
 }
 
 aistudio2api_import_from_paste() {
-    ui_header "📋 粘贴 Cookie JSON 凭据导入"
+    ui_header "📋 粘贴 Cookie 凭据导入"
 
     # 如果安装了 termux-api，尝试自动检测剪贴板
     local clip_content=""
     if command -v termux-clipboard-get >/dev/null 2>&1; then
         clip_content=$(termux-clipboard-get 2>/dev/null)
-        if [[ "$clip_content" =~ ^[[:space:]]*(\[|\{) ]]; then
-            ui_print info "💡 检测到系统剪贴板中含有凭据数据！"
+        if [[ "$clip_content" =~ ^[[:space:]]*(\[|\{) ]] || [[ "$clip_content" =~ (SAPISID|__Secure-1PAPISID|SID)= ]]; then
+            ui_print info "💡 检测到系统剪贴板中含有 Cookie 凭据数据！"
             if ui_confirm "是否直接使用剪贴板中的内容导入？"; then
                 _aistudio2api_process_and_import "$clip_content" false
                 ui_pause; return
@@ -505,7 +543,10 @@ aistudio2api_import_from_paste() {
     fi
 
     echo -e "说明："
-    echo -e "  • 请在 Kiwi / 狐猴浏览器中通过 \033[1;33mCookie-Editor\033[0m 点击 \033[1;36mExport as JSON\033[0m"
+    echo -e "  • 支持 Kiwi / 狐猴浏览器中 \033[1;33mCookie-Editor\033[0m 导出的任意格式："
+    echo -e "    - \033[1;36mExport as JSON\033[0m (JSON 数组)"
+    echo -e "    - \033[1;36mExport as Header String\033[0m (如 name=value; name2=value...)"
+    echo -e "    - 从抓包工具或 DevTools 复制的 \033[1;36mCookie 文本\033[0m"
     echo -e "  • 在下方输入框内\033[1;36m长按屏幕空白处\033[0m选择【粘贴】"
     echo -e "  • 粘贴完成后，点击手机键盘上方工具栏的 \033[1;32m[CTRL]\033[0m 键，再按字母 \033[1;32m[D]\033[0m 提交"
     echo -e "  • 若要取消输入，按 \033[1;31m[ESC]\033[0m 退出\n"
@@ -514,7 +555,7 @@ aistudio2api_import_from_paste() {
     if [ "$HAS_GUM" = true ]; then
         raw_paste=$("$GUM_BIN" write \
             --header="📋 凭据输入框 (长按粘贴后按 Ctrl+D 提交，按 Esc 取消)：" \
-            --placeholder="在此处长按粘贴 Cookie 内容..." \
+            --placeholder="在此处长按粘贴 Cookie 内容 (支持 JSON 或 key=value; 纯文本)..." \
             --width=0 \
             --height=10 \
             --show-line-numbers \
