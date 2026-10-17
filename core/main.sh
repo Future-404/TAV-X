@@ -17,6 +17,7 @@ check_dependencies
 scan_and_load_modules
 check_for_updates
 send_analytics
+ensure_dns_resolution
 
 if [ -n "$1" ]; then
     for i in "${!REGISTERED_MODULE_IDS[@]}"; do
