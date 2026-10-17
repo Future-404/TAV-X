@@ -309,6 +309,62 @@ aistudio2api_open_webui() {
     ui_pause
 }
 
+aistudio2api_show_tutorial() {
+    ui_header "如何获取 AI Studio 账号凭据"
+
+    local md_content="
+# 📚 Google AI Studio 凭据获取指南
+
+AIStudio2API 需要 Google AI Studio 的账号凭据以发起免 Key 调用。
+凭据是通用的，可以在电脑上提取后推送至手机，也可直接在单台手机上完成。
+
+---
+
+## 💻 方案一：电脑 Chrome 远程配对 (最快捷，免拷贝)
+
+如果您身边有电脑，推荐使用官方内建的“远程配对”：
+
+1. 在本管理菜单启动服务后，选择「🌐 打开 Web 控制台」；
+2. 在浏览器打开控制台的“账户”页，点击右上角「远程添加」，复制配对命令；
+3. 在电脑终端中直接运行该命令，电脑里 Chrome 登录的账号就会自动无线推送到手机！
+
+---
+
+## 📱 方案二：安卓手机单机获取 (无电脑首选)
+
+如果您身边没有电脑，只需在手机上使用支持扩展的浏览器即可搞定：
+
+### 1. 准备手机浏览器
+在手机上安装支持扩展的 Chromium 浏览器，推荐：
+* **Kiwi Browser（猕猴桃浏览器）** (推荐，纯净轻量)
+* **狐猴浏览器 (Lemur Browser)**
+
+### 2. 安装 Cookie 导出插件
+打开浏览器，进入扩展商店搜索并安装 **Cookie-Editor** 插件。
+
+### 3. 提取凭据并导出
+1. 在该浏览器中登录 [aistudio.google.com](https://aistudio.google.com)；
+2. 登录成功后，点击浏览器右上角菜单 ➔ 点击 **Cookie-Editor** 图标；
+3. 点击底部的 **Export** ➔ 选择 **Export as JSON**（会自动复制并保存到手机 Download 目录）。
+
+---
+
+## 📥 导入到本系统
+拿到凭据后，返回本管理菜单，选择 **「📥 导入账号凭据」**：
+* 脚本会**自动感应并推荐**您刚在 Download 目录下载的凭据文件，按回车即可一键导入！
+* 脚本已内置**智能转码器**，自动兼容 Cookie-Editor 导出的格式并自动签署入库。
+"
+
+    if [ "$HAS_GUM" = true ]; then
+        echo "$md_content" | gum format
+    else
+        echo -e "${YELLOW}AI Studio 凭据获取指南${NC}"
+        echo -e "【电脑端】启动服务 -> Web控制台点击'远程添加' -> 电脑端运行配对命令"
+        echo -e "【手机端】Kiwi 浏览器登录 aistudio.google.com -> Cookie-Editor 导出 JSON -> 菜单一键导入"
+    fi
+    ui_pause
+}
+
 aistudio2api_import_auth() {
     _aistudio2api_vars
     ui_header "📥 导入 Google AI Studio 账号凭据"
@@ -318,12 +374,31 @@ aistudio2api_import_auth() {
         ui_pause; return 1
     fi
 
+    # 自动探测手机 Download 目录下最新的 JSON 凭据文件
+    local default_file=""
+    local candidates=()
+    for search_dir in "/sdcard/Download" "$HOME/storage/downloads" "$HOME/downloads" "$TMP_DIR"; do
+        if [ -d "$search_dir" ]; then
+            while IFS= read -r f; do
+                [ -n "$f" ] && candidates+=("$f")
+            done < <(find "$search_dir" -maxdepth 2 -type f -name "*.json" 2>/dev/null | xargs ls -t 2>/dev/null | head -n 3)
+        fi
+        [ ${#candidates[@]} -gt 0 ] && break
+    done
+
+    if [ ${#candidates[@]} -gt 0 ]; then
+        default_file="${candidates[0]}"
+        ui_print info "💡 自动检测到最近生成的凭据文件："
+        echo -e "   \033[1;36m$default_file\033[0m\n"
+    fi
+
     echo -e "说明："
-    echo -e "  可导入从电脑/移动端浏览器扩展导出的 \033[1;33mStorageState / Playwright JSON\033[0m 凭据文件。"
-    echo -e "  或者也可以在启动服务后，直接在 \033[1;36mWeb 控制台\033[0m 页面中点选上传。\n"
+    echo -e "  • 支持 Kiwi 浏览器中 \033[1;33mCookie-Editor\033[0m 插件导出的 JSON 文件"
+    echo -e "  • 支持标准的 \033[1;33mPlaywright / StorageState\033[0m JSON 凭据文件"
+    echo -e "  • 系统将自动识别并自适应转换格式，免去手动改写\n"
 
     local json_file
-    json_file=$(ui_input "请输入 JSON 凭据文件的绝对路径" "" false)
+    json_file=$(ui_input "请输入凭据文件路径 (直接回车使用检测到的文件)" "$default_file" false)
     if [ -z "$json_file" ]; then
         ui_print warn "已取消操作。"
         ui_pause; return
@@ -334,13 +409,74 @@ aistudio2api_import_auth() {
         ui_pause; return 1
     fi
 
+    ui_print info "正在分析并转码凭据格式..."
+    local converted_file="$TMP_DIR/aistudio_auth_converted_$$.json"
+
+    python3 - "$json_file" "$converted_file" << 'EOF' 2>/dev/null
+import json, sys
+
+src_path = sys.argv[1]
+dst_path = sys.argv[2]
+
+try:
+    with open(src_path, "r", encoding="utf-8") as f:
+        raw = json.load(f)
+except Exception:
+    sys.exit(2)
+
+cookies = []
+origins = []
+
+if isinstance(raw, dict) and "cookies" in raw:
+    cookies = raw.get("cookies", [])
+    origins = raw.get("origins", [])
+elif isinstance(raw, list):
+    for c in raw:
+        if not isinstance(c, dict):
+            continue
+        s_site = c.get("sameSite", "")
+        if s_site:
+            s_site = s_site.capitalize()
+            if s_site not in ["Lax", "Strict", "None"]:
+                s_site = "None"
+        expires = c.get("expirationDate") or c.get("expires") or -1
+        cookies.append({
+            "name": c.get("name", ""),
+            "value": c.get("value", ""),
+            "domain": c.get("domain", ""),
+            "path": c.get("path", "/"),
+            "expires": float(expires),
+            "httpOnly": bool(c.get("httpOnly", False)),
+            "secure": bool(c.get("secure", False)),
+            "sameSite": s_site
+        })
+else:
+    sys.exit(3)
+
+out = {"cookies": cookies, "origins": origins}
+with open(dst_path, "w", encoding="utf-8") as f:
+    json.dump(out, f, indent=2, ensure_ascii=False)
+EOF
+
+    local py_res=$?
+    local target_import="$json_file"
+    if [ $py_res -eq 0 ] && [ -f "$converted_file" ]; then
+        target_import="$converted_file"
+        ui_print success "格式智能适配完成！"
+    fi
+
     ui_print info "正在通过 aistudio2api 导入并签署状态凭据..."
     cd "$AS_DIR" || return 1
-    if "$AS_BIN" setup --storage-state "$json_file"; then
-        ui_print success "账号凭据导入成功！"
+    if "$AS_BIN" setup --storage-state "$target_import"; then
+        ui_print success "🎉 账号凭据导入并验证成功！"
+        if is_app_running "aistudio2api"; then
+            ui_print info "正在重启服务以使新账号生效..."
+            aistudio2api_restart
+        fi
     else
-        ui_print error "凭据导入或验证失败，请确认文件格式有效。"
+        ui_print error "凭据导入或验证失败，请确认导出的 Cookie 包含 Google AI Studio 登录态。"
     fi
+    rm -f "$converted_file" 2>/dev/null
     ui_pause
 }
 
@@ -459,7 +595,8 @@ aistudio2api_menu() {
             "🛑 停止服务" \
             "🔄 重启服务" \
             "🌐 打开 Web 控制台" \
-            "📥 导入账号凭据 (JSON 文件)" \
+            "📥 导入账号凭据" \
+            "📚 获取凭据教程" \
             "⚙️  参数配置" \
             "📜 查看实时日志" \
             "⬇️  检查/重新安装" \
@@ -484,6 +621,9 @@ aistudio2api_menu() {
                 ;;
             *"导入账号"*)
                 aistudio2api_import_auth
+                ;;
+            *"获取凭据教程"*|*"教程"*)
+                aistudio2api_show_tutorial
                 ;;
             *"参数配置"*)
                 aistudio2api_config_menu
