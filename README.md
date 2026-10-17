@@ -4,7 +4,7 @@
 
 > **“别让虚拟的温柔，偷走了你在现实里本该拥有的温暖。”**
 
-[![Version](https://img.shields.io/badge/version-v3.5.0-blue.svg)](https://github.com/Future-404/TAV-X)
+[![Version](https://img.shields.io/badge/version-v3.5.1-blue.svg)](https://github.com/Future-404/TAV-X)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Android%20Termux%20%7C%20Linux-orange.svg)](#)
 [![Shell](https://img.shields.io/badge/shell-Bash-yellow.svg)](#)
