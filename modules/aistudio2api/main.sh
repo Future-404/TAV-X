@@ -388,7 +388,7 @@ _aistudio2api_process_and_import() {
         target_file="$input_data"
     else
         target_file="$TMP_DIR/aistudio_raw_auth_$$.json"
-        echo "$input_data" > "$target_file"
+        printf "%s\n" "$input_data" > "$target_file"
     fi
 
     ui_print info "正在分析并转码凭据格式..."
@@ -491,7 +491,7 @@ PY_EOF
 aistudio2api_import_from_paste() {
     ui_header "📋 粘贴 Cookie JSON 凭据导入"
 
-    # 如果安装了 termux-api，尝试检测剪贴板
+    # 如果安装了 termux-api，尝试自动检测剪贴板
     local clip_content=""
     if command -v termux-clipboard-get >/dev/null 2>&1; then
         clip_content=$(termux-clipboard-get 2>/dev/null)
@@ -506,48 +506,70 @@ aistudio2api_import_from_paste() {
 
     echo -e "说明："
     echo -e "  • 请在 Kiwi / 狐猴浏览器中通过 \033[1;33mCookie-Editor\033[0m 点击 \033[1;36mExport as JSON\033[0m"
-    echo -e "  • 回到此处后，长按屏幕选择【粘贴】即可\n"
+    echo -e "  • 在下方输入框内\033[1;36m长按屏幕空白处\033[0m选择【粘贴】"
+    echo -e "  • 粘贴完成后，点击手机键盘上方工具栏的 \033[1;32m[CTRL]\033[0m 键，再按字母 \033[1;32m[D]\033[0m 提交"
+    echo -e "  • 若要取消输入，按 \033[1;31m[ESC]\033[0m 退出\n"
 
-    ui_print info "请在下方长按屏幕选择【粘贴】（粘贴后自动识别，或输入 END 回车，输入 q 退出）："
-    local raw_paste
-    raw_paste=$(python3 - << 'PY_PASTE_EOF'
-import sys, json, select
+    local raw_paste=""
+    if [ "$HAS_GUM" = true ]; then
+        raw_paste=$("$GUM_BIN" write \
+            --header="📋 凭据输入框 (长按粘贴后按 Ctrl+D 提交，按 Esc 取消)：" \
+            --placeholder="在此处长按粘贴 Cookie 内容..." \
+            --width=0 \
+            --height=10 \
+            --show-line-numbers \
+            --cursor.mode="blink")
+        local ret=$?
+        if [ $ret -ne 0 ] || [ -z "$raw_paste" ]; then
+            ui_print warn "已取消操作或未输入有效内容。"
+            ui_pause; return
+        fi
+    else
+        local paste_script="$TMP_DIR/read_paste_$$.py"
+        cat << 'EOF_PY' > "$paste_script"
+import sys, json, os, select
 
-lines = []
-while True:
-    try:
-        line = sys.stdin.readline()
-        if not line:
-            break
-        stripped = line.strip()
-        if stripped in ["END", "exit", "q"]:
-            if stripped != "END" and not lines:
-                sys.exit(1)
-            break
-        lines.append(line)
-        combined = "".join(lines).strip()
-        if (combined.startswith("[") and combined.endswith("]")) or (combined.startswith("{") and combined.endswith("}")):
-            try:
-                json.loads(combined)
-                r, _, _ = select.select([sys.stdin], [], [], 0.3)
-                if not r:
-                    break
-            except Exception:
-                pass
-    except (KeyboardInterrupt, EOFError):
-        break
+sys.stderr.write("  \033[1;36m➜\033[0m 请长按屏幕选择【粘贴】Cookie JSON 内容：\n")
+sys.stderr.write("    (粘贴完成后，请在新起一行输入 END 并按回车结束，输入 q 取消)\n\n")
 
-raw = "".join(lines).strip()
-if raw:
-    print(raw)
-else:
+try:
+    with open("/dev/tty", "r") as tty:
+        lines = []
+        while True:
+            line = tty.readline()
+            if not line:
+                break
+            s = line.strip()
+            if s in ["END", "exit", "q"]:
+                if s != "END" and not lines:
+                    sys.exit(1)
+                break
+            lines.append(line)
+            combined = "".join(lines).strip()
+            if (combined.startswith("[") and combined.endswith("]")) or (combined.startswith("{") and combined.endswith("}")):
+                try:
+                    json.loads(combined)
+                    r, _, _ = select.select([tty], [], [], 0.3)
+                    if not r:
+                        break
+                except Exception:
+                    pass
+        raw = "".join(lines).strip()
+        if raw:
+            sys.stdout.write(raw)
+        else:
+            sys.exit(1)
+except Exception:
     sys.exit(1)
-PY_PASTE_EOF
-)
+EOF_PY
 
-    if [ $? -ne 0 ] || [ -z "$raw_paste" ]; then
-        ui_print warn "已取消或未输入有效内容。"
-        ui_pause; return
+        raw_paste=$(python3 "$paste_script")
+        local ret=$?
+        rm -f "$paste_script" 2>/dev/null
+        if [ $ret -ne 0 ] || [ -z "$raw_paste" ]; then
+            ui_print warn "已取消操作或未输入有效内容。"
+            ui_pause; return
+        fi
     fi
 
     _aistudio2api_process_and_import "$raw_paste" false
@@ -610,8 +632,9 @@ aistudio2api_import_auth() {
 
     local choice
     choice=$(ui_menu "请选择凭据导入方式" \
-        "📋 直接粘贴 JSON 内容 (从剪贴板粘贴，手机端推荐)" \
-        "📁 从文件导入 (自动扫描手机 Download 目录)" \
+        "📋 直接粘贴 JSON 内容 (打开多行输入框直接粘贴)" \
+        "📁 从文件导入 (自动扫描手机 Download 目录 .json)" \
+        "🌐 在 Web 控制台上传 (调用手机浏览器操作)" \
         "🔙 返回上一级")
 
     case "$choice" in
@@ -620,6 +643,9 @@ aistudio2api_import_auth() {
             ;;
         *"从文件导入"*)
             aistudio2api_import_from_file
+            ;;
+        *"Web 控制台"*)
+            aistudio2api_open_webui
             ;;
         *)
             return 0
