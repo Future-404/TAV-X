@@ -391,14 +391,38 @@ _aistudio2api_process_and_import() {
         printf "%s\n" "$input_data" > "$target_file"
     fi
 
-    ui_print info "正在分析并转码凭据格式..."
-    local converted_file="$TMP_DIR/aistudio_auth_converted_$$.json"
+    # 尝试自动嗅探现有邮箱作为默认值
+    local detected_email=""
+    if [ "$is_file" = "true" ]; then
+        detected_email=$(grep -o '"email":[[:space:]]*"[^"]*@gmail.com"' "$target_file" 2>/dev/null | head -n 1 | cut -d'"' -f4)
+    fi
 
-    python3 - "$target_file" "$converted_file" << 'PY_EOF'
+    # AIStudio2API 多账号体系强制要求关联 Google 邮箱作为账户主键
+    local account_email
+    account_email=$(ui_input "请输入此凭据对应的 Google 邮箱 (如 name@gmail.com)" "$detected_email" false)
+    if [ -z "$account_email" ]; then
+        ui_print warn "已取消操作 (必须指定 Google 邮箱以建立账户标识)。"
+        [ "$is_file" != "true" ] && rm -f "$target_file" 2>/dev/null
+        return 1
+    fi
+
+    if [[ ! "$account_email" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
+        ui_print error "邮箱格式不正确，请输入标准的 Google 邮箱地址。"
+        [ "$is_file" != "true" ] && rm -f "$target_file" 2>/dev/null
+        return 1
+    fi
+
+    ui_print info "正在分析并转码凭据格式..."
+    local import_work_dir="$TMP_DIR/aistudio_import_${account_email}_$$"
+    mkdir -p "$import_work_dir"
+    local converted_file="$import_work_dir/storage-state.json"
+
+    python3 - "$target_file" "$converted_file" "$account_email" << 'PY_EOF'
 import json, sys, re
 
 src_path = sys.argv[1]
 dst_path = sys.argv[2]
+account_email = sys.argv[3] if len(sys.argv) > 3 else ""
 
 try:
     with open(src_path, "r", encoding="utf-8") as f:
@@ -494,7 +518,16 @@ if not found:
     sys.stderr.write("⚠️ 未在 Cookie 中检测到 Google 登录态标识 (SAPISID/SID 等)。请确认您是在 aistudio.google.com 登录完成后导出的！\n")
     sys.exit(4)
 
-out = {"cookies": cookies, "origins": origins}
+out = {
+    "cookies": cookies,
+    "origins": origins,
+    "aistudio2api": {
+        "source": {
+            "browser": "mobile",
+            "email": account_email
+        }
+    }
+}
 with open(dst_path, "w", encoding="utf-8") as f:
     json.dump(out, f, indent=2, ensure_ascii=False)
 
@@ -506,7 +539,7 @@ PY_EOF
 
     if [ $py_res -ne 0 ]; then
         ui_print error "凭据解析或格式校验未通过，请检查内容是否正确。"
-        rm -f "$converted_file" 2>/dev/null
+        rm -rf "$import_work_dir" 2>/dev/null
         return 1
     fi
 
@@ -514,7 +547,7 @@ PY_EOF
     ui_print info "正在通过 aistudio2api 导入并签署状态凭据..."
     cd "$AS_DIR" || return 1
     if "$AS_BIN" setup --storage-state "$converted_file"; then
-        ui_print success "🎉 账号凭据导入并验证成功！"
+        ui_print success "🎉 账号凭据导入并验证成功！已绑定 Google 账户: $account_email"
         if is_app_running "aistudio2api"; then
             ui_print info "正在重启服务以使新账号生效..."
             aistudio2api_restart
@@ -522,7 +555,7 @@ PY_EOF
     else
         ui_print error "凭据导入签署失败，请确认导出的 Cookie 包含 Google AI Studio 完整登录态。"
     fi
-    rm -f "$converted_file" 2>/dev/null
+    rm -rf "$import_work_dir" 2>/dev/null
     return 0
 }
 
