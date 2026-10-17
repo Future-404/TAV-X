@@ -320,7 +320,7 @@ AIStudio2API 需要 Google AI Studio 的账号凭据以发起免 Key 调用。
 
 ---
 
-## 💻 方案一：电脑 Chrome 远程配对 (最快捷，免拷贝)
+## 💻 方案一：电脑 Chrome 远程配对 (推荐有电脑的用户)
 
 如果您身边有电脑，推荐使用官方内建的“远程配对”：
 
@@ -330,7 +330,7 @@ AIStudio2API 需要 Google AI Studio 的账号凭据以发起免 Key 调用。
 
 ---
 
-## 📱 方案二：安卓手机单机获取 (无电脑首选)
+## 📱 方案二：安卓手机单机获取 (纯手机首选)
 
 如果您身边没有电脑，只需在手机上使用支持扩展的浏览器即可搞定：
 
@@ -345,14 +345,23 @@ AIStudio2API 需要 Google AI Studio 的账号凭据以发起免 Key 调用。
 ### 3. 提取凭据并导出
 1. 在该浏览器中登录 [aistudio.google.com](https://aistudio.google.com)；
 2. 登录成功后，点击浏览器右上角菜单 ➔ 点击 **Cookie-Editor** 图标；
-3. 点击底部的 **Export** ➔ 选择 **Export as JSON**（会自动复制并保存到手机 Download 目录）。
+3. 点击底部的 **Export** ➔ 选择 **Export as JSON**；
+   *(此时凭据已复制到剪贴板，部分浏览器可能同时提示下载为 .json 文件)*。
 
 ---
 
 ## 📥 导入到本系统
+
 拿到凭据后，返回本管理菜单，选择 **「📥 导入账号凭据」**：
-* 脚本会**自动感应并推荐**您刚在 Download 目录下载的凭据文件，按回车即可一键导入！
-* 脚本已内置**智能转码器**，自动兼容 Cookie-Editor 导出的格式并自动签署入库。
+
+* **方式 A【直接粘贴】(最便捷)**：选择「直接粘贴 JSON 内容」，长按屏幕粘贴，系统会自动识别并一秒导入！
+* **方式 B【文件导入】**：若保存为 `.json` 文件，系统会**自动扫描 Download 目录**，直接按回车即可导入！
+* 系统已内置**智能转码器**与**防呆校验**，自动清洗 Cookie 字段并核实 Google 登录态。
+
+---
+
+> 💡 **安卓存储权限说明 (针对文件导入)**：
+> Termux 首次读取手机下载目录时系统会弹出存储授权弹窗，请点击【允许】；若曾拒绝授权，可在手机【系统设置 ➔ 应用管理 ➔ Termux ➔ 权限】中开启存储访问权限。
 "
 
     if [ "$HAS_GUM" = true ]; then
@@ -360,24 +369,201 @@ AIStudio2API 需要 Google AI Studio 的账号凭据以发起免 Key 调用。
     else
         echo -e "${YELLOW}AI Studio 凭据获取指南${NC}"
         echo -e "【电脑端】启动服务 -> Web控制台点击'远程添加' -> 电脑端运行配对命令"
-        echo -e "【手机端】Kiwi 浏览器登录 aistudio.google.com -> Cookie-Editor 导出 JSON -> 菜单一键导入"
+        echo -e "【手机端】Kiwi 浏览器登录 aistudio.google.com -> Cookie-Editor 导出 -> 直接粘贴或文件导入"
+        echo -e "【权限提示】若使用文件导入请确保已授予 Termux 手机存储权限 (termux-setup-storage)"
     fi
     ui_pause
 }
 
-aistudio2api_import_auth() {
-    _aistudio2api_vars
-    ui_header "📥 导入 Google AI Studio 账号凭据"
+_aistudio2api_process_and_import() {
+    local input_data="$1"
+    local is_file="$2"
+    local target_file=""
 
-    if [ ! -x "$AS_BIN" ]; then
-        ui_print error "程序未安装，请先执行安装。"
-        ui_pause; return 1
+    if [ "$is_file" = "true" ]; then
+        if [ ! -f "$input_data" ]; then
+            ui_print error "未找到凭据文件: $input_data"
+            return 1
+        fi
+        target_file="$input_data"
+    else
+        target_file="$TMP_DIR/aistudio_raw_auth_$$.json"
+        echo "$input_data" > "$target_file"
     fi
+
+    ui_print info "正在分析并转码凭据格式..."
+    local converted_file="$TMP_DIR/aistudio_auth_converted_$$.json"
+
+    python3 - "$target_file" "$converted_file" << 'PY_EOF'
+import json, sys
+
+src_path = sys.argv[1]
+dst_path = sys.argv[2]
+
+try:
+    with open(src_path, "r", encoding="utf-8") as f:
+        raw = json.load(f)
+except Exception as e:
+    sys.stderr.write(f"JSON 解析失败: {e}\n")
+    sys.exit(2)
+
+cookies = []
+origins = []
+
+if isinstance(raw, dict) and "cookies" in raw:
+    cookies = raw.get("cookies", [])
+    origins = raw.get("origins", [])
+elif isinstance(raw, list):
+    for c in raw:
+        if not isinstance(c, dict):
+            continue
+        s_raw = str(c.get("sameSite") or "").strip().lower()
+        if s_raw == "lax":
+            s_site = "Lax"
+        elif s_raw == "strict":
+            s_site = "Strict"
+        else:
+            s_site = "None"
+
+        exp = c.get("expirationDate") or c.get("expires")
+        try:
+            expires = float(exp) if exp is not None else -1.0
+        except (ValueError, TypeError):
+            expires = -1.0
+
+        cookies.append({
+            "name": c.get("name", ""),
+            "value": c.get("value", ""),
+            "domain": c.get("domain", ""),
+            "path": c.get("path", "/"),
+            "expires": expires,
+            "httpOnly": bool(c.get("httpOnly", False)),
+            "secure": bool(c.get("secure", False)),
+            "sameSite": s_site
+        })
+else:
+    sys.stderr.write("无效的数据结构：根节点必须为 Cookie 列表或 StorageState 对象\n")
+    sys.exit(3)
+
+if not cookies:
+    sys.stderr.write("未解析到任何有效 Cookie 条目\n")
+    sys.exit(3)
+
+# 校验 Google 登录凭据核心标识
+google_keys = {"SAPISID", "__Secure-1PAPISID", "__Secure-3PAPISID", "SID", "SSID", "HSID"}
+found = [c["name"] for c in cookies if c.get("name") in google_keys]
+if not found:
+    sys.stderr.write("⚠️ 未在 Cookie 中检测到 Google 登录态标识 (SAPISID/SID 等)。请确认您是在 aistudio.google.com 登录完成后导出的！\n")
+    sys.exit(4)
+
+out = {"cookies": cookies, "origins": origins}
+with open(dst_path, "w", encoding="utf-8") as f:
+    json.dump(out, f, indent=2, ensure_ascii=False)
+
+print(f"有效凭据解析成功 (共 {len(cookies)} 个 Cookie，已确认登录标识: {', '.join(set(found))})")
+PY_EOF
+
+    local py_res=$?
+    [ "$is_file" != "true" ] && rm -f "$target_file" 2>/dev/null
+
+    if [ $py_res -ne 0 ]; then
+        ui_print error "凭据解析或格式校验未通过，请检查内容是否正确。"
+        rm -f "$converted_file" 2>/dev/null
+        return 1
+    fi
+
+    ui_print success "凭据自适应转码校验通过！"
+    ui_print info "正在通过 aistudio2api 导入并签署状态凭据..."
+    cd "$AS_DIR" || return 1
+    if "$AS_BIN" setup --storage-state "$converted_file"; then
+        ui_print success "🎉 账号凭据导入并验证成功！"
+        if is_app_running "aistudio2api"; then
+            ui_print info "正在重启服务以使新账号生效..."
+            aistudio2api_restart
+        fi
+    else
+        ui_print error "凭据导入签署失败，请确认导出的 Cookie 包含 Google AI Studio 完整登录态。"
+    fi
+    rm -f "$converted_file" 2>/dev/null
+    return 0
+}
+
+aistudio2api_import_from_paste() {
+    ui_header "📋 粘贴 Cookie JSON 凭据导入"
+
+    # 如果安装了 termux-api，尝试检测剪贴板
+    local clip_content=""
+    if command -v termux-clipboard-get >/dev/null 2>&1; then
+        clip_content=$(termux-clipboard-get 2>/dev/null)
+        if [[ "$clip_content" =~ ^[[:space:]]*(\[|\{) ]]; then
+            ui_print info "💡 检测到系统剪贴板中含有凭据数据！"
+            if ui_confirm "是否直接使用剪贴板中的内容导入？"; then
+                _aistudio2api_process_and_import "$clip_content" false
+                ui_pause; return
+            fi
+        fi
+    fi
+
+    echo -e "说明："
+    echo -e "  • 请在 Kiwi / 狐猴浏览器中通过 \033[1;33mCookie-Editor\033[0m 点击 \033[1;36mExport as JSON\033[0m"
+    echo -e "  • 回到此处后，长按屏幕选择【粘贴】即可\n"
+
+    ui_print info "请在下方长按屏幕选择【粘贴】（粘贴后自动识别，或输入 END 回车，输入 q 退出）："
+    local raw_paste
+    raw_paste=$(python3 - << 'PY_PASTE_EOF'
+import sys, json, select
+
+lines = []
+while True:
+    try:
+        line = sys.stdin.readline()
+        if not line:
+            break
+        stripped = line.strip()
+        if stripped in ["END", "exit", "q"]:
+            if stripped != "END" and not lines:
+                sys.exit(1)
+            break
+        lines.append(line)
+        combined = "".join(lines).strip()
+        if (combined.startswith("[") and combined.endswith("]")) or (combined.startswith("{") and combined.endswith("}")):
+            try:
+                json.loads(combined)
+                r, _, _ = select.select([sys.stdin], [], [], 0.3)
+                if not r:
+                    break
+            except Exception:
+                pass
+    except (KeyboardInterrupt, EOFError):
+        break
+
+raw = "".join(lines).strip()
+if raw:
+    print(raw)
+else:
+    sys.exit(1)
+PY_PASTE_EOF
+)
+
+    if [ $? -ne 0 ] || [ -z "$raw_paste" ]; then
+        ui_print warn "已取消或未输入有效内容。"
+        ui_pause; return
+    fi
+
+    _aistudio2api_process_and_import "$raw_paste" false
+    ui_pause
+}
+
+aistudio2api_import_from_file() {
+    ui_header "📁 从文件导入 Google AI Studio 凭据"
+
+    # 确保存储权限
+    ensure_storage_permission
 
     # 自动探测手机 Download 目录下最新的 JSON 凭据文件
     local default_file=""
     local candidates=()
-    for search_dir in "/sdcard/Download" "$HOME/storage/downloads" "$HOME/downloads" "$TMP_DIR"; do
+    for search_dir in "/sdcard/Download" "/storage/emulated/0/Download" "$HOME/storage/downloads" "$HOME/downloads" "$TMP_DIR"; do
         if [ -d "$search_dir" ]; then
             while IFS= read -r f; do
                 [ -n "$f" ] && candidates+=("$f")
@@ -409,75 +595,36 @@ aistudio2api_import_auth() {
         ui_pause; return 1
     fi
 
-    ui_print info "正在分析并转码凭据格式..."
-    local converted_file="$TMP_DIR/aistudio_auth_converted_$$.json"
-
-    python3 - "$json_file" "$converted_file" << 'EOF' 2>/dev/null
-import json, sys
-
-src_path = sys.argv[1]
-dst_path = sys.argv[2]
-
-try:
-    with open(src_path, "r", encoding="utf-8") as f:
-        raw = json.load(f)
-except Exception:
-    sys.exit(2)
-
-cookies = []
-origins = []
-
-if isinstance(raw, dict) and "cookies" in raw:
-    cookies = raw.get("cookies", [])
-    origins = raw.get("origins", [])
-elif isinstance(raw, list):
-    for c in raw:
-        if not isinstance(c, dict):
-            continue
-        s_site = c.get("sameSite", "")
-        if s_site:
-            s_site = s_site.capitalize()
-            if s_site not in ["Lax", "Strict", "None"]:
-                s_site = "None"
-        expires = c.get("expirationDate") or c.get("expires") or -1
-        cookies.append({
-            "name": c.get("name", ""),
-            "value": c.get("value", ""),
-            "domain": c.get("domain", ""),
-            "path": c.get("path", "/"),
-            "expires": float(expires),
-            "httpOnly": bool(c.get("httpOnly", False)),
-            "secure": bool(c.get("secure", False)),
-            "sameSite": s_site
-        })
-else:
-    sys.exit(3)
-
-out = {"cookies": cookies, "origins": origins}
-with open(dst_path, "w", encoding="utf-8") as f:
-    json.dump(out, f, indent=2, ensure_ascii=False)
-EOF
-
-    local py_res=$?
-    local target_import="$json_file"
-    if [ $py_res -eq 0 ] && [ -f "$converted_file" ]; then
-        target_import="$converted_file"
-        ui_print success "格式智能适配完成！"
-    fi
-
-    ui_print info "正在通过 aistudio2api 导入并签署状态凭据..."
-    cd "$AS_DIR" || return 1
-    if "$AS_BIN" setup --storage-state "$target_import"; then
-        ui_print success "🎉 账号凭据导入并验证成功！"
-        if is_app_running "aistudio2api"; then
-            ui_print info "正在重启服务以使新账号生效..."
-            aistudio2api_restart
-        fi
-    else
-        ui_print error "凭据导入或验证失败，请确认导出的 Cookie 包含 Google AI Studio 登录态。"
-    fi
-    rm -f "$converted_file" 2>/dev/null
+    _aistudio2api_process_and_import "$json_file" true
     ui_pause
+}
+
+aistudio2api_import_auth() {
+    _aistudio2api_vars
+    ui_header "📥 导入 Google AI Studio 账号凭据"
+
+    if [ ! -x "$AS_BIN" ]; then
+        ui_print error "程序未安装，请先执行安装。"
+        ui_pause; return 1
+    fi
+
+    local choice
+    choice=$(ui_menu "请选择凭据导入方式" \
+        "📋 直接粘贴 JSON 内容 (从剪贴板粘贴，手机端推荐)" \
+        "📁 从文件导入 (自动扫描手机 Download 目录)" \
+        "🔙 返回上一级")
+
+    case "$choice" in
+        *"直接粘贴"*)
+            aistudio2api_import_from_paste
+            ;;
+        *"从文件导入"*)
+            aistudio2api_import_from_file
+            ;;
+        *)
+            return 0
+            ;;
+    esac
 }
 
 aistudio2api_config_menu() {

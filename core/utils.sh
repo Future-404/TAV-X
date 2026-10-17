@@ -280,19 +280,54 @@ get_modules_status_line() {
 }
 export -f get_modules_status_line
 
+check_storage_permission() {
+    [ -d "$HOME/storage/downloads" ] && ls "$HOME/storage/downloads" >/dev/null 2>&1 && return 0
+    ls /sdcard/Download >/dev/null 2>&1 && return 0
+    ls /storage/emulated/0/Download >/dev/null 2>&1 && return 0
+    return 1
+}
+export -f check_storage_permission
+
+ensure_storage_permission() {
+    if [ "$OS_TYPE" == "TERMUX" ]; then
+        if ! check_storage_permission; then
+            if command -v termux-setup-storage >/dev/null 2>&1; then
+                ui_print warn "访问手机存储目录需要系统授权。"
+                ui_print info "正在请求系统存储权限，请在弹出的系统对话框中点击【允许】..."
+                termux-setup-storage
+                local wait_cnt=0
+                while [ $wait_cnt -lt 5 ]; do
+                    if check_storage_permission; then
+                        break
+                    fi
+                    sleep 1
+                    wait_cnt=$((wait_cnt + 1))
+                done
+                if check_storage_permission; then
+                    ui_print success "存储权限已就绪！"
+                    return 0
+                else
+                    ui_print warn "未能自动检测到权限。若弹窗未弹出，请前往手机【系统设置 -> 应用管理 -> Termux -> 权限】手动开启存储权限。"
+                    return 1
+                fi
+            fi
+        fi
+    fi
+    return 0
+}
+export -f ensure_storage_permission
+
 ensure_backup_dir() {
     local backup_path=""
     if [ "$OS_TYPE" == "TERMUX" ]; then
-        if [ ! -d "$HOME/storage/downloads" ]; then
-            ui_print warn "备份需要访问外部存储权限。"
-            termux-setup-storage
-            sleep 3
-            if [ ! -d "$HOME/storage/downloads" ]; then
-                ui_print error "获取存储权限失败。请授权后重试。"
-                return 1
-            fi
+        if ! ensure_storage_permission; then
+            ui_print error "获取存储权限失败。请授权后重试。"
+            return 1
         fi
         backup_path="$HOME/storage/downloads/TAVX_Backup"
+        if [ ! -d "$HOME/storage/downloads" ] && [ -d "/sdcard/Download" ]; then
+            backup_path="/sdcard/Download/TAVX_Backup"
+        fi
     else
         backup_path="$HOME/TAVX_Backup"
     fi
