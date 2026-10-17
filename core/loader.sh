@@ -20,16 +20,47 @@ _parse_metadata() {
     _META_ENTRY=""
     _META_ID=""
 
-    local meta_block; meta_block=$(grep -E "^# MODULE_(NAME|ENTRY|ID)[:=]" "$file")
-    [ -z "$meta_block" ] && return 1
-
-    _META_NAME=$(echo "$meta_block" | grep "NAME" | head -n 1 | sed 's/^# MODULE_NAME[:=] *//;s/"//g' | xargs)
-    _META_ENTRY=$(echo "$meta_block" | grep "ENTRY" | head -n 1 | sed 's/^# MODULE_ENTRY[:=] *//;s/"//g' | xargs)
-    _META_ID=$(echo "$meta_block" | grep "ID" | head -n 1 | sed 's/^# MODULE_ID[:=] *//;s/"//g' | xargs)
+    local line val
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            "# MODULE_NAME:"*|"# MODULE_NAME="*)
+                val="${line#*MODULE_NAME[=:]}"
+                val="${val# }"
+                val="${val%\"}"
+                val="${val#\"}"
+                _META_NAME="${val%"${val##*[![:space:]]}"}"
+                ;;
+            "# MODULE_ENTRY:"*|"# MODULE_ENTRY="*)
+                val="${line#*MODULE_ENTRY[=:]}"
+                val="${val# }"
+                val="${val%\"}"
+                val="${val#\"}"
+                _META_ENTRY="${val%"${val##*[![:space:]]}"}"
+                ;;
+            "# MODULE_ID:"*|"# MODULE_ID="*)
+                val="${line#*MODULE_ID[=:]}"
+                val="${val# }"
+                val="${val%\"}"
+                val="${val#\"}"
+                _META_ID="${val%"${val##*[![:space:]]}"}"
+                ;;
+            "#!/bin/bash"|"#!"*|"#"*|"")
+                ;;
+            *)
+                break
+                ;;
+        esac
+    done < "$file"
 
     if [ -z "$_META_ID" ]; then
-        local dir_name; dir_name=$(basename "$(dirname "$file")")
-        [ "$dir_name" != "modules" ] && _META_ID="$dir_name" || _META_ID=$(basename "$file" .sh)
+        local parent="${file%/*}"
+        local dir_name="${parent##*/}"
+        if [ "$dir_name" != "modules" ]; then
+            _META_ID="$dir_name"
+        else
+            local fname="${file##*/}"
+            _META_ID="${fname%.sh}"
+        fi
     fi
 
     [ -n "$_META_NAME" ] && [ -n "$_META_ENTRY" ] && return 0 || return 1

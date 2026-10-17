@@ -6,10 +6,12 @@ GROUP_QQ="616353694"
 CONTACT_EMAIL="future_404@outlook.com"
 PROJECT_URL="https://github.com/Future-404/TAV-X"
 SLOGAN="别让虚拟的温柔，偷走了你在现实里本该拥有的温暖。"
-UPDATE_SUMMARY="v3.4.9 (Cloudflare Module Enhancement)
-  1. [新增] Cloudflare 隧道模块支持查看使用文档 (📖 使用文档)
-  2. [优化] 切换账号登录时明确提示旧隧道将失效，避免误操作
-  3. [优化] DNS 路由绑定失败时提示常见原因（域名未托管在当前账号）
+UPDATE_SUMMARY="v3.5.0 (AIStudio2API & Performance Overhaul)
+  1. [新增] 集成 AIStudio2API 模块，支持纯 Go 免浏览器逆向及多账号凭据管理
+  2. [修复] 适配 Termux seccomp 环境，解决 Go faccessat2 导致的 SIGSYS 启动异常
+  3. [优化] 深度重构核心 UI 渲染性能，消除子菜单与应用列表的刷新卡顿
+  4. [优化] 修复主界面 TAV-X 艺术字渐变色彩丢失问题，还原原生视觉体验
+  5. [清理] 下架停止维护的 Antigravity2API 模块，更新 Gemini CLI 上游源
 
   🔧 重新安装/更新脚本:
   curl -v -L https://tav-x.rka.qzz.io"

@@ -27,14 +27,28 @@ _load_store_data() {
     
     if [ -f "$INDEX_FILE" ]; then
         while IFS=, read -r id name cat desc url branch || [ -n "$id" ]; do
-            id=$(echo "$id" | tr -d '\r' | xargs)
+            id="${id//[$'\r\t\n ']/}"
             [[ "$id" =~ ^#.*$ || -z "$id" ]] && continue
             
-            name=$(echo "$name" | tr -d '\r' | xargs)
-            cat=$(echo "$cat" | tr -d '\r' | xargs)
-            desc=$(echo "$desc" | tr -d '\r' | xargs)
-            url=$(echo "$url" | tr -d '\r' | xargs)
-            branch=$(echo "$branch" | tr -d '\r' | xargs)
+            name="${name//$'\r'/}"
+            name="${name#"${name%%[![:space:]]*}"}"
+            name="${name%"${name##*[![:space:]]}"}"
+            
+            cat="${cat//$'\r'/}"
+            cat="${cat#"${cat%%[![:space:]]*}"}"
+            cat="${cat%"${cat##*[![:space:]]}"}"
+            
+            desc="${desc//$'\r'/}"
+            desc="${desc#"${desc%%[![:space:]]*}"}"
+            desc="${desc%"${desc##*[![:space:]]}"}"
+            
+            url="${url//$'\r'/}"
+            url="${url#"${url%%[![:space:]]*}"}"
+            url="${url%"${url##*[![:space:]]}"}"
+            
+            branch="${branch//$'\r'/}"
+            branch="${branch#"${branch%%[![:space:]]*}"}"
+            branch="${branch%"${branch##*[![:space:]]}"}"
             
             STORE_IDS+=("$id")
             STORE_NAMES+=("$name")
@@ -45,11 +59,9 @@ _load_store_data() {
         done < "$INDEX_FILE"
     fi
     
-    for mod_dir in "$TAVX_DIR/modules/"*;
- do
+    for mod_dir in "$TAVX_DIR/modules/"*; do
         [ ! -d "$mod_dir" ] && continue
-        local id
-        id=$(basename "$mod_dir")
+        local id="${mod_dir##*/}"
         local main_sh="$mod_dir/main.sh"
         [ ! -f "$main_sh" ] && continue
         
@@ -59,10 +71,27 @@ _load_store_data() {
         done
         
         if [ "$exists" = false ]; then
-            local meta_name
-            meta_name=$(grep "MODULE_NAME:" "$main_sh" | cut -d: -f2- | xargs)
-            local meta_cat
-            meta_cat=$(grep "APP_CATEGORY:" "$main_sh" | cut -d: -f2- | xargs)
+            local meta_name="" meta_cat="" line
+            while IFS= read -r line || [ -n "$line" ]; do
+                case "$line" in
+                    *"MODULE_NAME:"*|*"MODULE_NAME="*)
+                        meta_name="${line#*MODULE_NAME[=:]}"
+                        meta_name="${meta_name# }"
+                        meta_name="${meta_name%\"}"
+                        meta_name="${meta_name#\"}"
+                        meta_name="${meta_name%"${meta_name##*[![:space:]]}"}"
+                        ;;
+                    *"APP_CATEGORY:"*|*"APP_CATEGORY="*)
+                        meta_cat="${line#*APP_CATEGORY[=:]}"
+                        meta_cat="${meta_cat# }"
+                        meta_cat="${meta_cat%\"}"
+                        meta_cat="${meta_cat#\"}"
+                        meta_cat="${meta_cat%"${meta_cat##*[![:space:]]}"}"
+                        ;;
+                esac
+                [ -n "$meta_name" ] && [ -n "$meta_cat" ] && break
+            done < "$main_sh"
+            
             [ -z "$meta_name" ] && meta_name="$id"
             [ -z "$meta_cat" ] && meta_cat="本地模块"
             
@@ -80,22 +109,29 @@ manage_shortcuts_menu() {
     local SHORTCUT_FILE="$TAVX_DIR/config/shortcuts.list"
     local raw_list=()
     
-    for mod_dir in "$TAVX_DIR/modules/"*;
- do
+    for mod_dir in "$TAVX_DIR/modules/"*; do
         [ ! -d "$mod_dir" ] && continue
-        local id
-        id=$(basename "$mod_dir")
+        local id="${mod_dir##*/}"
         local main_sh="$mod_dir/main.sh"
         [ ! -f "$main_sh" ] && continue
         
-        local name
-        name=$(grep "MODULE_NAME:" "$main_sh" | cut -d ':' -f 2- | xargs)
+        local name="" line
+        while IFS= read -r line || [ -n "$line" ]; do
+            if [[ "$line" == *"MODULE_NAME:"* || "$line" == *"MODULE_NAME="* ]]; then
+                name="${line#*MODULE_NAME[=:]}"
+                name="${name# }"
+                name="${name%\"}"
+                name="${name#\"}"
+                name="${name%"${name##*[![:space:]]}"}"
+                break
+            fi
+        done < "$main_sh"
         [ -z "$name" ] && name="$id"
         
         local status="🟡"
         local app_path
         app_path=$(get_app_path "$id")
-        if [ -d "$app_path" ] && [ -n "$(ls -A "$app_path" 2>/dev/null)" ]; then
+        if [ -d "$app_path" ] && is_dir_nonempty "$app_path"; then
             status="🟢"
         fi
         
@@ -187,10 +223,9 @@ manage_shortcuts_menu() {
 app_store_menu() {
     local current_view="home"
     local selected_category=""
+    _load_store_data
     
     while true; do
-        _load_store_data
-        
         if [ "$current_view" == "home" ]; then
             ui_header "🛒 应用中心"
             local unique_cats=()
@@ -221,7 +256,7 @@ app_store_menu() {
             
             if [[ "$CHOICE" == *"快捷方式"* ]]; then manage_shortcuts_menu; continue; fi
             if [[ "$CHOICE" == *"全部应用"* ]]; then current_view="list"; selected_category="ALL"; continue; fi
-            if [[ "$CHOICE" == *"刷新"* ]]; then _refresh_store_index; continue; fi
+            if [[ "$CHOICE" == *"刷新"* ]]; then _refresh_store_index; _load_store_data; continue; fi
             if [[ "$CHOICE" == *"返回主菜单"* ]]; then return; fi
             if [[ "$CHOICE" == *"----"* ]]; then continue; fi
             
@@ -255,7 +290,7 @@ app_store_menu() {
                 app_path=$(get_app_path "$id")
                 
                 if [ -d "$mod_path" ] && [ -f "$mod_path/main.sh" ]; then
-                    if [ -d "$app_path" ] && [ -n "$(ls -A "$app_path" 2>/dev/null)" ]; then
+                    if [ -d "$app_path" ] && is_dir_nonempty "$app_path"; then
                         status="🟢"
                     else
                         status="🟡"

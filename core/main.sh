@@ -49,7 +49,7 @@ app_drawer_menu() {
             
             local app_path
             app_path=$(get_app_path "$id")
-            if [ ! -d "$app_path" ] || [ -z "$(ls -A "$app_path" 2>/dev/null)" ]; then
+            if [ ! -d "$app_path" ] || ! is_dir_nonempty "$app_path"; then
                 continue 
             fi
             

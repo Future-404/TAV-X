@@ -256,12 +256,14 @@ get_modules_status_line() {
     
     for pid_file in "$run_dir"/*.pid; do
         [ ! -f "$pid_file" ] && continue
-        local name=$(basename "$pid_file" .pid)
+        local name="${pid_file##*/}"
+        name="${name%.pid}"
         if [[ "$name" == "cf_manager" || "$name" == "audio_heartbeat" || "$name" == "cloudflare_monitor" ]]; then 
             continue
         fi
         
-        local pid=$(cat "$pid_file")
+        local pid
+        read -r pid < "$pid_file" 2>/dev/null
         if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then 
             running_apps+=("$name")
         fi
@@ -339,13 +341,21 @@ sys_remove_pkg() {
 export -f sys_remove_pkg
 
 get_sys_resources_info() {
-    local mem_info=$(free -m | grep Mem)
-    local mem_total=$(echo "$mem_info" | awk '{print $2}')
-    local mem_used=$(echo "$mem_info" | awk '{print $3}')
-    local mem_pct=0
-    [ -n "$mem_total" ] && [ "$mem_total" -gt 0 ] && mem_pct=$(( mem_used * 100 / mem_total ))
-    
-    echo "${mem_pct} %"
+    local total=0 avail=0 key val _
+    if [ -r /proc/meminfo ]; then
+        while read -r key val _; do
+            case "$key" in
+                MemTotal:) total=$val ;;
+                MemAvailable:) avail=$val; break ;;
+            esac
+        done < /proc/meminfo
+        if [ "$total" -gt 0 ]; then
+            local used=$((total - avail))
+            echo "$(( used * 100 / total )) %"
+            return
+        fi
+    fi
+    echo "0 %"
 }
 export -f get_sys_resources_info
 
@@ -370,6 +380,15 @@ get_app_path() {
     echo "$new_path"
 }
 export -f get_app_path
+
+is_dir_nonempty() {
+    local d="$1"
+    [ ! -d "$d" ] && return 1
+    local f=("$d"/* "$d"/.[!.]* "$d"/..?*)
+    [ -e "${f[0]}" ] && return 0
+    return 1
+}
+export -f is_dir_nonempty
 
 tavx_service_register() {
     local name="$1"
@@ -446,7 +465,9 @@ is_app_running() {
     local id="$1"
     
     if [ "$OS_TYPE" == "TERMUX" ]; then
-        if sv status "$id" 2>/dev/null | grep -q "^run:"; then return 0; fi
+        if [ -d "$PREFIX/var/service/$id" ]; then
+            if sv status "$id" 2>/dev/null | grep -q "^run:"; then return 0; fi
+        fi
         
         if [[ "$id" == "cloudflare" || "$id" == "cliproxyapi" ]]; then
             local pattern="cloudflared"
@@ -458,7 +479,7 @@ is_app_running() {
         local pid_file="$TAVX_DIR/run/${id}.pid"
         if [ -f "$pid_file" ] && [ -s "$pid_file" ]; then
             local pid
-            pid=$(cat "$pid_file")
+            read -r pid < "$pid_file" 2>/dev/null
             if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then return 0; fi
         fi
         
@@ -471,7 +492,7 @@ is_app_running() {
         
         if [ -f "$pid_file" ] && [ -s "$pid_file" ]; then
             local pid
-            pid=$(cat "$pid_file")
+            read -r pid < "$pid_file" 2>/dev/null
             if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then return 0; fi
         fi
         return 1

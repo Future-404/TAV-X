@@ -25,8 +25,7 @@ fi
 
 export HAS_GUM
 export GUM_BIN
-export HAS_GUM
-export GUM_BIN
+export CLICOLOR_FORCE=1
 
 export NC='\033[0m'
 export RED='\033[0;31m'
@@ -35,6 +34,8 @@ export YELLOW='\033[0;33m'
 export BLUE='\033[0;34m'
 export PURPLE='\033[0;35m'
 export CYAN='\033[0;36m'
+export PINK='\033[38;5;212m'
+export DIM='\033[38;5;240m'
 
 export C_PINK=212    
 export C_PURPLE=99   
@@ -62,33 +63,12 @@ ui_header() {
     local ver="${CURRENT_VERSION:-3.0}"
     
     clear
-    if [ "$HAS_GUM" = true ]; then
-        local logo
-        logo=$("$GUM_BIN" style --foreground "$C_PINK" "$(get_ascii_logo)")
-        local v_tag
-        v_tag=$("$GUM_BIN" style --foreground "$C_DIM" --align right "Ver: $ver | by Future 404  ")
-        echo "$logo"
-        echo "$v_tag"
-        
-        if [ -n "$subtitle" ]; then
-            local prefix
-            prefix=$("$GUM_BIN" style --foreground "$C_PURPLE" --bold "  🚀 ")
-            local divider
-            divider=$("$GUM_BIN" style --foreground "$C_DIM" "  ───────────────────────────────────────")
-            echo -e "${prefix}${subtitle}"
-            echo "$divider"
-        fi
-    else
-        # Fallback for text mode with colors
-        local PINK='\033[38;5;212m'
-        echo -e "${PINK}"
-        get_ascii_logo
-        echo -e "${NC}Ver: ${CYAN}$ver${NC} | by Future 404"
-        echo "----------------------------------------"
-        if [ -n "$subtitle" ]; then
-            echo -e "${PURPLE}🚀 $subtitle${NC}"
-            echo "----------------------------------------"
-        fi
+    echo -e "${PINK}$(get_ascii_logo)${NC}"
+    printf "%48b\n" "${DIM}Ver: $ver | by Future 404  ${NC}"
+    
+    if [ -n "$subtitle" ]; then
+        echo -e "  ${PURPLE}\033[1m🚀 ${subtitle}${NC}"
+        echo -e "  ${DIM}───────────────────────────────────────${NC}"
     fi
 }
 export -f ui_header
@@ -306,57 +286,37 @@ ui_status_card() {
     shift 2
     local infos=("$@")
 
-    local gum_color=""
-    local icon=""
+    local color_code=""
+    local icon="●"
     
     case "$type" in
-        running|success) gum_color="$C_GREEN"; icon="●" ;; 
-        stopped|error|failure) gum_color="$C_RED"; icon="●" ;; 
-        warn|working) gum_color="$C_YELLOW"; icon="●" ;; 
-        *) gum_color="$C_BLUE"; icon="●" ;; 
+        running|success) color_code='\033[38;5;82m' ;; 
+        stopped|error|failure) color_code='\033[38;5;196m' ;; 
+        warn|working) color_code='\033[38;5;220m' ;; 
+        *) color_code='\033[38;5;39m' ;; 
     esac
 
-    if [ "$HAS_GUM" = true ]; then
-        local parts=()
-        parts+=("$("$GUM_BIN" style --foreground "$gum_color" --bold "$icon $main_text")")
-        
-        if [ ${#infos[@]} -gt 0 ]; then
-            parts+=("")
-            for line in "${infos[@]}"; do
-                if [[ "$line" == *": "* ]]; then
-                    local k="${line%%: *}"
-                    local v="${line#*: }"
-                    parts+=("$("$GUM_BIN" style --foreground "$C_PURPLE" "$k"): $v")
-                else
-                    parts+=("$line")
-                fi
-            done
-        fi
-        
-        local joined
-        joined=$("$GUM_BIN" join --vertical --align left "${parts[@]}")
-        "$GUM_BIN" style --border normal --border-foreground "$C_DIM" --padding "0 1" --margin "0 0 1 0" --width 45 "$joined"
-    else
-        local color_code=""
-        case "$type" in
-            running|success) color_code="$GREEN" ;; 
-            stopped|error|failure) color_code="$RED" ;; 
-            warn|working) color_code="$YELLOW" ;; 
-            *) color_code="$BLUE" ;; 
-        esac
-        
-        echo -e "状态: ${color_code}${icon} ${main_text}${NC}"
+    local B_DIM='\033[38;5;240m'
+    local B_PUR='\033[38;5;99m'
+    local B_BOLD='\033[1m'
+    local B_NC='\033[0m'
+
+    echo -e "  ${B_DIM}┌───────────────────────────────────────────┐${B_NC}"
+    echo -e "  ${B_DIM}│${B_NC} ${color_code}${B_BOLD}${icon} ${main_text}${B_NC}"
+    if [ ${#infos[@]} -gt 0 ]; then
+        echo -e "  ${B_DIM}│${B_NC}"
         for line in "${infos[@]}"; do
             if [[ "$line" == *": "* ]]; then
                 local k="${line%%: *}"
                 local v="${line#*: }"
-                echo -e "${CYAN}${k}${NC}: ${v}"
+                echo -e "  ${B_DIM}│${B_NC} ${B_PUR}${k}${B_NC}: ${v}"
             else
-                echo -e "$line"
+                echo -e "  ${B_DIM}│${B_NC} ${line}"
             fi
         done
-        echo "----------------------------------------"
     fi
+    echo -e "  ${B_DIM}└───────────────────────────────────────────┘${B_NC}"
+    echo ""
 }
 export -f ui_status_card
 
