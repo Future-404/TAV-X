@@ -358,14 +358,13 @@ AIStudio2API 需要 Google AI Studio 的账号凭据以发起免 Key 调用。
 * **Kiwi Browser（猕猴桃浏览器）** (推荐，纯净轻量)
 * **狐猴浏览器 (Lemur Browser)**
 
-### 2. 安装 Cookie 导出插件
-打开浏览器，进入扩展商店搜索并安装 **Cookie-Editor** 插件。
+### 2. 安装 Cookie 提取插件
+打开浏览器，进入扩展商店搜索并安装 **Cookie Tool** 插件（界面极简纯粹，一键复制当前网站 Cookie，手机端强烈推荐；也可使用 Cookie-Editor）。
 
 ### 3. 提取凭据并导出
 1. 在该浏览器中登录 [aistudio.google.com](https://aistudio.google.com)；
-2. 登录成功后，点击浏览器右上角菜单 ➔ 点击 **Cookie-Editor** 图标；
-3. 点击底部的 **Export** ➔ 选择 **Export as JSON**；
-   *(此时凭据已复制到剪贴板，部分浏览器可能同时提示下载为 .json 文件)*。
+2. 登录成功后，点击浏览器右上角菜单 ➔ 点击 **Cookie Tool** 图标；
+3. 直接点击复制全部 Cookie（支持纯文本或 JSON 格式，系统均可自动识别解析）。
 
 ---
 
@@ -373,8 +372,8 @@ AIStudio2API 需要 Google AI Studio 的账号凭据以发起免 Key 调用。
 
 拿到凭据后，返回本管理菜单，选择 **「📥 导入账号凭据」**：
 
-* **方式 A【直接粘贴】(最便捷)**：选择「直接粘贴 JSON 内容」，长按屏幕粘贴，系统会自动识别并一秒导入！
-* **方式 B【文件导入】**：若保存为 `.json` 文件，系统会**自动扫描 Download 目录**，直接按回车即可导入！
+* **方式 A【直接粘贴】(最便捷)**：选择「直接粘贴 Cookie 凭据」，长按屏幕粘贴，无论是 Cookie Tool 复制的纯文本还是 JSON 格式，系统均自动智能转码并一秒完成导入！
+* **方式 B【文件导入】**：若保存为凭据文件，系统会**自动扫描 Download 目录**，直接按回车即可导入！
 * 系统已内置**智能转码器**与**防呆校验**，自动清洗 Cookie 字段并核实 Google 登录态。
 
 ---
@@ -388,7 +387,7 @@ AIStudio2API 需要 Google AI Studio 的账号凭据以发起免 Key 调用。
     else
         echo -e "${YELLOW}AI Studio 凭据获取指南${NC}"
         echo -e "【电脑端】启动服务 -> Web控制台点击'远程添加' -> 电脑端运行配对命令"
-        echo -e "【手机端】Kiwi 浏览器登录 aistudio.google.com -> Cookie-Editor 导出 -> 直接粘贴或文件导入"
+        echo -e "【手机端】Kiwi 浏览器登录 aistudio.google.com -> Cookie Tool (或 Cookie-Editor) 复制 -> 直接粘贴或文件导入"
         echo -e "【权限提示】若使用文件导入请确保已授予 Termux 手机存储权限 (termux-setup-storage)"
     fi
     ui_pause
@@ -597,10 +596,10 @@ aistudio2api_import_from_paste() {
     fi
 
     echo -e "说明："
-    echo -e "  • 支持 Kiwi / 狐猴浏览器中 \033[1;33mCookie-Editor\033[0m 导出的任意格式："
-    echo -e "    - \033[1;36mExport as JSON\033[0m (JSON 数组)"
-    echo -e "    - \033[1;36mExport as Header String\033[0m (如 name=value; name2=value...)"
-    echo -e "    - 从抓包工具或 DevTools 复制的 \033[1;36mCookie 文本\033[0m"
+    echo -e "  • 支持使用 \033[1;33mCookie Tool\033[0m (推荐，极简小巧一键复制) 或 \033[1;33mCookie-Editor\033[0m 导出的格式："
+    echo -e "    - \033[1;36mCookie 文本字符串\033[0m (如 name=value; name2=value...，Cookie Tool 默认一键复制格式)"
+    echo -e "    - \033[1;36mExport as JSON\033[0m (JSON 数组格式)"
+    echo -e "    - 从抓包工具或 DevTools 复制的 Cookie 标头文本"
     echo -e "  • 在下方输入框内\033[1;36m长按屏幕空白处\033[0m选择【粘贴】"
     echo -e "  • 粘贴完成后，点击手机键盘上方工具栏的 \033[1;32m[CTRL]\033[0m 键，再按字母 \033[1;32m[D]\033[0m 提交"
     echo -e "  • 若要取消输入，按 \033[1;31m[ESC]\033[0m 退出\n"
@@ -696,7 +695,7 @@ aistudio2api_import_from_file() {
     fi
 
     echo -e "说明："
-    echo -e "  • 支持 Kiwi 浏览器中 \033[1;33mCookie-Editor\033[0m 插件导出的 JSON 文件"
+    echo -e "  • 支持 Kiwi 浏览器中 \033[1;33mCookie Tool / Cookie-Editor\033[0m 导出的凭据文件"
     echo -e "  • 支持标准的 \033[1;33mPlaywright / StorageState\033[0m JSON 凭据文件"
     echo -e "  • 系统将自动识别并自适应转换格式，免去手动改写\n"
 

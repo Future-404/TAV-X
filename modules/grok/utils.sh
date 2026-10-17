@@ -60,20 +60,16 @@ grok_show_tutorial() {
 
 ### 1. 准备浏览器
 下载支持 Chrome 插件的浏览器，推荐：
-* **Kiwi Browser**
+* **Kiwi Browser（猕猴桃浏览器）**
 * **狐猴浏览器 (Lemur)**
 
 ### 2. 安装插件
-在浏览器扩展商店搜索并安装 
- Cookie-Editor 
- 插件。
+在浏览器扩展商店搜索并安装 **Cookie Tool** 插件（界面极简方便，手机端首选；也可使用 Cookie-Editor）。
 
 ### 3. 提取 Token
 1. 登录 [grok.com](https://grok.com)。
-2. 点击浏览器菜单中的 **Cookie-Editor** 图标。
-3. 搜索 
- sso 
- 并复制其值。
+2. 点击浏览器菜单中的 **Cookie Tool** (或 Cookie-Editor) 图标。
+3. 复制 Cookie 中名为 `sso` 的值。
 
 ---
 
@@ -86,7 +82,7 @@ grok_show_tutorial() {
     else
         echo -e "${YELLOW}Grok Token 获取指南${NC}"
         echo -e "【PC端】F12 -> Application -> Cookies -> grok.com -> 复制 sso 值"
-        echo -e "【安卓端】使用 Kiwi 浏览器安装 Cookie-Editor 插件提取 sso 值"
+        echo -e "【安卓端】使用 Kiwi 浏览器安装 Cookie Tool 插件提取 sso 值"
     fi
     ui_pause
 }
