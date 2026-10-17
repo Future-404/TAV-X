@@ -1,109 +1,170 @@
-# TAV-X 开发者文档
+<div align="center">
 
-TAV-X(Termux Automated Venture-X)是一个可扩展、模块化的 Shell 脚本框架，专为在Android Termux环境下部署和管理AI应用而设计，同时兼容debian和Ubuntu。
+# 🚀 TAV-X (Termux Automated Venture-X)
 
-## 🏗️ 架构概览
+> **“别让虚拟的温柔，偷走了你在现实里本该拥有的温暖。”**
 
-TAV-X 采用核心框架与功能模块分离的架构。核心框架负责生命周期管理、UI交互、网络策略和依赖处理；具体的功能应用则封装在独立的“模块”中。
+[![Version](https://img.shields.io/badge/version-v3.5.0-blue.svg)](https://github.com/Future-404/TAV-X)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-green.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Android%20Termux%20%7C%20Linux-orange.svg)](#)
+[![Shell](https://img.shields.io/badge/shell-Bash-yellow.svg)](#)
 
-### 目录结构
+**TAV-X** 是专为 **Android Termux** 打造的可扩展、模块化 AI 应用部署与全生命周期管理框架，同时全面兼容 **Debian** 与 **Ubuntu**。  
+集成了系统级服务守护、后台保活、内网穿透、网络镜像加速与丰富的 AI 逆向及交互应用。
+
+</div>
+
+---
+
+## ⚡ 快速安装与启动
+
+### 📥 一键安装（推荐）
+
+打开 Termux 终端，复制并执行以下命令即可全自动完成依赖安装与环境初始化：
+
+```bash
+curl -s -L https://tav-x.rka.qzz.io | bash
+```
+
+> **备用加速节点**（若上方链接不可达可使用）：
+> ```bash
+> curl -s -L https://tav-x.future404.qzz.io | bash
+> ```
+
+### 🛠️ Git 源码手动安装
+
+```bash
+git clone https://github.com/Future-404/TAV-X.git ~/.tav_x && bash ~/.tav_x/st.sh
+```
+
+### 🎯 启动面板
+
+安装完成后，在终端任意位置直接输入快捷指令即可打开交互式主控制台：
+
+```bash
+st
+```
+
+---
+
+## ⌨️ 终端快捷指令
+
+无需每次都进入交互菜单，直接在终端执行即可快速控制与排错：
+
+| 快捷指令 | 说明 |
+| :--- | :--- |
+| `st` | 打开 TAV-X 交互式图形/文本主菜单 |
+| `st ps` | 查看当前所有运行中的服务状态与 PID |
+| `st re` | 一键重启所有后台运行中的应用服务 |
+| `st stop` | 一键平滑停止所有运行中的服务 |
+| `st hb` | 快捷开关无声音频后台保活守护 (`audio_keeper`) |
+| `st update` | 强制检查并同步最新的 TAV-X 脚本核心代码 |
+| `st log` | 查看当前有可用日志的应用 ID 列表 |
+| `st log <ID>` | 实时监控指定应用日志（例如 `st log aistudio2api`，按 `q` 退出） |
+
+---
+
+## ✨ 核心特性亮点
+
+### 📱 原生 Android / Termux 深度融合
+- **系统服务守护**：基于 `termux-services` (runit) 架构，应用后台持续运行、故障自动重启、开机自启。
+- **锁屏防休眠**：联动 `termux-wake-lock` 与静音音频流双重保活机制，彻底规避锁屏 CPU 降频或休眠。
+- **ADB 系统级保活**：无需 Root，通过无线调试一键解除 Android 12+ 幽灵进程杀手（Phantom Process Killer）及系统电池优化白名单。
+
+### ⚡ 极致性能与现代交互
+- **纯原生性能重构**：v3.5.0 彻底消除循环中的外部子进程调用（`basename`/`dirname`/`cat`/`awk`/`xargs`），菜单打开与列表切换零延迟秒开。
+- **自适应 UI 引擎**：支持 Gum 现代富文本交互卡片，并自动无缝回退至纯 ANSI 高度优化的终端界面。
+
+### 🌐 智能全自动网络优化
+- **国内镜像测速直连**：内置多组主流 GitHub 镜像源，自动并发测速并选择延迟最低的通道加速下载与克隆。
+- **本地代理穿透**：智能识别本地常见代理端口（Clash / V2Ray / Sing-box 等），一键配置终端环境变量。
+
+### 🤖 丰富的模块化应用生态
+- **🚀 AIStudio2API (v3.5.0 新增)**：Google AI Studio 逆向 API 网关，集成纯 Go 进程内 WAA 算法，免浏览器、极低内存，支持多账号凭据导入与 Web 控制台，完美规避 Android seccomp 限制。
+- **🎭 SillyTavern (酒馆)**：移动端一键部署酒馆前端与 Node.js 运行时，支持官方/第三方插件拓展与安全备份恢复。
+- **🧠 Grok2API**：支持网页双模逆向的 Grok API 网关服务。
+- **💎 Gemini CLI / GCLI2API**：Google 官方 Gemini 命令行及 API 转换网关。
+- **☁️ Cloudflare Tunnel**：无需公网 IP 与云服务器，免费一键穿透手机本地服务至公网 HTTPS。
+- **🛡️ Mihomo (Clash Meta)**：轻量级网络代理分流内核。
+- **💻 CodeXMobile / Koishi**：代码移动工作区与多协议机器人框架。
+
+---
+
+## 🏗️ 架构概览与目录结构
+
+TAV-X 采用核心框架与应用模块解耦的架构：
 
 ```text
 TAV-X/
 ├── core/               # 核心框架库
-│   ├── env.sh          # 全局环境变量
-│   ├── ui.sh           # UI 组件
-│   ├── utils.sh        # 通用工具函数
-│   ├── loader.sh       # 模块动态加载逻辑
-│   └── ...
+│   ├── env.sh          # 全局环境变量与版本配置
+│   ├── ui.sh           # 自适应 UI 渲染引擎
+│   ├── utils.sh        # 通用系统工具与服务注册逻辑
+│   ├── loader.sh       # 模块动态扫描与加载引擎
+│   ├── store.sh        # 云端应用中心与本地模块管理
+│   ├── net_utils.sh    # 智能网络策略与镜像加速
+│   └── updater.sh      # 脚本自更新逻辑
 ├── modules/            # 功能模块目录
-│   ├── sillytavern/    # 示例模块：酒馆
-│   │   ├── main.sh     # 模块入口与元数据
-│   │   └── ...
+│   ├── aistudio2api/   # Google AI Studio 逆向模块
+│   ├── sillytavern/    # SillyTavern 酒馆模块
+│   ├── grok/           # Grok2API 模块
 │   └── ...
-├── config/             # 用户配置文件
-├── bin/                # 外部二进制工具 (由 deps.sh 管理)
-└── st.sh               # 项目启动入口脚本
+├── config/             # 用户自定义配置文件
+├── bin/                # 外部预编译工具
+└── st.sh               # 统一启动与安装入口
 ```
 
-## 🧩 模块开发实战
+---
 
-一个标准的模块目录必须包含 `main.sh`，它是模块的唯一入口。
+## 🧩 模块开发与贡献
 
-> **官方示例**：您可以参考 [tavx-module-demo](https://github.com/Future-404/tavx-module-demo) 获取一个包含完整生命周期演示的最小化仓库。
+每个模块均拥有独立且完整的生命周期，位于 `modules/<MODULE_ID>/main.sh`。
 
-### 1. 元数据规范
-每个模块的 `main.sh` 必须以元数据块开头，供 `core/loader.sh` 解析：
+### 1. 规范元数据头
+模块的 `main.sh` 需以标准元数据块开头：
 
 ```bash
 # [METADATA]
 # MODULE_ID: my_module
-# MODULE_NAME: 模块名称
+# MODULE_NAME: 我的应用
 # MODULE_ENTRY: my_module_menu
-# APP_AUTHOR: 作者名称
-# APP_PROJECT_URL: https://github.com/example/project
-# APP_DESC: 模块的功能简述。
+# APP_CATEGORY: AI 工具
+# APP_AUTHOR: 作者名
+# APP_PROJECT_URL: https://github.com/example/my_module
+# APP_DESC: 模块的功能简要介绍。
 # [END_METADATA]
 ```
 
-### 生命周期函数
-标准模块应实现以下函数（建议以 `MODULE_ID` 作为前缀以防冲突）：
+### 2. 标准生命周期函数
+模块应实现以下标准函数：
+- `${MODULE_ID}_install`：依赖安装与初始化配置。
+- `${MODULE_ID}_start`：启动服务（支持 Termux `tavx_service_register` 或后台 nohup）。
+- `${MODULE_ID}_stop`：平滑停止服务。
+- `${MODULE_ID}_menu`：模块的主管理界面入口。
 
-*   `${MODULE_ID}_install`: 负责安装依赖、克隆仓库及初始化环境。
-*   `${MODULE_ID}_start`: 启动应用程序的逻辑（支持后台运行）。
-*   `${MODULE_ID}_stop`: 停止应用程序。
-*   `${MODULE_ID}_menu`: 模块的主菜单入口（对应元数据中的 `MODULE_ENTRY`）。
+### 3. 发布到应用商店
+1. 将模块托管在独立的 Git 仓库（确保 `main.sh` 位于仓库根目录）。
+2. 编辑本仓库的 `config/store.csv` 追加收录行：
+   ```csv
+   模块ID,模块显示名称,分类,一句话描述,Git仓库地址,分支名称
+   ```
+3. 提交 Pull Request，审核合并后将自动对所有 TAV-X 用户生效。
 
-## 🛠️ 核心 API
+---
 
-TAV-X 提供了一套丰富的 Shell 函数库，旨在简化开发流程。
+## 💬 交流与支持
 
-### UI 组件 (`core/ui.sh`)
-自动适配图形化与纯文本模式。
+- 💬 **官方反馈 QQ 群**：`616353694`
+- 👤 **作者 QQ**：`317032529`
+- 📮 **反馈邮箱**：`future_404@outlook.com`
+- 🐙 **GitHub 项目主页**：[https://github.com/Future-404/TAV-X](https://github.com/Future-404/TAV-X)
 
-*   `ui_print <type> <message>`: 打印信息 (info)、成功 (success)、警告 (warn) 或错误 (error)。
-*   `ui_menu <title> <option1> <option2> ...`: 渲染交互式选择菜单。
-*   `ui_input <prompt> [default]`: 获取用户输入。
-*   `ui_confirm <prompt>`: 布尔值 (Yes/No) 确认框。
-*   `ui_stream_task <title> <command>`: 执行耗时任务，并显示进度视图或旋转进度条。
+---
 
-### 通用工具 (`core/utils.sh`)
-*   `get_app_path <id>`: 获取应用的标准化安装路径。
-*   `prepare_network_strategy [type]`: 自动配置代理或国内镜像源。
-*   `git_clone_smart <args> <repo> <dir>`: 支持自动镜像加速的 Git 克隆。
-*   `check_process_smart <pid_file> <pattern>`: 鲁棒的进程状态检查。
-
-## 💻 参与贡献与发布
-
-TAV-X 支持加载本地模块和云端商店模块。您可以根据需求选择开发方式。
-
-### 方式一：开发本地调试
-1.  **Fork** 本仓库到你的账户。
-2.  在 `modules/` 目录下创建一个新文件夹（以模块ID命名）。
-3.  在其中编写 `main.sh`，务必包含标准的元数据块。
-4.  运行 `st` 脚本，系统会自动扫描并加载您的本地模块进行测试。
-
-### 方式二：发布到应用商城
-如果你希望将模块分享给所有 TAV-X 用户：
-
-1.  **建立独立仓库**：将模块代码托管在一个独立的Git仓库中（推荐 GitHub）。
-    *   *注意：`main.sh` 必须位于仓库根目录。*
-2.  **提交收录申请**：编辑本仓库的 `config/store.csv` 文件，在末尾追加一行配置：
-    ```csv
-    模块ID,模块显示名称,一句话描述,Git仓库地址,分支名称
-    ```
-    > 示例：`super_tool,超级工具箱,这是一个强大的辅助工具,https://github.com/user/super-tool.git,main`
-3.  **提交 PR**：向我们提交 Pull Request。审核合并后，模块将实时出现在所有用户的“应用中心”列表中。
-
-## 📄 许可证
+## 📄 许可证与使用限制
 
 本项目基于 **AGPL-3.0** 许可证发布。
 
-### 使用限制说明
-- 本项目 **仅限个人学习、研究与非商业用途**。
-- **严禁任何形式的商业使用**，包括但不限于：
-  - 收费服务
-  - 商业托管 
-  - 盈利性产品或服务的一部分
-
-- 如你修改了本项目代码，并以任何形式向他人提供服务，需按 AGPL-3.0 要求公开对应源代码。
+- 本项目 **仅限个人学习、技术研究与非商业用途**。
+- **严禁任何形式的商业用途**，包括但不限于收费部署、商业托管、转售、或作为任何盈利性产品与服务的一部分。
+- 依据 AGPL-3.0 协议要求，若修改本项目代码并向公众提供服务，必须开源对应修改后的全部源代码。
