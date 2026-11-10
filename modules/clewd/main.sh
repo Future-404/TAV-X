@@ -32,26 +32,86 @@ clewd_install() {
     local arch
     arch=$(uname -m)
     local asset_pattern="linux-x86_64"
-    [[ "$arch" == "aarch64" || "$arch" == "arm64" ]] && asset_pattern="android-aarch64"
+    if [[ "$arch" == "aarch64" || "$arch" == "arm64" ]]; then
+        if [ "$OS_TYPE" == "TERMUX" ]; then
+            asset_pattern="android-aarch64"
+        else
+            asset_pattern="linux-aarch64"
+        fi
+    elif [[ "$arch" == "x86_64" || "$arch" == "amd64" ]]; then
+        asset_pattern="linux-x86_64"
+    fi
     
-    ui_print info "正在获取版本信息 ($asset_pattern)..."
+    ui_print info "正在获取 ClewdR 版本信息 ($asset_pattern)..."
+    prepare_network_strategy
     auto_load_proxy_env
     
-    local api_url="https://api.github.com/repos/Xerxes-2/clewdr/releases/latest"
-    local json
-    json=$(curl -s -m 10 "$api_url")
-    
-    if [ -z "$json" ] || [[ "$json" == *"rate limit"* ]]; then
-        ui_print error "GitHub API 请求失败 (可能触发频率限制)。"
-        ui_pause; return 1
+    local release_info=""
+    # 方案 1: Python 原生发起请求 (自动支持当前环境代理与全局超长超时)
+    release_info=$(python3 - "Xerxes-2/clewdr" "$asset_pattern" << 'PY_EOF' 2>/dev/null
+import sys, urllib.request, json, os
+
+repo = sys.argv[1]
+pattern = sys.argv[2]
+api_url = f"https://api.github.com/repos/{repo}/releases/latest"
+
+proxy = os.environ.get("https_proxy") or os.environ.get("http_proxy") or os.environ.get("ALL_PROXY")
+opener = urllib.request.build_opener(urllib.request.ProxyHandler({'http': proxy, 'https': proxy})) if proxy else urllib.request.build_opener()
+req = urllib.request.Request(api_url, headers={"User-Agent": "TAV-X/ClewdR"})
+try:
+    with opener.open(req, timeout=10) as resp:
+        data = json.loads(resp.read().decode())
+        tag = data.get("tag_name", "").strip()
+        for a in data.get("assets", []):
+            name = a.get("name", "")
+            if pattern in name and name.endswith(".zip"):
+                print(f"{tag}|{a.get('browser_download_url', '')}")
+                sys.exit(0)
+except Exception:
+    pass
+sys.exit(1)
+PY_EOF
+)
+
+    # 方案 2: 若 Python 请求受阻，尝试 curl 获取并由 Python 健壮解析
+    if [ -z "$release_info" ]; then
+        local raw_json
+        raw_json=$(curl -s -m 8 "https://api.github.com/repos/Xerxes-2/clewdr/releases/latest" 2>/dev/null)
+        if [ -n "$raw_json" ] && [[ "$raw_json" != *"rate limit"* ]]; then
+            release_info=$(python3 - "$raw_json" "$asset_pattern" << 'PY_EOF' 2>/dev/null
+import sys, json
+
+try:
+    data = json.loads(sys.argv[1])
+    pattern = sys.argv[2]
+    tag = data.get("tag_name", "").strip()
+    for a in data.get("assets", []):
+        name = a.get("name", "")
+        if pattern in name and name.endswith(".zip"):
+            print(f"{tag}|{a.get('browser_download_url', '')}")
+            sys.exit(0)
+except Exception:
+    pass
+sys.exit(1)
+PY_EOF
+)
+        fi
     fi
 
-    local download_url
-    download_url=$(echo "$json" | yq -p json '.assets[] | select(.name | contains("'$asset_pattern'")) | .browser_download_url' 2>/dev/null | head -n 1)
-    
+    local download_url=""
+    local tag=""
+    if [ -n "$release_info" ]; then
+        tag="${release_info%%|*}"
+        download_url="${release_info##*|}"
+    fi
+
+    # 兜底至已知官方最新稳定版本 (v0.13.8)
     if [[ -z "$download_url" || "$download_url" == "null" ]]; then
-        ui_print error "无法从 API 解析下载地址。架构: $asset_pattern"
-        ui_pause; return 1
+        tag="v0.13.8"
+        download_url="https://github.com/Xerxes-2/clewdr/releases/download/${tag}/clewdr-${asset_pattern}.zip"
+        ui_print warn "通过 API 发现失败，切换至已知稳定版本 (${tag})..."
+    else
+        ui_print success "发现最新版本: $tag"
     fi
     
     local tmp_file="$TMP_DIR/clewdr_dist.zip"
@@ -68,8 +128,9 @@ clewd_install() {
             [ -n "$bin_path" ] && mv "$bin_path" "$CL_DIR/clewdr"
         fi
         
+        echo "$tag" > "$CL_DIR/.version"
         safe_rm "$tmp_file"
-        ui_print success "安装完成。"
+        ui_print success "ClewdR ($tag) 安装完成。"
     else
         ui_print error "安装失败。"
         ui_pause; return 1
@@ -145,6 +206,13 @@ clewd_menu() {
         local log_path="$CL_LOG"
         [ "$OS_TYPE" == "TERMUX" ] && log_path="$PREFIX/var/service/clewd/log/current"
 
+        local app_ver="未安装"
+        if [ -f "$CL_DIR/.version" ]; then
+            app_ver=$(cat "$CL_DIR/.version" 2>/dev/null | tr -d '\r\n')
+        elif [ -f "$CL_DIR/clewdr" ]; then
+            app_ver="已就绪"
+        fi
+
         if [ "$OS_TYPE" == "TERMUX" ]; then
             if sv status clewd 2>/dev/null | grep -q "^run:"; then
                 state="running"; text="运行中"
@@ -152,6 +220,8 @@ clewd_menu() {
         elif check_process_smart "$CL_PID" "clewdr|node.*clewd\.js"; then
             state="running"; text="运行中"
         fi
+
+        info+=( "版本: $app_ver" )
 
         if [ "$state" == "running" ]; then
             local pass="未知"

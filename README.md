@@ -4,7 +4,7 @@
 
 > **“别让虚拟的温柔，偷走了你在现实里本该拥有的温暖。”**
 
-[![Version](https://img.shields.io/badge/version-v3.5.1-blue.svg)](https://github.com/Future-404/TAV-X)
+[![Version](https://img.shields.io/badge/version-v3.5.2-blue.svg)](https://github.com/Future-404/TAV-X)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Android%20Termux%20%7C%20Linux-orange.svg)](#)
 [![Shell](https://img.shields.io/badge/shell-Bash-yellow.svg)](#)
@@ -80,7 +80,7 @@ st
 - **本地代理穿透**：智能识别本地常见代理端口（Clash / V2Ray / Sing-box 等），一键配置终端环境变量。
 
 ### 🤖 丰富的模块化应用生态
-- **🚀 AIStudio2API (v3.5.0 新增)**：Google AI Studio 逆向 API 网关，集成纯 Go 进程内 WAA 算法，免浏览器、极低内存，支持多账号凭据导入与 Web 控制台，完美规避 Android seccomp 限制。
+- **🚀 AIStudio2API**：Google AI Studio 逆向 API 网关，集成 SpiderMonkey 进程内轻量 WAA 引擎，免浏览器、极低内存，支持多账号凭据导入与 Web 控制台，完美规避 Android seccomp 限制。
 - **🎭 SillyTavern (酒馆)**：移动端一键部署酒馆前端与 Node.js 运行时，支持官方/第三方插件拓展与安全备份恢复。
 - **🧠 Grok2API**：支持网页双模逆向的 Grok API 网关服务。
 - **💎 Gemini CLI / GCLI2API**：Google 官方 Gemini 命令行及 API 转换网关。

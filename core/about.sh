@@ -6,13 +6,13 @@ GROUP_QQ="616353694"
 CONTACT_EMAIL="future_404@outlook.com"
 PROJECT_URL="https://github.com/Future-404/TAV-X"
 SLOGAN="别让虚拟的温柔，偷走了你在现实里本该拥有的温暖。"
-UPDATE_SUMMARY="v3.5.1 (AIStudio2API Mobile Auth & Termux Network Fixes)
-  1. [优化] AIStudio2API 支持 Cookie Tool / DevTools 原始 Cookie 文本直接粘贴与自适应转码
-  2. [优化] 新增 Google 账户邮箱绑定交互，确保 storage-state 多账号签署完美通过
-  3. [修复] 解决 Termux 环境下 Go 网络栈 DNS 回环解析 ([::1]:53 connection refused) 问题
-  4. [修复] 注入 Termux CA 根证书变量 (SSL_CERT_FILE)，彻底解决 Go/Rust 服务 TLS 校验失败
-  5. [优化] AIStudio2API 启动自动嗅探本地运行的代理端口 (Clash/Sing-box)，无需手动配置
-  6. [权限] 智能探测并适配 Android 手机存储读写权限 (Download 目录快速导入凭据)
+UPDATE_SUMMARY="v3.5.2 (AIStudio2API, CLIProxyAPI & ClewdR 核心模块重构与自愈修复)
+  1. [修复] AIStudio2API 移除过期的 v0.2.12 兜底与 yq 依赖，升级至 v0.3.4 并修复 x86_64 误匹配 AppImage 解压崩溃
+  2. [自愈] AIStudio2API 全面切换至 SpiderMonkey 进程内引擎与 Playground 通道，支持老用户旧配置无感自愈迁移
+  3. [重构] CLIProxyAPI 改用官方纯静态预编译包 (v8.0.64) 秒速部署，告别高门槛本地 go build 编译失败
+  4. [修复] CLIProxyAPI 全面适配 v8 配置文件架构 (.server / .management)，彻底解决管理后台 404 与可视化配置失效问题
+  5. [优化] ClewdR 移除 yq 脆弱依赖，精准区分 Termux (Bionic) 与 Linux (Glibc) ARM64 架构，新增 v0.13.8 稳定兜底
+  6. [体验] 三大核心反代模块均支持保留数据平滑更新，并在管理面板实时展示当前安装的程序版本号
 
   🔧 重新安装/更新脚本:
   curl -v -L https://tav-x.rka.qzz.io"

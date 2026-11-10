@@ -6,7 +6,7 @@
 # APP_CATEGORY: AI模型接口
 # APP_AUTHOR: Mag1cFall
 # APP_PROJECT_URL: https://github.com/Mag1cFall/AIStudio2API
-# APP_DESC: 基于 Go 的高性能 Google AI Studio 代理服务，支持 Playground + Build 双额度通道、纯 Go 免浏览器 WAA 防护与 WebUI 管理。
+# APP_DESC: 基于 Go 的高性能 Google AI Studio 代理服务，支持 Playground 额度通道、SpiderMonkey 免浏览器 WAA 引擎与 WebUI 管理。
 # [END_METADATA]
 
 source "$TAVX_DIR/core/env.sh"
@@ -98,18 +98,30 @@ WARM_STARTUP_CONCURRENCY=5
 PER_ACCOUNT_CONCURRENCY=2
 ROUTING_STRATEGY=round-robin
 
-# 生成请求使用的上游通道 (Playground 与 Build 双通道)
-UPSTREAM_CHANNELS=playground,build
+# 生成请求使用的上游通道 (build 通道上游已停用生成，默认仅启用 playground)
+UPSTREAM_CHANNELS=playground
 BUILD_NATIVE_NONSTREAM=true
 
-# WAA 后端配置: 极关键! 设为 go 启用纯 Go 进程内算法，零浏览器依赖
-WAA_BACKEND=go
+# WAA 后端配置: 设为 spidermonkey 启用进程内 SpiderMonkey 算法，零浏览器依赖
+WAA_BACKEND=spidermonkey
 TEMPORARY_CHAT=false
 EOF
         if [ -n "$detected_proxy" ]; then
             ui_print info "💡 自动检测到本地代理并关联: $detected_proxy"
         fi
-        ui_print success "配置文件 (.env) 初始化完成，默认已开启纯 Go WAA 后端！"
+        ui_print success "配置文件 (.env) 初始化完成，默认已开启 SpiderMonkey WAA 后端！"
+    else
+        # 自动迁移已废弃配置，保障老用户无感自愈
+        if grep -q "^WAA_BACKEND=go" "$AS_ENV" 2>/dev/null; then
+            sed -i 's/^WAA_BACKEND=go$/WAA_BACKEND=spidermonkey/g' "$AS_ENV"
+            ui_print info "💡 检测到旧版 WAA_BACKEND=go 配置，已自动平滑迁移为 spidermonkey"
+        fi
+        if grep -q "^UPSTREAM_CHANNELS=.*build" "$AS_ENV" 2>/dev/null; then
+            sed -i 's/^UPSTREAM_CHANNELS=playground,build/UPSTREAM_CHANNELS=playground/g' "$AS_ENV"
+            sed -i 's/^UPSTREAM_CHANNELS=build,playground/UPSTREAM_CHANNELS=playground/g' "$AS_ENV"
+            sed -i 's/^UPSTREAM_CHANNELS=build$/UPSTREAM_CHANNELS=playground/g' "$AS_ENV"
+            ui_print info "💡 检测到已停用的 build 通道，已自动优化调整为 playground"
+        fi
     fi
 }
 
@@ -133,22 +145,70 @@ aistudio2api_install() {
     prepare_network_strategy
 
     ui_print info "正在获取 AIStudio2API 最新发布版本..."
-    local api_url="https://api.github.com/repos/${AS_REPO}/releases/latest"
-    local json
-    json=$(curl -s -m 10 "$api_url")
+    local release_info=""
+    # 方案 1: Python 原生发起请求 (自动支持当前环境代理与全局超长超时)
+    release_info=$(python3 - "$AS_REPO" "$asset_arch" << 'PY_EOF' 2>/dev/null
+import sys, urllib.request, json, os
+
+repo = sys.argv[1]
+arch = sys.argv[2]
+api_url = f"https://api.github.com/repos/{repo}/releases/latest"
+
+proxy = os.environ.get("https_proxy") or os.environ.get("http_proxy") or os.environ.get("ALL_PROXY")
+opener = urllib.request.build_opener(urllib.request.ProxyHandler({'http': proxy, 'https': proxy})) if proxy else urllib.request.build_opener()
+req = urllib.request.Request(api_url, headers={"User-Agent": "TAV-X/AIStudio2API"})
+try:
+    with opener.open(req, timeout=10) as resp:
+        data = json.loads(resp.read().decode())
+        tag = data.get("tag_name", "").strip()
+        for a in data.get("assets", []):
+            name = a.get("name", "")
+            if arch in name and name.endswith(".tar.gz"):
+                print(f"{tag}|{a.get('browser_download_url', '')}")
+                sys.exit(0)
+except Exception:
+    pass
+sys.exit(1)
+PY_EOF
+)
+
+    # 方案 2: 若 Python 请求受阻，尝试 curl 获取并由 Python 健壮解析
+    if [ -z "$release_info" ]; then
+        local raw_json
+        raw_json=$(curl -s -m 8 "https://api.github.com/repos/${AS_REPO}/releases/latest" 2>/dev/null)
+        if [ -n "$raw_json" ] && [[ "$raw_json" != *"rate limit"* ]]; then
+            release_info=$(python3 - "$raw_json" "$asset_arch" << 'PY_EOF' 2>/dev/null
+import sys, json
+
+try:
+    data = json.loads(sys.argv[1])
+    arch = sys.argv[2]
+    tag = data.get("tag_name", "").strip()
+    for a in data.get("assets", []):
+        name = a.get("name", "")
+        if arch in name and name.endswith(".tar.gz"):
+            print(f"{tag}|{a.get('browser_download_url', '')}")
+            sys.exit(0)
+except Exception:
+    pass
+sys.exit(1)
+PY_EOF
+)
+        fi
+    fi
 
     local download_url=""
     local tag=""
-    if [ -n "$json" ] && [[ "$json" != *"rate limit"* ]]; then
-        tag=$(echo "$json" | yq -p json '.tag_name' 2>/dev/null | tr -d '"' | tr -d '\r')
-        download_url=$(echo "$json" | yq -p json '.assets[] | select(.name | contains("'$asset_arch'")) | .browser_download_url' 2>/dev/null | head -n 1 | tr -d '"' | tr -d '\r')
+    if [ -n "$release_info" ]; then
+        tag="${release_info%%|*}"
+        download_url="${release_info##*|}"
     fi
 
-    # Fallback to known stable version if API fails
+    # 兜底至已知官方最新稳定版本 (v0.3.4)
     if [[ -z "$download_url" || "$download_url" == "null" ]]; then
-        tag="v0.2.12"
+        tag="v0.3.4"
         download_url="https://github.com/${AS_REPO}/releases/download/${tag}/aistudio2api-${tag}-${asset_arch}.tar.gz"
-        ui_print warn "通过 API 发现失败，切换至已知稳定版本 (${tag})..."
+        ui_print warn "通过 API 发现失败，切换至已知最新稳定版本 (${tag})..."
     else
         ui_print success "发现最新版本: $tag"
     fi
@@ -180,6 +240,7 @@ aistudio2api_install() {
 
     cp "$extracted_bin" "$AS_BIN"
     chmod +x "$AS_BIN"
+    echo "$tag" > "$AS_DIR/.version"
     rm -rf "$tmp_extract" "$tmp_archive"
 
     # 初始化配置
@@ -765,7 +826,7 @@ aistudio2api_config_menu() {
         echo -e "当前配置概要："
         echo -e "  • 监听端口 : \033[1;36m${port}\033[0m"
         echo -e "  • API 密钥 : \033[1;33m${cur_key:-<无鉴权 (公开)>}\033[0m"
-        echo -e "  • WAA 引擎 : \033[1;32m${cur_backend:-go}\033[0m (Termux 务必保持 go)"
+        echo -e "  • WAA 引擎 : \033[1;32m${cur_backend:-spidermonkey}\033[0m (免浏览器轻量引擎)"
         echo -e "  • 出口代理 : \033[1;35m${cur_proxy:-<跟随系统/直连>}\033[0m\n"
 
         local CHOICE
@@ -792,10 +853,10 @@ aistudio2api_config_menu() {
                 ;;
             *"WAA 后端"*)
                 local sel
-                sel=$(ui_menu "请选择 WAA 引擎" "🟢 go (纯 Go 进程内运行，极低占用，手机必须推荐)" "⚪ camoufox (桌面级防检测浏览器，手机端不推荐)")
-                if [[ "$sel" == *"go"* ]]; then
-                    sed -i "s|^WAA_BACKEND=.*|WAA_BACKEND=go|g" "$AS_ENV"
-                    ui_print success "已切换为纯 Go 引擎！"
+                sel=$(ui_menu "请选择 WAA 引擎" "🟢 spidermonkey (进程内轻量 JS 引擎，免浏览器，Termux/手机推荐)" "⚪ camoufox (桌面级防检测浏览器，需图形或 Xvfb 环境)")
+                if [[ "$sel" == *"spidermonkey"* ]]; then
+                    sed -i "s|^WAA_BACKEND=.*|WAA_BACKEND=spidermonkey|g" "$AS_ENV"
+                    ui_print success "已切换为 SpiderMonkey 进程内引擎！"
                 elif [[ "$sel" == *"camoufox"* ]]; then
                     sed -i "s|^WAA_BACKEND=.*|WAA_BACKEND=camoufox|g" "$AS_ENV"
                     ui_print warn "已切换为 Camoufox 引擎 (手机端可能因缺少 X11/GLIBC 无法工作)。"
@@ -842,15 +903,22 @@ aistudio2api_menu() {
         local_ip=$(get_local_ip)
         local accounts
         accounts=$(_aistudio2api_get_auth_count)
-        local cur_backend="go"
+        local cur_backend="spidermonkey"
         if [ -f "$AS_ENV" ]; then
             cur_backend=$(grep "^WAA_BACKEND=" "$AS_ENV" | cut -d= -f2- | tr -d '"' | tr -d "'" | tr -d '\r' | xargs)
         fi
+        local app_ver="未安装"
+        if [ -f "$AS_DIR/.version" ]; then
+            app_ver=$(cat "$AS_DIR/.version" 2>/dev/null | tr -d '\r\n')
+        elif [ -f "$AS_BIN" ]; then
+            app_ver="已就绪"
+        fi
 
+        info+=("版本: ${app_ver}")
         info+=("端口: $port")
         info+=("控制台: http://127.0.0.1:$port")
         info+=("局域网: http://${local_ip}:$port")
-        info+=("WAA引擎: ${cur_backend:-go} (免浏览器)")
+        info+=("WAA引擎: ${cur_backend:-spidermonkey} (免浏览器轻量引擎)")
         info+=("已导入账号: ${accounts} 个")
 
         ui_header "AIStudio2API (Go版) 管理面板"
