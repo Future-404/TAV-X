@@ -9,6 +9,7 @@ source "$TAVX_DIR/core/deps.sh"
 source "$TAVX_DIR/core/loader.sh"
 source "$TAVX_DIR/core/security.sh"
 source "$TAVX_DIR/core/updater.sh"
+source "$TAVX_DIR/core/module_updater.sh"
 source "$TAVX_DIR/core/store.sh"
 source "$TAVX_DIR/core/about.sh"
 source "$TAVX_DIR/core/migrate_apps.sh"
@@ -69,11 +70,20 @@ app_drawer_menu() {
             ui_pause; return
         fi
         
-        APP_MENU_OPTS+=("🔙 返回主菜单")
+        local DRAWER_ITEMS=()
+        DRAWER_ITEMS+=("🔄 检查所有应用更新")
+        DRAWER_ITEMS+=("------------------------")
+        DRAWER_ITEMS+=("${APP_MENU_OPTS[@]}")
+        DRAWER_ITEMS+=("🔙 返回主菜单")
 
         local CHOICE
-        CHOICE=$(ui_menu "我的应用" "${APP_MENU_OPTS[@]}")
+        CHOICE=$(ui_menu "我的应用" "${DRAWER_ITEMS[@]}")
         if [[ "$CHOICE" == *"返回"* ]]; then return; fi
+        if [[ "$CHOICE" == *"检查所有应用更新"* ]]; then
+            module_check_all_updates
+            continue
+        fi
+        if [[ "$CHOICE" == *"----"* ]]; then continue; fi
         
         local found=false
         

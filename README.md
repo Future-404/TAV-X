@@ -4,7 +4,7 @@
 
 > **“别让虚拟的温柔，偷走了你在现实里本该拥有的温暖。”**
 
-[![Version](https://img.shields.io/badge/version-v3.5.2-blue.svg)](https://github.com/Future-404/TAV-X)
+[![Version](https://img.shields.io/badge/version-v3.5.3-blue.svg)](https://github.com/Future-404/TAV-X)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Android%20Termux%20%7C%20Linux-orange.svg)](#)
 [![Shell](https://img.shields.io/badge/shell-Bash-yellow.svg)](#)
@@ -103,6 +103,7 @@ TAV-X/
 │   ├── loader.sh       # 模块动态扫描与加载引擎
 │   ├── store.sh        # 云端应用中心与本地模块管理
 │   ├── net_utils.sh    # 智能网络策略与镜像加速
+│   ├── module_updater.sh # 通用模块版本检测与更新引擎
 │   └── updater.sh      # 脚本自更新逻辑
 ├── modules/            # 功能模块目录
 │   ├── aistudio2api/   # Google AI Studio 逆向模块

@@ -65,6 +65,15 @@ _load_store_data() {
         local main_sh="$mod_dir/main.sh"
         [ ! -f "$main_sh" ] && continue
         
+        # 已停更且未安装的模块不在应用中心展示
+        if grep -q "MODULE_DEPRECATED: true" "$main_sh" 2>/dev/null; then
+            local app_p
+            app_p=$(get_app_path "$id")
+            if [ ! -d "$app_p" ] || ! is_dir_nonempty "$app_p"; then
+                continue
+            fi
+        fi
+
         local exists=false
         for existing_id in "${STORE_IDS[@]}"; do
             if [ "$existing_id" == "$id" ]; then exists=true; break; fi
@@ -414,7 +423,7 @@ _app_store_action() {
         "installed")
             echo -e "状态: ${GREEN}🟢 已就绪${NC}"
             local ACT
-            ACT=$(ui_menu "选择操作" "🚀 管理/启动" "🔄 更新模块脚本" "🔙 返回")
+            ACT=$(ui_menu "选择操作" "🚀 管理/启动" "🔄 检查与更新应用" "🔙 返回")
             case "$ACT" in
                 *"管理"*) 
                     if [ -f "$mod_path/main.sh" ]; then
@@ -429,8 +438,12 @@ _app_store_action() {
                     fi
                     ;; 
                 *"更新"*) 
-                    ui_stream_task "更新脚本..." "cd '$mod_path' && git pull"
-                    ui_print success "脚本已更新。"
+                    if command -v module_perform_update &>/dev/null; then
+                        module_perform_update "$id"
+                    else
+                        ui_stream_task "更新脚本..." "cd '$mod_path' && git pull"
+                        ui_print success "脚本已更新。"
+                    fi
                     ;; 
             esac
             ;; 

@@ -7,6 +7,9 @@
 # APP_AUTHOR: Mag1cFall
 # APP_PROJECT_URL: https://github.com/Mag1cFall/AIStudio2API
 # APP_DESC: 基于 Go 的高性能 Google AI Studio 代理服务，支持 Playground 额度通道、SpiderMonkey 免浏览器 WAA 引擎与 WebUI 管理。
+# UPDATE_TYPE: github_release
+# UPDATE_REPO: Mag1cFall/AIStudio2API
+# UPDATE_ASSET: linux-{arch}.tar.gz
 # [END_METADATA]
 
 source "$TAVX_DIR/core/env.sh"
@@ -23,7 +26,6 @@ _aistudio2api_vars() {
     AS_PID="$RUN_DIR/aistudio2api.pid"
     AS_AUTH_DIR="$AS_DIR/auth"
     AS_REPO="Mag1cFall/AIStudio2API"
-    mkdir -p "$AS_DIR" "$AS_AUTH_DIR"
 }
 
 _aistudio2api_get_port() {
@@ -53,6 +55,7 @@ _aistudio2api_get_auth_count() {
 
 _aistudio2api_init_env() {
     _aistudio2api_vars
+    mkdir -p "$AS_DIR" "$AS_AUTH_DIR"
     if [ ! -f "$AS_ENV" ]; then
         ui_print info "正在初始化默认运行配置 (.env)..."
         local detected_proxy=""
@@ -238,6 +241,8 @@ PY_EOF
         ui_pause; return 1
     fi
 
+    mkdir -p "$AS_DIR" "$AS_AUTH_DIR"
+    rm -f "$AS_BIN" 2>/dev/null
     cp "$extracted_bin" "$AS_BIN"
     chmod +x "$AS_BIN"
     echo "$tag" > "$AS_DIR/.version"
@@ -255,6 +260,19 @@ PY_EOF
 
     ui_print success "AIStudio2API 安装成功！"
     ui_pause
+}
+
+aistudio2api_update() {
+    _aistudio2api_vars
+    if command -v driver_update_github_release &>/dev/null; then
+        if driver_update_github_release "aistudio2api" "$AS_REPO" "linux-{arch}.tar.gz" "aistudio2api"; then
+            _aistudio2api_init_env
+            return 0
+        fi
+        return 1
+    else
+        aistudio2api_install
+    fi
 }
 
 aistudio2api_start() {
@@ -921,6 +939,8 @@ aistudio2api_menu() {
         info+=("WAA引擎: ${cur_backend:-spidermonkey} (免浏览器轻量引擎)")
         info+=("已导入账号: ${accounts} 个")
 
+        info+=("提示: 网页端在线更新可能因进程占用失败，推荐在此处更新")
+
         ui_header "AIStudio2API (Go版) 管理面板"
         ui_status_card "$state" "$state_text" "${info[@]}"
 
@@ -934,7 +954,8 @@ aistudio2api_menu() {
             "📚 获取凭据教程" \
             "⚙️  参数配置" \
             "📜 查看实时日志" \
-            "⬇️  检查/重新安装" \
+            "🔄 检查与更新版本" \
+            "⬇️  重新部署/修复安装" \
             "🗑️  卸载模块" \
             "🧭 关于模块" \
             "🔙 返回主菜单")
@@ -966,7 +987,14 @@ aistudio2api_menu() {
             *"实时日志"*)
                 ui_watch_log "aistudio2api"
                 ;;
-            *"检查/重新安装"*)
+            *"检查与更新版本"*)
+                if command -v module_perform_update &>/dev/null; then
+                    module_perform_update "aistudio2api"
+                else
+                    aistudio2api_update
+                fi
+                ;;
+            *"重新部署"*|*"重新安装"*)
                 aistudio2api_install
                 ;;
             *"卸载模块"*)

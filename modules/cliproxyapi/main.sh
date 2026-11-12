@@ -7,6 +7,9 @@
 # APP_AUTHOR: router-for-me
 # APP_PROJECT_URL: https://github.com/router-for-me/CLIProxyAPI
 # APP_DESC: CLIProxyAPI 是一个由 Go 编写的高性能代理工具，支持远程管理和 WebUI 后台，非常适合在手机端作为代理中转使用。
+# UPDATE_TYPE: github_release
+# UPDATE_REPO: router-for-me/CLIProxyAPI
+# UPDATE_ASSET: {uarch}_no-plugin.tar.gz
 # [END_METADATA]
 
 source "$TAVX_DIR/core/env.sh"
@@ -22,7 +25,6 @@ _cp_vars() {
     CP_LOG="$CP_DIR/proxy.log"
     CP_SVC_NAME="cliproxyapi"
     CP_REPO="router-for-me/CLIProxyAPI"
-    mkdir -p "$CP_DIR"
 }
 
 _cp_get_port() {
@@ -251,6 +253,8 @@ PY_EOF
         ui_pause; return 1
     fi
 
+    mkdir -p "$CP_DIR"
+    rm -f "$CP_BIN" 2>/dev/null
     cp "$extracted_bin" "$CP_BIN"
     chmod +x "$CP_BIN"
 
@@ -265,6 +269,11 @@ PY_EOF
     _cp_init_or_migrate_config
 
     ui_print success "CLIProxyAPI ($tag) 安装成功！"
+    return 0
+}
+
+cliproxyapi_update() {
+    cliproxyapi_install
 }
 
 cliproxyapi_start() {
@@ -385,7 +394,13 @@ cliproxyapi_menu() {
                 fi
                 ;;
             *"日志"*) ui_watch_log "$CP_SVC_NAME" ;; 
-            *"更新"*|*"安装"*) cliproxyapi_install; ui_pause ;;
+            *"更新"*|*"安装"*) 
+                if command -v module_perform_update &>/dev/null; then
+                    module_perform_update "cliproxyapi"
+                else
+                    cliproxyapi_install; ui_pause
+                fi
+                ;;
             *"卸载"*) cliproxyapi_uninstall && [ $? -eq 2 ] && return ;; 
             *"关于"*) show_module_about_info "${BASH_SOURCE[0]}" ;; 
             *"返回"*) return ;; 

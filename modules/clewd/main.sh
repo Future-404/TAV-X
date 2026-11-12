@@ -7,6 +7,8 @@
 # APP_AUTHOR: Xerxes-2
 # APP_PROJECT_URL: https://github.com/Xerxes-2/clewdr
 # APP_DESC: ClewdR是一个用于Claude（Claude.ai、Claude Code的Rust代理程序。它能保持较低的资源占用，提供OpenAI风格的API接口，并附带一个小型React管理界面，用于管理Cookie和设置。
+# UPDATE_TYPE: github_release
+# UPDATE_REPO: Xerxes-2/clewdr
 # [END_METADATA]
 
 source "$TAVX_DIR/core/env.sh"
@@ -22,7 +24,6 @@ _clewd_vars() {
     CL_CONF="$CL_DIR/config.js"
     # shellcheck disable=SC2034
     CL_SECRETS="$CONFIG_DIR/clewd_secrets.conf"
-    mkdir -p "$CL_DIR"
 }
 
 clewd_install() {
@@ -119,6 +120,8 @@ PY_EOF
     
     if ui_stream_task "正在下载发行包..." "$DL_CMD"; then
         ui_print info "正在解压..."
+        mkdir -p "$CL_DIR"
+        rm -f "$CL_DIR/clewdr" 2>/dev/null
         unzip -q -o "$tmp_file" -d "$CL_DIR"
         chmod +x "$CL_DIR"/* 2>/dev/null
         
@@ -131,10 +134,15 @@ PY_EOF
         echo "$tag" > "$CL_DIR/.version"
         safe_rm "$tmp_file"
         ui_print success "ClewdR ($tag) 安装完成。"
+        return 0
     else
         ui_print error "安装失败。"
         ui_pause; return 1
     fi
+}
+
+clewd_update() {
+    clewd_install
 }
 
 clewd_start() {
@@ -255,7 +263,13 @@ clewd_menu() {
                 ui_pause ;; 
             *"日志"*) ui_watch_log "clewd" ;; 
             *"停止"*) clewd_stop; ui_print success "已停止"; ui_pause ;; 
-            *"更新"*) clewd_install ;; 
+            *"更新"*) 
+                if command -v module_perform_update &>/dev/null; then
+                    module_perform_update "clewd"
+                else
+                    clewd_install
+                fi
+                ;;
             *"卸载"*) clewd_uninstall && [ $? -eq 2 ] && return ;; 
             *"关于"*) show_module_about_info "${BASH_SOURCE[0]}" ;;
             *"返回"*) return ;; 

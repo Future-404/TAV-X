@@ -6,13 +6,12 @@ GROUP_QQ="616353694"
 CONTACT_EMAIL="future_404@outlook.com"
 PROJECT_URL="https://github.com/Future-404/TAV-X"
 SLOGAN="别让虚拟的温柔，偷走了你在现实里本该拥有的温暖。"
-UPDATE_SUMMARY="v3.5.2 (AIStudio2API, CLIProxyAPI & ClewdR 核心模块重构与自愈修复)
-  1. [修复] AIStudio2API 移除过期的 v0.2.12 兜底与 yq 依赖，升级至 v0.3.4 并修复 x86_64 误匹配 AppImage 解压崩溃
-  2. [自愈] AIStudio2API 全面切换至 SpiderMonkey 进程内引擎与 Playground 通道，支持老用户旧配置无感自愈迁移
-  3. [重构] CLIProxyAPI 改用官方纯静态预编译包 (v8.0.64) 秒速部署，告别高门槛本地 go build 编译失败
-  4. [修复] CLIProxyAPI 全面适配 v8 配置文件架构 (.server / .management)，彻底解决管理后台 404 与可视化配置失效问题
-  5. [优化] ClewdR 移除 yq 脆弱依赖，精准区分 Termux (Bionic) 与 Linux (Glibc) ARM64 架构，新增 v0.13.8 稳定兜底
-  6. [体验] 三大核心反代模块均支持保留数据平滑更新，并在管理面板实时展示当前安装的程序版本号
+UPDATE_SUMMARY="v3.5.3 (通用模块智能更新引擎与运行态安全锁)
+  1. [新增] 引入通用模块更新引擎 (module_updater.sh)，统一支持 Git 仓库、GitHub Release 二进制与 npm 全局包的版本检测与升级
+  2. [体验] 「我的应用」管理中心新增一键批量检查所有已安装模块更新功能，支持逐个或全量平滑升级
+  3. [安全] 新增运行态防占用锁，更新前自动检测并引导停止运行中的服务，彻底杜绝二进制覆盖引发 Text file busy 崩溃
+  4. [修复] 修复部分模块加载阶段提前创建目录导致未安装应用被误判为已安装的问题，补齐模块更新联动钩子
+  5. [调整] 标记弃用并在应用市场隐藏长期断更的旧版 AI Studio Build 插件，平滑引导迁移至新版 AIStudio2API
 
   🔧 重新安装/更新脚本:
   curl -v -L https://tav-x.rka.qzz.io"

@@ -5,11 +5,17 @@
 export REGISTERED_MODULE_NAMES=()
 export REGISTERED_MODULE_ENTRIES=()
 export REGISTERED_MODULE_IDS=()
+export REGISTERED_MODULE_UPDATE_TYPES=()
+export REGISTERED_MODULE_UPDATE_REPOS=()
+export REGISTERED_MODULE_UPDATE_ASSETS=()
 
 _reset_registry() {
     REGISTERED_MODULE_NAMES=()
     REGISTERED_MODULE_ENTRIES=()
     REGISTERED_MODULE_IDS=()
+    REGISTERED_MODULE_UPDATE_TYPES=()
+    REGISTERED_MODULE_UPDATE_REPOS=()
+    REGISTERED_MODULE_UPDATE_ASSETS=()
 }
 
 _parse_metadata() {
@@ -19,6 +25,9 @@ _parse_metadata() {
     _META_NAME=""
     _META_ENTRY=""
     _META_ID=""
+    _META_UPDATE_TYPE=""
+    _META_UPDATE_REPO=""
+    _META_UPDATE_ASSET=""
 
     local line val
     while IFS= read -r line || [ -n "$line" ]; do
@@ -43,6 +52,27 @@ _parse_metadata() {
                 val="${val%\"}"
                 val="${val#\"}"
                 _META_ID="${val%"${val##*[![:space:]]}"}"
+                ;;
+            "# UPDATE_TYPE:"*|"# UPDATE_TYPE="*)
+                val="${line#*UPDATE_TYPE[=:]}"
+                val="${val# }"
+                val="${val%\"}"
+                val="${val#\"}"
+                _META_UPDATE_TYPE="${val%"${val##*[![:space:]]}"}"
+                ;;
+            "# UPDATE_REPO:"*|"# UPDATE_REPO="*)
+                val="${line#*UPDATE_REPO[=:]}"
+                val="${val# }"
+                val="${val%\"}"
+                val="${val#\"}"
+                _META_UPDATE_REPO="${val%"${val##*[![:space:]]}"}"
+                ;;
+            "# UPDATE_ASSET:"*|"# UPDATE_ASSET="*)
+                val="${line#*UPDATE_ASSET[=:]}"
+                val="${val# }"
+                val="${val%\"}"
+                val="${val#\"}"
+                _META_UPDATE_ASSET="${val%"${val##*[![:space:]]}"}"
                 ;;
             "#!/bin/bash"|"#!"*|"#"*|"")
                 ;;
@@ -82,6 +112,11 @@ scan_and_load_modules() {
             REGISTERED_MODULE_NAMES+=("$_META_NAME")
             REGISTERED_MODULE_ENTRIES+=("$_META_ENTRY")
             REGISTERED_MODULE_IDS+=("$_META_ID")
+            REGISTERED_MODULE_UPDATE_TYPES+=("$_META_UPDATE_TYPE")
+            REGISTERED_MODULE_UPDATE_REPOS+=("$_META_UPDATE_REPO")
+            REGISTERED_MODULE_UPDATE_ASSETS+=("$_META_UPDATE_ASSET")
         fi
     done
+
+    [ -f "$TAVX_DIR/core/module_updater.sh" ] && source "$TAVX_DIR/core/module_updater.sh"
 }
