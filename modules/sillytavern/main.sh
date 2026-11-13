@@ -81,29 +81,63 @@ sillytavern_install() {
 sillytavern_update() {
     _st_vars
     ui_header "SillyTavern 智能更新"
-    if [ ! -d "$ST_DIR/.git" ]; then ui_print error "未检测到有效的 Git 仓库。"; ui_pause; return; fi
-    
-    cd "$ST_DIR" || return
+    if [ ! -d "$ST_DIR/.git" ]; then
+        ui_print error "未检测到有效的 Git 仓库。"
+        return 1
+    fi
+
+    cd "$ST_DIR" || return 1
     if ! git symbolic-ref -q HEAD >/dev/null; then
         local current_tag
         current_tag=$(git describe --tags --exact-match 2>/dev/null || git rev-parse --short HEAD)
         ui_print warn "当前处于版本锁定状态 ($current_tag)"
-        echo -e "${YELLOW}请先 [解除锁定] 后再尝试更新。${NC}"; ui_pause; return
+        echo -e "${YELLOW}请先 [解除锁定] 后再尝试更新。${NC}"
+        return 1
     fi
-    
+
     prepare_network_strategy
-    
-    local TEMP_URL
+
+    local TEMP_URL cur_branch
     TEMP_URL=$(get_dynamic_repo_url "SillyTavern/SillyTavern")
-    local UPDATE_CMD="cd \"$ST_DIR\"; git pull --autostash \"$TEMP_URL\""
-    
-    if ui_stream_task "正在同步最新代码..." "$UPDATE_CMD"; then
+    cur_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+    [ -z "$cur_branch" ] || [ "$cur_branch" == "HEAD" ] && cur_branch="release"
+
+    if ! ui_stream_task "正在拉取云端代码..." "cd \"$ST_DIR\" && git fetch \"$TEMP_URL\" \"$cur_branch\""; then
+        ui_print error "拉取云端代码失败，请检查网络连接。"
+        return 1
+    fi
+
+    if git -C "$ST_DIR" merge --ff-only --autostash FETCH_HEAD >/dev/null 2>&1; then
         ui_print success "代码同步完成。"
         npm_install_smart "$ST_DIR"
-    else
-        ui_print error "更新失败！可能存在冲突或网络问题。"
+        return $?
     fi
-    ui_pause
+
+    git -C "$ST_DIR" merge --abort >/dev/null 2>&1 || true
+    git -C "$ST_DIR" rebase --abort >/dev/null 2>&1 || true
+
+    echo ""
+    ui_print warn "检测到本地代码分支与云端存在分叉或冲突，无法自动快速合并。"
+    ui_print info "说明：选择 [允许更新] 将强制同步云端最新源码（不会影响您的角色卡、聊天记录与配置文件）。"
+    local choice
+    choice=$(ui_menu "是否允许更新？" "✅ 允许更新 (强制同步云端最新代码)" "❌ 放弃更新 (保持当前本地版本不变)")
+    case "$choice" in
+        *"允许更新"*)
+            local FORCE_CMD="cd \"$ST_DIR\" && (git stash push -m 'tavx-update-backup' >/dev/null 2>&1 || true) && git reset --hard FETCH_HEAD"
+            if ui_stream_task "正在强制同步最新代码..." "$FORCE_CMD"; then
+                ui_print success "代码同步完成。"
+                npm_install_smart "$ST_DIR"
+                return $?
+            else
+                ui_print error "强制同步失败。"
+                return 1
+            fi
+            ;;
+        *)
+            ui_print info "已放弃更新，保持当前本地版本不变。"
+            return 2
+            ;;
+    esac
 }
 
 sillytavern_rollback() {
@@ -357,7 +391,10 @@ sillytavern_menu() {
 _st_update_submenu() {
     local opt
     opt=$(ui_menu "更新管理" "🆕 检查并更新" "⏳ 版本时光机" "🔙 取消")
-    case "$opt" in *"检查"*) sillytavern_update ;; *"时光机"*) sillytavern_rollback ;; esac
+    case "$opt" in
+        *"检查"*) sillytavern_update; ui_pause ;;
+        *"时光机"*) sillytavern_rollback ;;
+    esac
 }
 
 _st_backup_submenu() {

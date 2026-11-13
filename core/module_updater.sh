@@ -15,41 +15,32 @@ _ensure_update_cache_dir() {
     mkdir -p "$MODULE_UPDATE_CACHE_DIR" 2>/dev/null
 }
 
-# 获取模块本地当前版本号
+# 获取模块本地当前版本号（Git 仓库统一返回 7 位短 commit hash，Release 模块返回语义化版本号）
 # 参数 1: 模块 ID
-# 参数 2: compare_mode ("true" 时对 Git 仓库强制返回短 commit hash 以便与远端对称比对)
 module_get_local_version() {
     local id="$1"
-    local compare_mode="${2:-false}"
     local app_path
     app_path=$(get_app_path "$id")
 
-    # 若处于 Git 对称比对模式且目录是 Git 仓库，直接返回短 commit hash
-    if [ "$compare_mode" == "true" ] && [ -d "$app_path/.git" ]; then
+    # 1. Git 仓库统一返回 7 位短 commit hash，与远端 git ls-remote 保持格式完全一致
+    if [ -d "$app_path/.git" ]; then
         local short_sha
         short_sha=$(git -C "$app_path" rev-parse --short=7 HEAD 2>/dev/null)
         [ -n "$short_sha" ] && echo "$short_sha" && return 0
     fi
 
-    # 1. 优先读取 .version 文件
+    # 2. 优先读取 .version 文件
     if [ -f "$app_path/.version" ]; then
         local v
         v=$(cat "$app_path/.version" 2>/dev/null | tr -d '\r\n ')
         [ -n "$v" ] && echo "$v" && return 0
     fi
 
-    # 2. 如果模块有自定义版本获取函数
+    # 3. 如果模块有自定义版本获取函数
     if command -v "${id}_get_version" &>/dev/null; then
         local v
         v=$("${id}_get_version" 2>/dev/null | tr -d '\r\n ')
         [ -n "$v" ] && echo "$v" && return 0
-    fi
-
-    # 3. 检查是否为 Git 仓库
-    if [ -d "$app_path/.git" ]; then
-        local git_ver
-        git_ver=$(git -C "$app_path" describe --tags --exact-match 2>/dev/null || git -C "$app_path" rev-parse --short=7 HEAD 2>/dev/null)
-        [ -n "$git_ver" ] && echo "$git_ver" && return 0
     fi
 
     # 4. 二进制可执行文件版本推断 (-v / --version)
@@ -296,11 +287,8 @@ module_check_update_status() {
     up_type=$(_module_get_update_type "$id")
     [ "$up_type" == "none" ] && return 3
 
-    local compare_flag="false"
-    [ "$up_type" == "git" ] && compare_flag="true"
-
     local local_v
-    local_v=$(module_get_local_version "$id" "$compare_flag")
+    local_v=$(module_get_local_version "$id")
     local remote_v
     remote_v=$(module_check_remote_version "$id")
 
@@ -340,24 +328,59 @@ driver_update_git_repo() {
     fi
 
     prepare_network_strategy
-    local dyn_url
+    local dyn_url cur_branch
     dyn_url=$(get_dynamic_repo_url "$repo")
+    cur_branch=$(git -C "$target_dir" rev-parse --abbrev-ref HEAD 2>/dev/null)
 
-    local pull_cmd="cd '$target_dir' && git fetch '$dyn_url' && git merge --autostash FETCH_HEAD"
-    if ui_stream_task "同步最新代码..." "$pull_cmd"; then
+    local fetch_cmd="cd '$target_dir' && git fetch '$dyn_url'"
+    [ -n "$cur_branch" ] && [ "$cur_branch" != "HEAD" ] && fetch_cmd="cd '$target_dir' && git fetch '$dyn_url' '$cur_branch'"
+
+    if ! ui_stream_task "正在拉取最新代码..." "$fetch_cmd"; then
+        ui_print error "Git 拉取失败，请检查网络。"
+        return 1
+    fi
+
+    local sync_ok=false
+    if git -C "$target_dir" merge --ff-only --autostash FETCH_HEAD >/dev/null 2>&1; then
+        sync_ok=true
+    else
+        git -C "$target_dir" merge --abort >/dev/null 2>&1 || true
+        git -C "$target_dir" rebase --abort >/dev/null 2>&1 || true
+
+        echo ""
+        ui_print warn "检测到本地代码分支与云端存在分叉或冲突，无法自动快速合并。"
+        ui_print info "说明：选择 [允许更新] 将强制同步云端最新源码。"
+        local choice
+        choice=$(ui_menu "是否允许更新？" "✅ 允许更新 (强制同步云端最新代码)" "❌ 放弃更新 (保持当前本地版本不变)")
+        case "$choice" in
+            *"允许更新"*)
+                local force_cmd="cd '$target_dir' && (git stash push -m 'tavx-update-backup' >/dev/null 2>&1 || true) && git reset --hard FETCH_HEAD"
+                if ui_stream_task "正在强制同步最新代码..." "$force_cmd"; then
+                    sync_ok=true
+                else
+                    ui_print error "Git 强制同步失败。"
+                    return 1
+                fi
+                ;;
+            *)
+                ui_print info "已放弃更新，保持当前本地版本不变。"
+                return 2
+                ;;
+        esac
+    fi
+
+    if [ "$sync_ok" = true ]; then
         if [ -f "$target_dir/package.json" ]; then
             ui_print info "检测到 package.json，正在检查依赖更新..."
             npm_install_smart "$target_dir"
         fi
         local new_ver
-        new_ver=$(git -C "$target_dir" describe --tags --exact-match 2>/dev/null || git -C "$target_dir" rev-parse --short=7 HEAD 2>/dev/null)
+        new_ver=$(git -C "$target_dir" rev-parse --short=7 HEAD 2>/dev/null)
         [ -n "$new_ver" ] && echo "$new_ver" > "$target_dir/.version"
         ui_print success "代码同步成功！当前版本: ${new_ver}"
         return 0
-    else
-        ui_print error "Git 同步更新失败，请检查网络。"
-        return 1
     fi
+    return 1
 }
 export -f driver_update_git_repo
 
@@ -510,15 +533,12 @@ module_perform_update() {
 
     local up_type
     up_type=$(_module_get_update_type "$id")
-    local compare_flag="false"
-    [ "$up_type" == "git" ] && compare_flag="true"
 
-    local display_v local_cmp_v
-    display_v=$(module_get_local_version "$id" "false")
-    local_cmp_v=$(module_get_local_version "$id" "$compare_flag")
+    local local_v
+    local_v=$(module_get_local_version "$id")
 
     ui_header "模块更新: $id"
-    echo -e "当前本地版本: \033[1;33m${display_v}\033[0m"
+    echo -e "当前本地版本: \033[1;33m${local_v}\033[0m"
 
     if [ "$skip_confirm" != "true" ]; then
         ui_print info "正在检测远端最新版本..."
@@ -526,7 +546,7 @@ module_perform_update() {
         remote_v=$(module_check_remote_version "$id" "true")
         if [ -n "$remote_v" ]; then
             echo -e "发现远端版本: \033[1;32m${remote_v}\033[0m"
-            if [ "$local_cmp_v" == "$remote_v" ] || [ "${local_cmp_v#v}" == "${remote_v#v}" ]; then
+            if [ "$local_v" == "$remote_v" ] || [ "${local_v#v}" == "${remote_v#v}" ]; then
                 ui_print info "当前已是最新版本。"
                 if ! ui_confirm "当前已是最新，是否仍要强制重新覆盖安装？"; then
                     return 0
@@ -560,47 +580,53 @@ module_perform_update() {
     fi
 
     # 2. 调用模块专属更新钩子或通用更新驱动
-    local success=false
+    local up_ret=1
     if command -v "${id}_update" &>/dev/null; then
         ui_print info "执行模块专用更新程序 (${id}_update)..."
-        if "${id}_update"; then success=true; fi
+        "${id}_update"
+        up_ret=$?
     else
         local repo asset_pattern
         repo=$(_module_get_repo "$id")
         asset_pattern=$(_module_get_update_asset "$id")
 
         if [ "$up_type" == "git" ] && [ -n "$repo" ]; then
-            driver_update_git_repo "$id" "$app_path" "$repo" && success=true
+            driver_update_git_repo "$id" "$app_path" "$repo"
+            up_ret=$?
         elif [ "$up_type" == "github_release" ] && [ -n "$repo" ] && [ -n "$asset_pattern" ]; then
-            driver_update_github_release "$id" "$repo" "$asset_pattern" "$id" && success=true
+            driver_update_github_release "$id" "$repo" "$asset_pattern" "$id"
+            up_ret=$?
         elif command -v "${id}_install" &>/dev/null; then
-            "${id}_install" && success=true
+            "${id}_install"
+            up_ret=$?
         fi
     fi
 
     # 3. 清理缓存
     module_clear_update_cache "$id"
 
-    # 4. 运行态自动恢复
-    if [ "$success" = true ]; then
+    # 4. 运行态自动恢复与结果反馈
+    if [ "$up_ret" -eq 0 ]; then
         local new_local_v
-        new_local_v=$(module_get_local_version "$id" "false")
+        new_local_v=$(module_get_local_version "$id")
         ui_print success "🎉 模块 [$id] 更新完成！当前版本: ${new_local_v}"
-
-        if [ "$was_running" = true ]; then
-            ui_print info "正在自动恢复后台服务..."
-            if command -v "${id}_start" &>/dev/null; then
-                "${id}_start"
-            elif [ "$OS_TYPE" == "TERMUX" ] && [ -d "$PREFIX/var/service/$id" ]; then
-                tavx_service_control "up" "$id"
-            fi
-        fi
+    elif [ "$up_ret" -eq 2 ]; then
+        ui_print info "已放弃模块 [$id] 的更新操作。"
     else
         ui_print error "更新流程异常退出，请检查上方日志。"
     fi
 
+    if [ "$was_running" = true ] && { [ "$up_ret" -eq 0 ] || [ "$up_ret" -eq 2 ]; }; then
+        ui_print info "正在自动恢复后台服务..."
+        if command -v "${id}_start" &>/dev/null; then
+            "${id}_start"
+        elif [ "$OS_TYPE" == "TERMUX" ] && [ -d "$PREFIX/var/service/$id" ]; then
+            tavx_service_control "up" "$id"
+        fi
+    fi
+
     [ "$skip_confirm" != "true" ] && ui_pause
-    return 0
+    [ "$up_ret" -eq 0 ] || [ "$up_ret" -eq 2 ]
 }
 export -f module_perform_update
 
@@ -625,20 +651,16 @@ module_check_all_updates() {
         up_type=$(_module_get_update_type "$id")
         [ "$up_type" == "none" ] && continue
 
-        local compare_flag="false"
-        [ "$up_type" == "git" ] && compare_flag="true"
-
-        local display_v local_cmp_v remote_v
-        display_v=$(module_get_local_version "$id" "false")
-        local_cmp_v=$(module_get_local_version "$id" "$compare_flag")
+        local local_v remote_v
+        local_v=$(module_get_local_version "$id")
         remote_v=$(module_check_remote_version "$id" "true")
 
         if [ -z "$remote_v" ]; then
             failed+=("$name ($id)")
-        elif [ "$local_cmp_v" != "$remote_v" ] && [ "${local_cmp_v#v}" != "${remote_v#v}" ]; then
-            updates_available+=("$id|$name|$display_v|$remote_v")
+        elif [ "$local_v" != "$remote_v" ] && [ "${local_v#v}" != "${remote_v#v}" ]; then
+            updates_available+=("$id|$name|$local_v|$remote_v")
         else
-            up_to_date+=("$name: $display_v")
+            up_to_date+=("$name: $local_v")
         fi
     done
 
