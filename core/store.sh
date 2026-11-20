@@ -123,7 +123,16 @@ manage_shortcuts_menu() {
         local id="${mod_dir##*/}"
         local main_sh="$mod_dir/main.sh"
         [ ! -f "$main_sh" ] && continue
-        
+
+        # 已停更且未安装的模块不在快捷方式勾选列表中展示
+        if grep -q "MODULE_DEPRECATED: true" "$main_sh" 2>/dev/null; then
+            local app_p
+            app_p=$(get_app_path "$id")
+            if [ ! -d "$app_p" ] || ! is_dir_nonempty "$app_p"; then
+                continue
+            fi
+        fi
+
         local name="" line
         while IFS= read -r line || [ -n "$line" ]; do
             if [[ "$line" == *"MODULE_NAME:"* || "$line" == *"MODULE_NAME="* ]]; then
@@ -421,9 +430,21 @@ _app_store_action() {
             ;; 
             
         "installed")
-            echo -e "状态: ${GREEN}🟢 已就绪${NC}"
+            local is_deprecated=false
+            if grep -q "MODULE_DEPRECATED: true" "$mod_path/main.sh" 2>/dev/null; then
+                is_deprecated=true
+                echo -e "状态: ${YELLOW}⚠️ 已下架 (仅保留卸载)${NC}"
+            else
+                echo -e "状态: ${GREEN}🟢 已就绪${NC}"
+            fi
+
             local ACT
-            ACT=$(ui_menu "选择操作" "🚀 管理/启动" "🔄 检查与更新应用" "🔙 返回")
+            if [ "$is_deprecated" = true ]; then
+                ACT=$(ui_menu "选择操作" "🗑️  管理/卸载" "🔙 返回")
+            else
+                ACT=$(ui_menu "选择操作" "🚀 管理/启动" "🔄 检查与更新应用" "🔙 返回")
+            fi
+
             case "$ACT" in
                 *"管理"*) 
                     if [ -f "$mod_path/main.sh" ]; then
@@ -432,6 +453,7 @@ _app_store_action() {
                         if [ -n "$entry" ]; then
                             source "$mod_path/main.sh"
                             $entry
+                            _load_store_data
                         else
                             ui_print error "无法识别入口函数。"
                         fi

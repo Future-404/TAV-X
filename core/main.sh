@@ -144,6 +144,12 @@ while true; do
                 done
                 
                 if [ "$idx" -ge 0 ]; then
+                    if grep -q "MODULE_DEPRECATED: true" "$TAVX_DIR/modules/$sid/main.sh" 2>/dev/null; then
+                        app_p=$(get_app_path "$sid")
+                        if [ ! -d "$app_p" ] || ! is_dir_nonempty "$app_p"; then
+                            continue
+                        fi
+                    fi
                     name="${REGISTERED_MODULE_NAMES[$idx]}"
                     icon="⚪"
                     if is_app_running "$sid"; then

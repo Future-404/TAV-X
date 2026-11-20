@@ -4,7 +4,7 @@
 
 > **“别让虚拟的温柔，偷走了你在现实里本该拥有的温暖。”**
 
-[![Version](https://img.shields.io/badge/version-v3.5.4-blue.svg)](https://github.com/Future-404/TAV-X)
+[![Version](https://img.shields.io/badge/version-v3.5.5-blue.svg)](https://github.com/Future-404/TAV-X)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Android%20Termux%20%7C%20Linux-orange.svg)](#)
 [![Shell](https://img.shields.io/badge/shell-Bash-yellow.svg)](#)
@@ -81,9 +81,9 @@ st
 
 ### 🤖 丰富的模块化应用生态
 - **🚀 AIStudio2API**：Google AI Studio 逆向 API 网关，集成 SpiderMonkey 进程内轻量 WAA 引擎，免浏览器、极低内存，支持多账号凭据导入与 Web 控制台，完美规避 Android seccomp 限制。
+- **💎 Gemini-Web2API**：Google Gemini Web 逆向 API 网关，纯静态 Go 单二进制，原生兼容 OpenAI / Claude / Gemini 协议与访客模式，支持多账号负载均衡与 Web 控制台。
 - **🎭 SillyTavern (酒馆)**：移动端一键部署酒馆前端与 Node.js 运行时，支持官方/第三方插件拓展与安全备份恢复。
 - **🧠 Grok2API**：支持网页双模逆向的 Grok API 网关服务。
-- **💎 Gemini CLI / GCLI2API**：Google 官方 Gemini 命令行及 API 转换网关。
 - **☁️ Cloudflare Tunnel**：无需公网 IP 与云服务器，免费一键穿透手机本地服务至公网 HTTPS。
 - **🛡️ Mihomo (Clash Meta)**：轻量级网络代理分流内核。
 - **💻 CodeXMobile / Koishi**：代码移动工作区与多协议机器人框架。
@@ -107,6 +107,7 @@ TAV-X/
 │   └── updater.sh      # 脚本自更新逻辑
 ├── modules/            # 功能模块目录
 │   ├── aistudio2api/   # Google AI Studio 逆向模块
+│   ├── geminiweb2api/  # Google Gemini Web 逆向模块
 │   ├── sillytavern/    # SillyTavern 酒馆模块
 │   ├── grok/           # Grok2API 模块
 │   └── ...

@@ -491,8 +491,12 @@ export -f get_app_path
 is_dir_nonempty() {
     local d="$1"
     [ ! -d "$d" ] && return 1
-    local f=("$d"/* "$d"/.[!.]* "$d"/..?*)
-    [ -e "${f[0]}" ] && return 0
+    local item
+    for item in "$d"/* "$d"/.[!.]* "$d"/..?*; do
+        if [ -e "$item" ] || [ -L "$item" ]; then
+            return 0
+        fi
+    done
     return 1
 }
 export -f is_dir_nonempty

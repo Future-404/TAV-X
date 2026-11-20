@@ -6,11 +6,11 @@ GROUP_QQ="616353694"
 CONTACT_EMAIL="future_404@outlook.com"
 PROJECT_URL="https://github.com/Future-404/TAV-X"
 SLOGAN="别让虚拟的温柔，偷走了你在现实里本该拥有的温暖。"
-UPDATE_SUMMARY="v3.5.4 (Git 更新冲突交互决策与版本显示格式统一)
-  1. [体验] SillyTavern 与通用 Git 模块在遇到分支分叉或合并冲突时不再直接报错，提供「允许更新 (强制同步)」与「放弃更新」手动选项
-  2. [修复] 统一 Git 仓库模块更新前后的版本展示与比对格式（统一采用 7 位短哈希，消除 1.19.0 -> 06bde93 混显问题）
-  3. [修复] 修复 SillyTavern 更新失败或用户放弃更新时退出码误判导致外层提示「更新完成」及双重暂停的问题
-  4. [安全] 当用户手动选择放弃更新时，自动恢复更新前运行中的后台服务，避免服务意外停机
+UPDATE_SUMMARY="v3.5.5 (新增 Gemini-Web2API 模块与移除旧版 Gemini/GCLI2API)
+  1. [新增] 集成 Gemini-Web2API (Go版) 模块，纯静态单二进制，原生兼容 OpenAI/Claude/Gemini 协议与访客模式，支持 Cookie 多格式导入、代理池与 WebUI 管理
+  2. [调整] 移除 Gemini CLI 与 GCLI2API 模块，仅保留已安装用户的卸载清理入口；未安装时自动在应用商城与快捷方式中隐藏
+  3. [优化] 完善核心层对已移除模块的更新拦截、商店管理菜单及主菜单残留快捷方式过滤
+  4. [修复] 修复 is_dir_nonempty 对仅含隐藏文件（如 .installed）目录误判为空的问题，确保老用户可见已移除应用的卸载入口
 
   🔧 重新安装/更新脚本:
   curl -v -L https://tav-x.rka.qzz.io"

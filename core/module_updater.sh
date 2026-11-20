@@ -534,6 +534,12 @@ module_perform_update() {
     local up_type
     up_type=$(_module_get_update_type "$id")
 
+    if [ "$up_type" == "none" ]; then
+        ui_print warn "模块 [$id] 已下架或不支持自动更新。"
+        [ "$skip_confirm" != "true" ] && ui_pause
+        return 0
+    fi
+
     local local_v
     local_v=$(module_get_local_version "$id")
 
